@@ -1,0 +1,21 @@
+[build]
+# 15 GB di RAM e altri programmi aperti: quattro compilazioni alla volta.
+jobs = 4
+
+[env]
+# aws-lc-sys, il codice C delle firme di PDFCraft, per Android: col clang dell'NDK che cargo-ndk
+# passa in CC, senza CMake, e mai con un AWS-LC trovato sul PC (ricerca PDFCraft, sezione 11).
+# Solo per il bersaglio Android: le prove sul PC restano come sono.
+AWS_LC_SYS_CMAKE_BUILDER_aarch64_linux_android = "0"
+AWS_LC_SYS_USE_SYSTEM_aarch64_linux_android = "0"
+# Il C e il C++ compilati dentro la libreria Android (aws-lc, GameActivity) con le protezioni della
+# memoria che MobSF cercava e non c'erano (controllo del 27/10): lo stack canary e FORTIFY, che fa
+# controllare alla libc le copie in memoria. Il Rust sicuro non ne ha bisogno. build.sh controlla
+# che ci siano.
+CFLAGS_aarch64_linux_android = "-fstack-protector-strong -D_FORTIFY_SOURCE=2"
+CXXFLAGS_aarch64_linux_android = "-fstack-protector-strong -D_FORTIFY_SOURCE=2"
+# I font delle Slide (Carlito, Caladea, Liberation Sans e Serif, Inter) dentro la libreria: sul
+# telefono DeckCraft non trova font di sistema e scriverebbe tutto in Ubuntu Light (ricerca
+# DeckCraft, sezione 3). Li legge solo deckcraft-fonts, da fonts/latin-manifest.txt; WordCraft e
+# PDFCraft leggono fonts/manifest.txt, che è vuoto.
+CRAFT_FONTS_DIR = { value = "crates/mod-slide", relative = true }

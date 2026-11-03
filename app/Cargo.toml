@@ -1,0 +1,49 @@
+[package]
+name = "tascabile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+# cdylib: libtascabile.so per Android. rlib: per il binario desktop e per i test.
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "tascabile-desktop"
+path = "src/main.rs"
+
+[dependencies]
+tascabile-platform = { path = "../crates/platform" }
+tascabile-word = { path = "../crates/mod-word" }
+# Il motore PDF: apertura e lettore (tappa D).
+tascabile-pdf = { path = "../crates/mod-pdf" }
+# Le Slide: aprire, leggere e presentare (tappa G).
+tascabile-slide = { path = "../crates/mod-slide" }
+# I fogli di calcolo in sola lettura (0.9.0), coi lettori di GridCraft.
+tascabile-foglio = { path = "../crates/mod-foglio" }
+tascabile-files = { path = "../crates/files" }
+# «Timestamp con blockchain»: la prova pubblica della data di un file (OpenTimestamps).
+tascabile-prova-data = { path = "../crates/prova-data" }
+# Il numero a caso della prova, che nasconde l'impronta ai server: già nel lock e nell'app (WordCraft).
+getrandom = "0.3.4"
+# Il foglio «Aa» che sale dal fondo.
+tascabile-touch = { path = "../crates/touch" }
+# La sessione del motore e le copie di recupero (`wordcraft_engine::recovery`).
+wordcraft-engine.workspace = true
+serde_json.workspace = true
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "wayland", "x11", "android-game-activity"] }
+log.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+winit = { workspace = true, features = ["android-game-activity"] }
+jni.workspace = true
+android_logger.workspace = true
+env_filter.workspace = true
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+env_logger.workspace = true
+
+[dev-dependencies]
+egui_kittest = { workspace = true, features = ["wgpu"] }
+image.workspace = true

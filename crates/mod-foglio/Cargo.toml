@@ -1,0 +1,22 @@
+[package]
+name = "tascabile-foglio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+# I fogli di calcolo in sola lettura (l'autore, 3/11): i lettori e il modello di GridCraft, senza il
+# motore né la sua interfaccia (ricerca 2026-11-03-gridcraft-api, sezioni 1 e 13).
+gridcraft-xlsx.workspace = true
+gridcraft-model.workspace = true
+gridcraft-numfmt.workspace = true
+gridcraft-core.workspace = true
+# Il controllo dell'archivio prima del lettore, come per Word e le Slide (audit del 30/10).
+tascabile-files = { path = "../files" }
+# Riconoscere un pacchetto di Excel o di LibreOffice anche senza il nome giusto; è la zip 3.0.0
+# fissata nel lock.
+zip = { version = "3.0.0", default-features = false, features = ["deflate"] }
+# I caratteri delle celle: Carlito (le misure di Calibri, il carattere di Excel) dai caratteri delle
+# Slide, già nell'APK (CRAFT_FONTS_DIR).
+deckcraft-fonts.workspace = true

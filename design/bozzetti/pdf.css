@@ -1,0 +1,22 @@
+.tavolo { position: absolute; left: 0; right: 0; top: 92px; bottom: 0; background: #E9E5DE; overflow: hidden; }
+.pagina { position: absolute; left: 16px; width: 380px; height: 537px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 6px 16px rgba(0,0,0,.08); padding: 30px 28px; font-family: "Lato"; color: #222; font-size: 9.5px; line-height: 1.45; }
+.pagina h4 { font-size: 13px; text-align: center; margin-bottom: 4px; letter-spacing: .3px; }
+.pagina .sotto-t { text-align: center; font-size: 8.5px; color: #555; margin-bottom: 14px; }
+.pagina .riga-c { display: flex; align-items: flex-end; gap: 6px; margin: 9px 0; }
+.pagina .riga-c .lab { white-space: nowrap; }
+.campo { flex: 1; height: 20px; border-bottom: 1px solid #999; position: relative; }
+.campo.pieno { background: rgba(35,70,160,.07); border: 1.5px solid var(--blu); border-radius: 4px; padding: 2px 6px; font-family: "Atkinson"; font-size: 11px; color: #1E1B18; display: flex; align-items: center; }
+.campo.vuoto { background: rgba(35,70,160,.05); border: 1px dashed #93A6D6; border-radius: 4px; }
+.spunta { width: 13px; height: 13px; border: 1px solid #777; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; margin-right: 4px; vertical-align: -2px; }
+.spunta.si { background: var(--blu); border-color: var(--blu); color: #fff; }
+.firma-box { margin-top: 16px; height: 62px; border: 1.5px dashed var(--rosso); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--rosso); font-family: "Atkinson"; font-size: 13px; font-weight: 700; gap: 6px; background: rgba(194,65,43,.05); }
+.numero-pag { position: absolute; left: 50%; transform: translateX(-50%); top: 646px; background: rgba(30,27,24,.78); color: #fff; font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 14px; }
+.modi { position: absolute; left: 12px; right: 12px; bottom: 32px; height: 64px; background: var(--foglio); border-radius: 22px; box-shadow: 0 2px 6px rgba(30,27,24,.12), 0 12px 28px rgba(30,27,24,.14); display: flex; align-items: center; justify-content: space-around; padding: 0 4px; }
+.modo { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 12px; font-weight: 700; color: var(--matita); width: 72px; padding: 6px 0; border-radius: 16px; }
+.modo .i { font-size: 22px; }
+.modo.acceso { color: var(--rosso); background: var(--rosso-tenue); }
+.griglia { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 6px; margin-top: 4px; }
+.strumento { display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; text-align: center; line-height: 1.15; padding: 6px 0; }
+.strumento .q { width: 56px; height: 56px; border-radius: 18px; display: flex; align-items: center; justify-content: center; background: var(--velo); color: var(--inchiostro); }
+.strumento .q.r { background: var(--rosso-tenue); color: var(--rosso); }
+.strumento .q.b { background: var(--blu-tenue); color: var(--blu); }

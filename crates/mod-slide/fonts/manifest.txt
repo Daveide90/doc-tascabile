@@ -1,0 +1,3 @@
+# Vuoto apposta. Il build script di deckcraft-fonts vuole questo file: senza, butta anche il
+# latin-manifest.txt (crates/fonts/build.rs:34-44 di DeckCraft v0.10.0). WordCraft e PDFCraft
+# leggono solo questo e quindi, con CRAFT_FONTS_DIR, non incorporano niente.

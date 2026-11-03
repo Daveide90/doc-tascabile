@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sfondo dell'icona adattiva (mipmap-anydpi/ic_launcher.xml). -->
+    <color name="icona_sfondo">#1565C0</color>
+    <!-- Il fondo dell'app (tema::CARTA, design/bozzetti/stile.css): finestra e barre di sistema. -->
+    <color name="carta">#F6F3EE</color>
+</resources>

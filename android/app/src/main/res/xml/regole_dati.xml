@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Niente esce dall'app col backup su Google Drive o col trasferimento da telefono a telefono
+     (D2D): copie di recupero, firme salvate, recenti, autore dei commenti, dizionario personale.
+     Su alcuni telefoni allowBackup="false" spegne il backup ma non il trasferimento (Android 12,
+     «D2D transfer functionality changes»): qui si escludono tutte le cartelle dell'app in tutti e
+     due (audit di sicurezza del 30/10, problema 2). La cache non va mai nel backup. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="."/>
+        <exclude domain="database" path="."/>
+        <exclude domain="sharedpref" path="."/>
+        <exclude domain="external" path="."/>
+        <exclude domain="device_root" path="."/>
+        <exclude domain="device_file" path="."/>
+        <exclude domain="device_database" path="."/>
+        <exclude domain="device_sharedpref" path="."/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="."/>
+        <exclude domain="database" path="."/>
+        <exclude domain="sharedpref" path="."/>
+        <exclude domain="external" path="."/>
+        <exclude domain="device_root" path="."/>
+        <exclude domain="device_file" path="."/>
+        <exclude domain="device_database" path="."/>
+        <exclude domain="device_sharedpref" path="."/>
+    </device-transfer>
+</data-extraction-rules>

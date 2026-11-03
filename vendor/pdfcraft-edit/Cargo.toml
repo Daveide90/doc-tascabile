@@ -1,0 +1,23 @@
+# Copia di pdfcraft-edit 0.13.0 di PDFCraft al commit b75cbd9 (lo stesso del motore), con una
+# correzione: sostituire o togliere un'immagine della pagina lasciava il suo nome nelle risorse, e
+# il salvataggio completo si portava dietro l'immagine di prima. Vedi `change_image` in
+# src/images.rs (cerca «Tascabile»). Da togliere quando PDFCraft lo corregge; da rifare se il
+# motore cambia commit. Le licenze sono quelle di PDFCraft (MIT o Apache 2.0).
+[package]
+name = "pdfcraft-edit"
+description = "Page content editing: headers and footers, watermarks, backgrounds, Bates numbers (ISO 32000-2 §14.8)"
+version = "0.13.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+pdfcraft-annot = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+pdfcraft-cos = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+pdfcraft-content = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+pdfcraft-fonts = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+pdfcraft-model = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+thiserror = "2"
+kurbo = "0.13"
+unicode-bidi = "0.3"

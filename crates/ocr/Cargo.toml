@@ -1,0 +1,20 @@
+[package]
+name = "tascabile-ocr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Il rilevamento delle righe: il modello di ocrs (text-detection.rten) con la stessa ocrs del motore
+# PDF, già nel lock, come la PR 1012 di PDFCraft (ricerca 2026-10-24-pdf-modifica-ocr, sezione 4).
+ocrs = { version = "0.13.1", default-features = false, features = ["rten"] }
+# Il riconoscimento: PP-OCRv6 small di PaddleOCR in ONNX, eseguito da RTen. La stessa rten del
+# motore (0.26.0), con in più il formato ONNX: Cargo unisce le feature, la copia resta una.
+rten = { version = "0.26.0", default-features = false, features = ["rten_format", "onnx_format"] }
+rten-tensor = "0.26.0"
+rten-imageproc = "0.26.0"
+# Le righe lette in parallelo: la stessa rayon di RTen, già nel lock.
+rayon = "1.12"
+# Ritagli e ridimensionamenti delle righe: la stessa image del workspace, senza formati in più.
+image.workspace = true

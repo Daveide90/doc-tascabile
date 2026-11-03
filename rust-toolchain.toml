@@ -1,0 +1,8 @@
+[toolchain]
+channel = "stable"   # quella installata: niente secondo download
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["aarch64-linux-android"]
+# La versione con cui si fanno le build di rilascio: android/build.sh si ferma se rustc è un'altra
+# (audit di sicurezza del 30/10, problema 12). Dopo un `rustup update` si cambia qui, a mano.
+# versione: 1.99.1

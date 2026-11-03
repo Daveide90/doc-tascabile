@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- La rete serve solo al «Timestamp con blockchain»: manda l'impronta di un file ai server pubblici di
+         OpenTimestamps e prende l'intestazione di un blocco da un esploratore. I documenti restano
+         sul telefono. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- La modalità riservata: da Android 12 le finestre di altre app non stanno sopra la nostra
+         (setHideOverlayWindows). Permesso normale, senza domande. -->
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+    <!-- L'impronta o il PIN prima di usare la firma salvata (BiometricPrompt). Permesso normale. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- «Accesso a tutti i file»: aprire e salvare i documenti dove stanno (Download, Documenti,
+         allegati di WhatsApp). -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- Niente backup: allowBackup per Android 11, le regole (res/xml/regole_dati.xml) da Android 12
+         anche per il trasferimento da telefono a telefono. -->
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@style/Theme.Tascabile"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/regole_dati"
+        android:networkSecurityConfig="@xml/rete">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            android:enableOnBackInvokedCallback="false"
+            android:configChanges="colorMode|density|fontScale|fontWeightAdjustment|grammaticalGender|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|orientation|screenLayout|screenSize|smallestScreenSize|touchscreen|uiMode">
+
+            <!-- GameActivity carica lib<nome>.so: qui libtascabile.so -->
+            <meta-data android:name="android.app.lib_name" android:value="tascabile" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- «Apri con» da WhatsApp, file manager, posta: i documenti di testo e, dalla tappa D,
+                 i PDF da leggere. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/vnd.oasis.opendocument.text" />
+                <data android:mimeType="application/rtf" />
+                <data android:mimeType="application/pdf" />
+                <!-- Le presentazioni che si aprono (tappa G): .pptx, .ppsx, .potx. Non .ppt né .odp:
+                     l'app comparirebbe in «Apri con» per poi dire che non li legge. -->
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.presentation" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.slideshow" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.presentationml.template" />
+                <!-- I fogli di calcolo, in sola lettura (0.9.0): Excel, il vecchio .xls, LibreOffice,
+                     il testo separato da virgole. -->
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.ms-excel.sheet.macroenabled.12" />
+                <data android:mimeType="application/vnd.oasis.opendocument.spreadsheet" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+            </intent-filter>
+        </activity>
+
+        <!-- Condivisione (documento, PDF, diagnosi): URI content:// solo per i file di
+             getCacheDir()/condivisi/, con permesso di lettura dato a chi li riceve; e per il file
+             della foto della firma in getCacheDir()/foto/, con permesso di scrittura dato alla
+             fotocamera di sistema. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="it.tascabile.app.condivisione"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/percorsi_condivisi" />
+        </provider>
+    </application>
+</manifest>

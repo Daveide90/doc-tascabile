@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- L'icona: un foglio con l'angolo piegato e le righe del testo. Misure dell'icona adattiva:
+     108 per 108 dp, con la parte sempre visibile nel cerchio di raggio 33 al centro; il foglio va
+     da 36 a 72 in larghezza e da 30 a 78 in altezza. Righe e angolo sono buchi nel foglio
+     (evenOdd), così lo stesso disegno vale anche da icona monocromatica (Android 13 e oltre). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M36,30 H62 L72,40 V78 H36 Z
+            M62,30 V40 H72 Z
+            M41,37 H57 V41 H41 Z
+            M41,47 H67 V49.5 H41 Z
+            M41,54 H67 V56.5 H41 Z
+            M41,61 H67 V63.5 H41 Z
+            M41,68 H58 V70.5 H41 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.6"
+        android:pathData="M62,30 V40 H72 Z" />
+</vector>

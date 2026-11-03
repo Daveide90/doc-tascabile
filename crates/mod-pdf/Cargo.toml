@@ -1,0 +1,45 @@
+[package]
+name = "tascabile-pdf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+pdfcraft-engine.workspace = true
+# Il disegno delle pagine: il motore non riesporta pdfcraft_render (ricerca PDFCraft, sezione 15).
+pdfcraft-render.workspace = true
+# Le lettere che WinAnsi non ha: i campi dei moduli e i testi di Fill & Sign le disegnano «?»
+# (analisi del 27/10, critico 12). Già nel lock, portato dal motore.
+pdfcraft-fonts.workspace = true
+# Le pagine come texture di egui senza copia: i pixel del motore sono RGBA8 premoltiplicato, come
+# Color32 (ricerca PDFCraft, sezione 3). Tutti e due già nel lock, con queste feature.
+egui = { workspace = true, features = ["bytemuck"] }
+bytemuck = { version = "1.25", features = ["extern_crate_alloc"] }
+# La ricerca senza accenti: NFKD e via i segni combinanti, su tutti e due i lati del confronto
+# (ricerca PDFCraft, sezione 4). Già nel lock, portato da hayro-syntax.
+unicode-normalization = "0.1.26"
+# Il riconoscimento del testo (P8): PP-OCRv6 di PaddleOCR con RTen, italiano con gli accenti.
+tascabile-ocr = { path = "../ocr" }
+# Colori, ombre e caratteri del tema per il lettore.
+tascabile-touch = { path = "../touch" }
+# Le foto senza EXIF, XMP e testi prima del motore, che incorpora il JPEG com'è: la posizione
+# GPS non deve finire nel PDF (analisi del 27/10, critico 2).
+tascabile-files = { path = "../files" }
+# La foto della firma ridotta sotto i limiti del motore (4 MiB, 32 megapixel) prima di darla a
+# SignaturePhoto: già nel lock con JPEG, portato dal motore.
+image = { workspace = true, features = ["jpeg"] }
+# Le pagine in bianco e nero della scansione in PNG a un bit con la loro risoluzione (pHYs), che
+# image non scrive: la pagina esce grande come un A4. Già nel lock, portato da image e dal motore.
+png = "0.18"
+# Le parole corrette di una scansione si ridisegnano nella foto col carattere più simile fra
+# quelli già nell'APK (Carlito, Liberation, Caladea, incorporati da deckcraft-fonts con
+# CRAFT_FONTS_DIR): la forma delle lettere e la composizione vengono da qui. Già nel lock, portati
+# da mod-slide; kurbo per leggere i contorni delle lettere.
+deckcraft-fonts.workspace = true
+kurbo = "0.13.1"
+
+[dev-dependencies]
+# La prova del tetto agli attributi della copia corretta di roxmltree (vendor/roxmltree), che
+# PDFCraft usa per i moduli XFA (revisione del 31/10, punto 4).
+roxmltree = "0.20"

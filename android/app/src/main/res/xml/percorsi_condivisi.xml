@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider (AndroidManifest.xml): si condivide solo la sottocartella condivisi/ della cache,
+     e foto/ dove la fotocamera di sistema scrive la foto della firma (MainActivity.tascabileFotoFirma). -->
+<paths>
+    <cache-path name="condivisi" path="condivisi/" />
+    <cache-path name="foto" path="foto/" />
+</paths>

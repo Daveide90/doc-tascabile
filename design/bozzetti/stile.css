@@ -1,0 +1,134 @@
+/* Tascabile · bozzetti 24/10/2026. Telefono 412 x 915 dp. Tema chiaro «carta e inchiostro». */
+@font-face { font-family: "Fraunces"; src: url("../font/Fraunces.ttf"); font-weight: 100 900; }
+@font-face { font-family: "Atkinson"; src: url("../font/AtkinsonHyperlegibleNext.ttf"); font-weight: 200 800; }
+@font-face { font-family: "Icone"; src: url("../font/MaterialSymbolsRounded.ttf"); }
+
+:root {
+  --carta: #F6F3EE;        /* fondo dell'app */
+  --foglio: #FFFFFF;       /* superfici e pagina */
+  --inchiostro: #1E1B18;   /* testo principale */
+  --matita: #6A635B;       /* testo secondario */
+  --filo: #E4DED4;         /* linee sottili */
+  --velo: #EDE8E0;         /* superfici leggere, pulsanti spenti */
+  --blu: #2346A0;          /* Word e colore dell'app */
+  --blu-tenue: #E3E9F7;
+  --rosso: #C2412B;        /* PDF */
+  --rosso-tenue: #F7E4DF;
+  --ocra: #B7791A;         /* Slide */
+  --ocra-tenue: #F6EBD6;
+  --scuro: #2A2622;        /* barre scure, barra della selezione */
+  --ombra: 0 1px 2px rgba(30,27,24,.08), 0 6px 18px rgba(30,27,24,.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 412px; height: 915px; overflow: hidden; }
+body { background: var(--carta); color: var(--inchiostro); font-family: "Atkinson", sans-serif; font-size: 16px; line-height: 1.35; position: relative; -webkit-font-smoothing: antialiased; }
+
+.i { font-family: "Icone"; font-weight: normal; font-style: normal; font-size: 24px; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; font-feature-settings: "liga"; font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24; }
+.i.pieno { font-variation-settings: "FILL" 1, "wght" 400, "GRAD" 0, "opsz" 24; }
+
+/* Barra di stato del telefono (solo per il bozzetto) */
+.stato { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-size: 13px; font-weight: 600; color: var(--inchiostro); }
+.stato .i { font-size: 16px; margin-left: 4px; }
+.navigazione { position: absolute; bottom: 0; left: 0; right: 0; height: 22px; display: flex; justify-content: center; align-items: center; }
+.navigazione::after { content: ""; width: 108px; height: 4px; border-radius: 2px; background: var(--inchiostro); opacity: .35; }
+
+/* Pulsante icona da 48 dp */
+.ib { width: 48px; height: 48px; border-radius: 24px; display: inline-flex; align-items: center; justify-content: center; color: var(--inchiostro); }
+.ib.spento { color: #B9B2A8; }
+
+/* ---------- HOME ---------- */
+.home-testa { padding: 14px 12px 6px 22px; display: flex; align-items: flex-start; justify-content: space-between; }
+.marchio { font-family: "Fraunces"; font-size: 36px; font-weight: 600; letter-spacing: -0.5px; font-variation-settings: "SOFT" 60, "WONK" 0, "opsz" 72; line-height: 1.05; }
+.marchio .punto { color: var(--blu); }
+.marchio .doc { color: var(--blu); }
+.data { font-size: 14px; color: var(--matita); margin-top: 4px; }
+.cerca { margin: 12px 18px 6px; height: 52px; border-radius: 26px; background: var(--foglio); box-shadow: var(--ombra); display: flex; align-items: center; gap: 12px; padding: 0 18px; color: var(--matita); font-size: 16px; }
+.filtri { display: flex; gap: 8px; padding: 14px 18px 4px; }
+.chip { height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid var(--filo); display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--inchiostro); background: transparent; }
+.chip.acceso { background: var(--inchiostro); color: #fff; border-color: var(--inchiostro); }
+.titoletto { font-family: "Fraunces"; font-size: 20px; font-weight: 600; padding: 16px 22px 8px; display: flex; justify-content: space-between; align-items: baseline; font-variation-settings: "SOFT" 50, "opsz" 36; }
+.titoletto a { font-family: "Atkinson"; font-size: 14px; color: var(--blu); font-weight: 700; text-decoration: none; }
+.elenco { margin: 0 14px; background: var(--foglio); border-radius: 20px; box-shadow: var(--ombra); overflow: hidden; }
+.voce { height: 72px; display: flex; align-items: center; gap: 14px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--filo); }
+.voce:last-child { border-bottom: none; }
+.tipo { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
+.tipo.word { background: var(--blu-tenue); color: var(--blu); }
+.tipo.pdf { background: var(--rosso-tenue); color: var(--rosso); }
+.tipo.slide { background: var(--ocra-tenue); color: var(--ocra); }
+.voce .nome { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.voce .dove { font-size: 13px; color: var(--matita); margin-top: 2px; display: flex; align-items: center; gap: 4px; }
+.voce .dove .i { font-size: 15px; }
+.voce .testo { flex: 1; min-width: 0; }
+.cartelle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 14px; }
+.cartella { height: 64px; background: var(--foglio); border-radius: 16px; box-shadow: var(--ombra); display: flex; align-items: center; gap: 12px; padding: 0 14px; }
+.cartella .i { color: var(--matita); }
+.cartella .n { font-weight: 700; font-size: 15px; }
+.cartella .c { font-size: 12px; color: var(--matita); }
+.fab { position: absolute; right: 18px; bottom: 40px; height: 58px; border-radius: 18px; background: var(--blu); color: #fff; display: flex; align-items: center; gap: 10px; padding: 0 22px 0 18px; font-weight: 700; font-size: 16px; box-shadow: 0 4px 10px rgba(35,70,160,.35), 0 10px 24px rgba(35,70,160,.25); }
+
+/* ---------- EDITOR ---------- */
+.barra-alta { height: 64px; display: flex; align-items: center; padding: 0 4px; background: var(--carta); }
+.barra-alta .titolo { flex: 1; min-width: 0; padding-left: 2px; }
+.barra-alta .titolo .n { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barra-alta .titolo .s { font-size: 12.5px; color: var(--matita); display: flex; align-items: center; gap: 4px; }
+.barra-alta .titolo .s .i { font-size: 14px; color: #3C8A55; }
+.foglio { position: absolute; left: 10px; right: 10px; top: 92px; bottom: 0; background: var(--foglio); border-radius: 18px 18px 0 0; box-shadow: var(--ombra); padding: 26px 24px; font-family: "Lato", "Atkinson", sans-serif; overflow: hidden; }
+.foglio h1 { font-family: "Lato"; font-size: 26px; font-weight: 700; color: #1F3B63; margin-bottom: 14px; line-height: 1.2; }
+.foglio h2 { font-family: "Lato"; font-size: 19px; font-weight: 700; color: #1F3B63; margin: 18px 0 8px; }
+.foglio p { font-size: 16.5px; line-height: 1.55; margin-bottom: 12px; color: #222; }
+.foglio ul { margin: 0 0 12px 22px; font-size: 16.5px; line-height: 1.55; color: #222; }
+.cursore { display: inline-block; width: 2px; height: 22px; background: var(--blu); vertical-align: -4px; margin: 0 1px; }
+.formato { position: absolute; left: 14px; right: 14px; bottom: 34px; height: 60px; border-radius: 30px; background: var(--foglio); box-shadow: 0 2px 6px rgba(30,27,24,.12), 0 12px 28px rgba(30,27,24,.14); display: flex; align-items: center; justify-content: space-between; padding: 0 6px; }
+.formato .sep { width: 1px; height: 28px; background: var(--filo); }
+.formato .ib.acceso { background: var(--blu-tenue); color: var(--blu); }
+.formato .aa { font-family: "Fraunces"; font-size: 21px; font-weight: 600; }
+.tastiera { position: absolute; left: 0; right: 0; bottom: 0; height: 300px; background: #E7E3DC; border-top: 1px solid #D9D3C9; padding: 8px 4px 26px; }
+.tastiera .riga { display: flex; gap: 6px; justify-content: center; margin: 9px 0; }
+.tastiera .t { width: 34px; height: 46px; border-radius: 7px; background: #FBFAF8; box-shadow: 0 1px 0 rgba(0,0,0,.15); display: flex; align-items: center; justify-content: center; font-size: 19px; color: #2B2724; }
+.tastiera .t.l { width: 52px; background: #D3CDC3; font-size: 15px; }
+.tastiera .t.sp { width: 180px; }
+.tastiera .sugg { height: 36px; display: flex; justify-content: space-around; align-items: center; font-size: 15px; color: #4A443E; border-bottom: 1px solid #D9D3C9; }
+
+/* ---------- FOGLIO Aa ---------- */
+.velo { position: absolute; inset: 0; background: rgba(30,27,24,.38); }
+.sotto { position: absolute; left: 0; right: 0; bottom: 0; background: var(--foglio); border-radius: 28px 28px 0 0; padding: 10px 18px 36px; box-shadow: 0 -8px 30px rgba(0,0,0,.18); }
+.maniglia { width: 36px; height: 4px; border-radius: 2px; background: #CFC8BD; margin: 0 auto 10px; }
+.sotto .testa { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.sotto h3 { font-family: "Fraunces"; font-size: 23px; font-weight: 600; font-variation-settings: "SOFT" 50, "opsz" 36; }
+.etichetta { font-size: 13px; font-weight: 700; color: var(--matita); letter-spacing: .4px; text-transform: uppercase; margin: 16px 2px 8px; }
+.stili { display: flex; gap: 8px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.stile { flex: none; height: 64px; min-width: 92px; padding: 0 14px; border-radius: 14px; border: 1.5px solid var(--filo); display: flex; align-items: center; justify-content: center; font-family: "Lato"; color: #1F3B63; }
+.stile.n { font-size: 16px; color: #222; }
+.stile.t1 { font-size: 22px; font-weight: 700; }
+.stile.t2 { font-size: 19px; font-weight: 700; }
+.stile.t3 { font-size: 17px; font-weight: 700; }
+.stile.acceso { border-color: var(--blu); background: var(--blu-tenue); }
+.righe2 { display: flex; gap: 12px; }
+.gruppo { display: flex; background: var(--velo); border-radius: 16px; padding: 4px; gap: 2px; }
+.gruppo .ib { width: 46px; height: 44px; border-radius: 12px; }
+.gruppo .ib.acceso { background: var(--foglio); color: var(--blu); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.passo { display: flex; align-items: center; background: var(--velo); border-radius: 16px; padding: 4px; }
+.passo .ib { width: 46px; height: 44px; border-radius: 12px; }
+.passo .v { width: 56px; text-align: center; font-weight: 700; font-size: 18px; }
+.elenchi { display: flex; gap: 10px; }
+.bott { flex: 1; height: 52px; border-radius: 16px; background: var(--velo); display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 700; font-size: 15px; }
+.bott.acceso { background: var(--blu-tenue); color: var(--blu); }
+
+/* ---------- SELEZIONE ---------- */
+.sel { background: rgba(35,70,160,.18); border-radius: 2px; }
+.goccia { position: absolute; width: 22px; height: 22px; background: var(--blu); }
+.goccia.sx { border-radius: 50% 0 50% 50%; }
+.goccia.dx { border-radius: 0 50% 50% 50%; }
+.contesto { position: absolute; height: 52px; border-radius: 26px; background: var(--scuro); color: #fff; display: flex; align-items: center; padding: 0 6px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.contesto .az { height: 44px; padding: 0 12px; display: flex; align-items: center; gap: 6px; font-size: 14.5px; font-weight: 700; border-radius: 22px; }
+.contesto .az .i { font-size: 20px; }
+.contesto .sep { width: 1px; height: 24px; background: rgba(255,255,255,.18); }
+
+/* ---------- MENU ---------- */
+.menu { position: absolute; right: 8px; top: 72px; width: 252px; background: var(--foglio); border-radius: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.08); padding: 8px 0; }
+.menu .m { height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 18px; font-size: 15.5px; }
+.menu .m .i { color: var(--matita); }
+.menu .m.primo { font-weight: 700; }
+.menu .m.primo .i { color: var(--blu); }
+.menu .riga { height: 1px; background: var(--filo); margin: 6px 0; }

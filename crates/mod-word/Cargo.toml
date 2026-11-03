@@ -1,0 +1,31 @@
+[package]
+name = "tascabile-word"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+tascabile-platform = { path = "../platform" }
+# Le maniglie della selezione e la lente.
+tascabile-touch = { path = "../touch" }
+wordcraft-engine.workspace = true
+wordcraft-fonts.workspace = true
+# Le parti dei font incorporati, rilette dall'originale per rimetterle nel documento senza
+# caricarle nel processo.
+wordcraft-docx.workspace = true
+egui.workspace = true
+serde_json.workspace = true
+log.workspace = true
+# Nomi liberi e nomi dal testo per salvare, copie e PDF.
+tascabile-files = { path = "../files" }
+# Il controllo degli archivi prima del motore e la tabella dei font senza i font incorporati: la
+# stessa zip del motore (3.0.0, fissata nel lock) con la stessa compressione, e la flate2 che c'è
+# già sotto.
+zip = { version = "=3.0.0", default-features = false, features = ["deflate"] }
+flate2 = "1.1"
+# L'ora locale per il nome di ripiego di un documento nuovo (localtime_r, anche su Android).
+libc = "0.2"
+# Le foto della galleria e della fotocamera: dritte come dice l'EXIF e ridotte se enormi, con la
+# stessa image del motore (in JPEG anche qui).
+image = { workspace = true, features = ["jpeg"] }

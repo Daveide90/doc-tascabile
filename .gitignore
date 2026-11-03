@@ -1,0 +1,13 @@
+target/
+*.apk
+*.aab
+*.keystore
+*.jks
+android/build/
+android/.gradle/
+upstream/
+android/app/build/
+android/app/src/main/jniLibs/
+android/local.properties
+android/firma.properties
+design/font/

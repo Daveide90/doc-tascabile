@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="340" height="76" viewBox="0 0 340 76" role="img" aria-label="Download APK · Scarica l'APK">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2A2622"/><stop offset="1" stop-color="#1E1B18"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="338" height="74" rx="18" fill="url(#g)"/>
+  <rect x="1.5" y="1.5" width="337" height="73" rx="17.5" fill="none" stroke="#ffffff" stroke-opacity="0.18"/>
+  <circle cx="40" cy="38" r="22" fill="#2346A0"/>
+  <path d="M40 26v17m-7-7 7 7 7-7M30 49h20" fill="none" stroke="#F6F3EE" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="76" y="35" font-family="Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="700" fill="#F6F3EE">Download APK</text>
+  <text x="76" y="56" font-family="Segoe UI, Roboto, Helvetica Neue, Arial, sans-serif" font-size="13" fill="#D9D2C7">Scarica l'APK · Android 11 o successivo</text>
+</svg>

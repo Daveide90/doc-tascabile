@@ -1,0 +1,98 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "app"]
+
+[workspace.package]
+version = "0.9.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+
+[workspace.dependencies]
+# Motore Word: WordCraft v0.10.0, tag del 22/10/2026 (ricerca 2026-10-23-motori-nuovi, sezione 3).
+wordcraft-engine = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+wordcraft-fonts = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+# Il lettore .docx da solo, che non carica i font incorporati nel processo (lo fa `io` del motore).
+wordcraft-docx = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+# Motore PDF: PDFCraft dal main del 24/10/2026, dopo la v0.13.0, con le difese contro i file
+# ostili (piano della tappa D, decisioni). Il disegno sta in pdfcraft-render, che il motore non
+# riesporta. Niente ui-egui, automation né platform.
+pdfcraft-engine = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+pdfcraft-render = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+pdfcraft-fonts = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+# Slide: i crate di DeckCraft v0.10.0 (tag del 22/10/2026) sotto il motore, senza deckcraft-engine,
+# che porta per forza i codec video (ricerca DeckCraft, sezione 13; piano della tappa G). La 0.11.1
+# no: vuole krilla e craft-pdf di un altro commit di craft-libs, diverso da quello di WordCraft.
+deckcraft-pptx = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-format = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-render = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-anim = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-pdf = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-fonts = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-model = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-geom = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+# Fogli: GridCraft dal main del 3/11/2026 (13 commit dopo la v0.16.0), solo i lettori e il modello;
+# niente engine, ui-egui, mcp (ricerca 2026-11-03-gridcraft-api, sezioni 1 e 8). zip resta 3.0.0.
+gridcraft-xlsx = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+gridcraft-model = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+gridcraft-numfmt = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+gridcraft-core = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+# Stessa egui dei tre motori.
+egui = "0.36.2"
+eframe = { version = "0.36.2", default-features = false }
+egui_kittest = "0.36.2"
+# Solo Android: stessa winit di eframe 0.36.2 e stessa jni di android-activity 0.6.1.
+winit = { version = "0.30.13", default-features = false }
+jni = "0.22.4"
+android_logger = "0.15.1"
+env_filter = "0.1"
+env_logger = "0.11"
+log = "0.4"
+# I recenti di tascabile-files, in JSON.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# I nomi di tascabile-files, tagliati senza spezzare un carattere composto: la stessa di egui e
+# del motore.
+unicode-segmentation = "1.13"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[patch.crates-io]
+# Come nel workspace di WordCraft: craft-pdf vuole il krilla del fork craft-libs.
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "c3487320b2d1de657b860b3c8abb44e1f2b32bd8" }
+# Come nel workspace di PDFCraft (il suo Cargo.toml, [patch.crates-io]): pdfcraft-render usa le API
+# aggiunte dai crate corretti di vendor/. Non winit né egui-wgpu, che correggono solo il desktop.
+hayro = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+hayro-interpret = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+hayro-syntax = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+hayro-cmap = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+hayro-jbig2 = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+lopdf = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+vello_common = { git = "https://github.com/storytold/pdfcraft", rev = "b75cbd92c5b21972b814d451fb89ddf94e6a12d9" }
+# roxmltree 0.20.0 con un tetto di 1024 attributi per elemento (CVE-2026-92987: il controllo dei
+# doppioni li confrontava a due a due; un modulo XFA fatto apposta teneva la CPU al 100%). PDFCraft
+# chiede la 0.20: la correzione è in vendor/roxmltree (revisione del 31/10, punto 4).
+roxmltree = { path = "vendor/roxmltree" }
+
+[patch."https://github.com/storytold/pdfcraft"]
+# pdfcraft-edit con le immagini sostituite o tolte che escono davvero dal file (vendor/pdfcraft-edit,
+# correzione della 0.8.7 per «Correggi la scansione», «Sostituisci» e «Togli» immagine).
+pdfcraft-edit = { path = "vendor/pdfcraft-edit" }
+
+[profile.dev]
+# Meno disco: solo i numeri di riga nei nostri crate.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# Motore e disegno veloci anche nelle prove; niente simboli di debug nelle dipendenze.
+opt-level = 2
+debug = false
+
+[profile.dev.package.tascabile-ocr]
+# Il riconoscimento ha cicli sui pixel e le funzioni generiche di image si compilano qui: senza
+# ottimizzare, una pagina A4 costa secondi in più nelle prove.
+opt-level = 2
+
+[profile.release]
+debug = false
+# Mai "abort": Session::run del motore e android-activity si salvano dai panic con catch_unwind.
+panic = "unwind"

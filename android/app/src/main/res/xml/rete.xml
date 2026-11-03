@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La rete dell'app, che serve solo al «Timestamp con blockchain»: niente traffico in chiaro e i
+     certificati del sistema (revisione del 31/10, punto 7). Da Android 16 anche la Certificate
+     Transparency: in xml-v36/rete.xml, perché prima l'elemento non esiste. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

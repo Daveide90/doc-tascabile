@@ -1,0 +1,85 @@
+# Nomi che devono restare nel dex anche dopo R8: li cerca per nome il codice nativo (Rust di
+# Tascabile e C++ di GameActivity) con FindClass, GetMethodID, GetFieldID e RegisterNatives; se uno
+# manca o cambia nome l'app si chiude all'avvio o al primo uso. Li controlla build.sh, su ogni APK.
+# Formato: classe nome tipo [native]. Le classi di Android (Configuration, MotionEvent, KeyEvent,
+# Locale) non sono nel dex e non serve controllarle.
+
+# MainActivity: i sei metodi nativi scritti in Rust (app/src/android_main.rs)
+Lit/tascabile/app/MainActivity; nativeImeState (Ljava/lang/String;IIIIJ)V native
+Lit/tascabile/app/MainActivity; nativeInsets (IIIIIII)V native
+Lit/tascabile/app/MainActivity; nativeNewIntent ()V native
+Lit/tascabile/app/MainActivity; nativeDiagnosi (Ljava/lang/String;)V native
+Lit/tascabile/app/MainActivity; nativeFotoFirma (III)V native
+Lit/tascabile/app/MainActivity; nativeImpronta (II)V native
+Lit/tascabile/app/MainActivity; nativeSchermoEsterno (II)V native
+# MainActivity: i metodi che Rust chiama con JNI (crates/platform/src/android.rs)
+Lit/tascabile/app/MainActivity; tascabileSetIme (Ljava/lang/String;IIJ)V
+Lit/tascabile/app/MainActivity; tascabileNomeUri (Landroid/net/Uri;)Ljava/lang/String;
+Lit/tascabile/app/MainActivity; tascabileCondividiFile (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+Lit/tascabile/app/MainActivity; tascabileCondividiTesto (Ljava/lang/String;Ljava/lang/String;)V
+Lit/tascabile/app/MainActivity; tascabileCopy (Ljava/lang/String;)V
+Lit/tascabile/app/MainActivity; tascabilePaste ()Ljava/lang/String;
+Lit/tascabile/app/MainActivity; tascabileApriIndirizzo (Ljava/lang/String;)V
+Lit/tascabile/app/MainActivity; tascabilePresentazione (Z)V
+Lit/tascabile/app/MainActivity; tascabileRiservata (Z)V
+Lit/tascabile/app/MainActivity; tascabileProietta ([BII)V
+Lit/tascabile/app/MainActivity; tascabileRete (Ljava/lang/String;[B)[B
+Lit/tascabile/app/MainActivity; tascabileConsentiRete (Z)V
+Lit/tascabile/app/MainActivity; tascabileImpronta (ILjava/lang/String;Ljava/lang/String;)V
+Lit/tascabile/app/MainActivity; tascabileTipoTastiera (I)V
+Lit/tascabile/app/MainActivity; tascabileFotoFirma (II)V
+
+# GameActivity: i metodi nativi registrati dal C++ (GameActivity.cpp, g_methods)
+Lcom/google/androidgamesdk/GameActivity; initializeNativeCode (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Landroid/content/res/AssetManager;[BLandroid/content/res/Configuration;)J native
+Lcom/google/androidgamesdk/GameActivity; getDlError ()Ljava/lang/String; native
+Lcom/google/androidgamesdk/GameActivity; terminateNativeCode (J)V native
+Lcom/google/androidgamesdk/GameActivity; onStartNative (J)V native
+Lcom/google/androidgamesdk/GameActivity; onResumeNative (J)V native
+Lcom/google/androidgamesdk/GameActivity; onSaveInstanceStateNative (J)[B native
+Lcom/google/androidgamesdk/GameActivity; onPauseNative (J)V native
+Lcom/google/androidgamesdk/GameActivity; onStopNative (J)V native
+Lcom/google/androidgamesdk/GameActivity; onConfigurationChangedNative (JLandroid/content/res/Configuration;)V native
+Lcom/google/androidgamesdk/GameActivity; onTrimMemoryNative (JI)V native
+Lcom/google/androidgamesdk/GameActivity; onWindowFocusChangedNative (JZ)V native
+Lcom/google/androidgamesdk/GameActivity; onSurfaceCreatedNative (JLandroid/view/Surface;)V native
+Lcom/google/androidgamesdk/GameActivity; onSurfaceChangedNative (JLandroid/view/Surface;III)V native
+Lcom/google/androidgamesdk/GameActivity; onSurfaceRedrawNeededNative (JLandroid/view/Surface;)V native
+Lcom/google/androidgamesdk/GameActivity; onSurfaceDestroyedNative (J)V native
+Lcom/google/androidgamesdk/GameActivity; onTouchEventNative (JLandroid/view/MotionEvent;IIIIIJJIIIIIIFF)Z native
+Lcom/google/androidgamesdk/GameActivity; onKeyDownNative (JLandroid/view/KeyEvent;)Z native
+Lcom/google/androidgamesdk/GameActivity; onKeyUpNative (JLandroid/view/KeyEvent;)Z native
+Lcom/google/androidgamesdk/GameActivity; onTextInputEventNative (JLcom/google/androidgamesdk/gametextinput/State;)V native
+Lcom/google/androidgamesdk/GameActivity; onWindowInsetsChangedNative (J)V native
+Lcom/google/androidgamesdk/GameActivity; setInputConnectionNative (JLcom/google/androidgamesdk/gametextinput/InputConnection;)V native
+Lcom/google/androidgamesdk/GameActivity; onContentRectChangedNative (JIIII)V native
+Lcom/google/androidgamesdk/GameActivity; onSoftwareKeyboardVisibilityChangedNative (JZ)V native
+Lcom/google/androidgamesdk/GameActivity; onEditorActionNative (JI)V native
+# GameActivity: i metodi che il C++ chiama (GameActivity.cpp, GET_METHOD_ID)
+Lcom/google/androidgamesdk/GameActivity; setWindowFlags (II)V
+Lcom/google/androidgamesdk/GameActivity; getWindowInsets (I)Landroidx/core/graphics/Insets;
+Lcom/google/androidgamesdk/GameActivity; getWaterfallInsets ()Landroidx/core/graphics/Insets;
+Lcom/google/androidgamesdk/GameActivity; setImeEditorInfoFields (III)V
+# GameTextInput (gametextinput.cpp)
+Lcom/google/androidgamesdk/gametextinput/InputConnection; setState (Lcom/google/androidgamesdk/gametextinput/State;)V
+Lcom/google/androidgamesdk/gametextinput/InputConnection; setSoftKeyboardActive (ZI)V
+Lcom/google/androidgamesdk/gametextinput/InputConnection; restartInput ()V
+Lcom/google/androidgamesdk/gametextinput/State; <init> (Ljava/lang/String;IIII)V
+Lcom/google/androidgamesdk/gametextinput/State; text Ljava/lang/String;
+Lcom/google/androidgamesdk/gametextinput/State; selectionStart I
+Lcom/google/androidgamesdk/gametextinput/State; selectionEnd I
+Lcom/google/androidgamesdk/gametextinput/State; composingRegionStart I
+Lcom/google/androidgamesdk/gametextinput/State; composingRegionEnd I
+# AndroidX, letti dal C++ di GameActivity (le regole dell'AAR li tengono)
+Landroidx/core/graphics/Insets; left I
+Landroidx/core/graphics/Insets; right I
+Landroidx/core/graphics/Insets; top I
+Landroidx/core/graphics/Insets; bottom I
+Landroidx/core/view/WindowInsetsCompat$Type; captionBar ()I
+Landroidx/core/view/WindowInsetsCompat$Type; displayCutout ()I
+Landroidx/core/view/WindowInsetsCompat$Type; ime ()I
+Landroidx/core/view/WindowInsetsCompat$Type; mandatorySystemGestures ()I
+Landroidx/core/view/WindowInsetsCompat$Type; navigationBars ()I
+Landroidx/core/view/WindowInsetsCompat$Type; statusBars ()I
+Landroidx/core/view/WindowInsetsCompat$Type; systemBars ()I
+Landroidx/core/view/WindowInsetsCompat$Type; systemGestures ()I
+Landroidx/core/view/WindowInsetsCompat$Type; tappableElement ()I

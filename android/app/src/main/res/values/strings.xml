@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Il nome sotto l'icona (l'autore, 24/10/2026). Il pacchetto resta it.tascabile.app. -->
+    <string name="app_name">Doc Tascabile</string>
+</resources>

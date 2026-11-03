@@ -1,0 +1,31 @@
+[package]
+name = "tascabile-slide"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+# Aprire (riconoscere, importare, riparare), disegnare, presentare ed esportare in PDF: le funzioni
+# di libreria che il motore usa sotto la Session, tutte su &Presentation (ricerca DeckCraft, sezione 13).
+deckcraft-pptx.workspace = true
+deckcraft-format.workspace = true
+deckcraft-render.workspace = true
+deckcraft-anim.workspace = true
+deckcraft-pdf.workspace = true
+# I font: quelli incorporati con CRAFT_FONTS_DIR (.cargo/config.toml) e quelli dentro i file.
+deckcraft-fonts.workspace = true
+deckcraft-model.workspace = true
+# Lo spostamento delle forme e dei paragrafi nelle animazioni (il Vec2 di kurbo che DeckCraft riesporta).
+deckcraft-geom.workspace = true
+# Riconoscere un pacchetto di PowerPoint anche senza il nome giusto (ppt/presentation.xml); è la
+# zip 3.0.0 fissata nel lock, con le feature che le dà già deckcraft-pptx.
+zip = { version = "3.0.0", default-features = false, features = ["deflate"] }
+# Il lettore: le slide come texture di egui, con la stessa impaginazione delle pagine del lettore
+# PDF (pizzico, doppio tocco, la pagina che si legge: tascabile_pdf::geometria) e i colori, le
+# ombre e le icone del tema.
+egui.workspace = true
+tascabile-pdf = { path = "../mod-pdf" }
+# Il controllo dell'archivio prima di DeckCraft, lo stesso dei documenti Word (audit del 30/10).
+tascabile-files = { path = "../files" }
+tascabile-touch = { path = "../touch" }
