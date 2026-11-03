@@ -108,8 +108,8 @@ const DITO_FERMO: f32 = 8.0;
 const DOPO_IL_TOCCO: f64 = 0.15;
 
 /// Una voce di un elenco che scorre si colora come premuta solo se il dito ci resta fermo un
-/// attimo, o dopo un tocco: chi appoggia il dito per scorrere non la colora (segnalazione di
-/// L'autore del 3/11: «preseleziona illuminando il primo file che tocco per scorrere»), come fa
+/// attimo, o dopo un tocco: chi appoggia il dito per scorrere non la colora (segnalazione
+/// dell'autore del 3/11: «preseleziona illuminando il primo file che tocco per scorrere»), come fa
 /// Android.
 pub fn premuto(ui: &Ui, r: &Response) -> bool {
     let id = r.id.with("premuto");

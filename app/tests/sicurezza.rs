@@ -1,5 +1,5 @@
 //! Le difese del manifest, della firma e della build che non si vedono nelle prove dell'app
-//! (audit di sicurezza del 30/10, `docs/sicurezza/audit-2026-10-30.md`): si leggono i file, così
+//! (audit di sicurezza del 30/10, un documento interno di lavoro): si leggono i file, così
 //! una riga tolta per sbaglio si prende sul PC prima del telefono.
 
 use std::fs;

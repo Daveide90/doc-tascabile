@@ -1,5 +1,5 @@
 //! Il «Timestamp con blockchain» dell'app: la prova pubblica che un file esisteva in un momento, così com'era, col
-//! protocollo aperto OpenTimestamps (piano `docs/superpowers/plans/2026-10-28-fissa-la-data.md`).
+//! protocollo aperto OpenTimestamps (piano un documento interno di lavoro).
 
 pub mod blocco;
 pub mod formato;

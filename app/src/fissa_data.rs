@@ -1,5 +1,5 @@
 //! «Timestamp con blockchain» e «Controlla il timestamp» nei menu di Word, PDF e Slide (piano
-//! `docs/superpowers/plans/2026-10-28-fissa-la-data.md`; il nome è dell'autore, che non voleva «Fissa
+//! un documento interno di lavoro; il nome è dell'autore, che non voleva «Fissa
 //! la data»): la prova pubblica e gratuita che il file esisteva così com'è, col protocollo aperto
 //! OpenTimestamps (crate `tascabile-prova-data`). È
 //! l'unica cosa per cui l'app va in rete, e ci va solo l'impronta del file. La prova si salva

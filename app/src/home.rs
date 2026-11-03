@@ -39,10 +39,10 @@ pub const TROVATI_AL_MASSIMO: usize = 50;
 
 /// Il testo grigio della ricerca vuota.
 pub const CERCA: &str = "Cerca nei documenti";
-/// La ricerca dentro una cartella aperta (l'autore, 3/11: «metti un pulsante cerca»).
+/// La ricerca dentro una cartella aperta (richiesta dell'autore, 3/11: «metti un pulsante cerca»).
 pub const CERCA_IN_CARTELLA: &str = "Cerca in questa cartella";
 pub const CERCA_PULSANTE: &str = "Cerca";
-/// Le due viste di una cartella (l'autore, 3/11: «fai decidere se voler visualizzare le cartelle
+/// Le due viste di una cartella (richiesta dell'autore, 3/11: «fai decidere se voler visualizzare le cartelle
 /// con sotto cartelle oppure tutte insieme»).
 pub const VISTA_CARTELLE: &str = "Con le cartelle";
 pub const VISTA_TUTTI: &str = "Tutti i file";
@@ -159,7 +159,7 @@ pub enum Filtro {
 }
 
 impl Filtro {
-    /// I chip: prima i PDF, poi i documenti e le slide (l'autore, 3/11).
+    /// I chip: prima i PDF, poi i documenti e le slide (scelta dell'autore, 3/11).
     pub const CHIP: [(Filtro, &'static str); 5] =
         [(Filtro::Tutti, "Tutti"), (Filtro::Pdf, "PDF"), (Filtro::Documenti, "Documenti"), (Filtro::Slide, "Slide"), (Filtro::Fogli, "Fogli")];
 
@@ -319,7 +319,7 @@ impl Home {
         let inizio = Instant::now();
         self.scorciatoie = scorciatoie(&self.radice);
         self.file = if self.accesso {
-            // Solo i file che l'app apre: gli altri non si vedono (l'autore, 3/11: «se un file non lo
+            // Solo i file che l'app apre: gli altri non si vedono (richiesta dell'autore, 3/11: «se un file non lo
             // leggiamo deve sparire»).
             self.scorciatoie.iter().map(|s| elenca(&s.percorso).ok().map(|v| v.into_iter().filter(|v| !v.cartella && si_apre(v.tipo)).collect())).collect()
         } else {
@@ -891,7 +891,7 @@ impl Home {
         }
     }
 
-    /// Il foglio di «Nuovo»: prima «Scansiona» (i PDF vengono prima, l'autore il 3/11), poi
+    /// Il foglio di «Nuovo»: prima «Scansiona» (i PDF vengono prima, scelta dell'autore del 3/11), poi
     /// «Documento vuoto» e i modelli (Verbale, Relazione, Lettera, Lezione).
     fn mostra_foglio_nuovo(&mut self, ctx: &egui::Context) -> Option<Azione> {
         let scelto = self.foglio_nuovo.mostra(ctx, "Nuovo", |ui| {

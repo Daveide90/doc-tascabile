@@ -34,7 +34,7 @@ fn regole(testo: &str) -> String {
 fn version_name_di_gradle_e_quella_di_cargo() {
     let gradle = android("app/build.gradle.kts");
     assert_eq!(valore(&gradle, "versionName").as_deref(), Some(tascabile::VERSIONE));
-    assert_eq!(tascabile::VERSIONE, "0.9.2");
+    assert_eq!(tascabile::VERSIONE, "0.9.3");
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn version_code_della_0_7_0_e_8() {
     // La 0.0.1 aveva 1, la 0.1.0 2, la 0.2.0 3, la 0.3.0 4, la 0.4.0 5, la 0.5.0 6, la 0.6.0 7:
     // Android installa sopra solo con un numero più alto.
     let gradle = android("app/build.gradle.kts");
-    assert_eq!(valore(&gradle, "versionCode").as_deref(), Some("28"));
+    assert_eq!(valore(&gradle, "versionCode").as_deref(), Some("29"));
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn build_sh_usa_il_lock() {
 
 #[test]
 fn il_nome_sotto_l_icona_e_doc_tascabile() {
-    // L'autore, 24/10: l'app si chiama «Doc Tascabile»; il pacchetto resta it.tascabile.app.
+    // Scelta dell'autore, 24/10: l'app si chiama «Doc Tascabile»; il pacchetto resta it.tascabile.app.
     let stringhe = android("app/src/main/res/values/strings.xml");
     assert!(stringhe.contains(r#"<string name="app_name">Doc Tascabile</string>"#), "{stringhe}");
     let manifest = android("app/src/main/AndroidManifest.xml");

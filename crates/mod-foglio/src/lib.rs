@@ -1,4 +1,4 @@
-//! I fogli di calcolo in sola lettura (l'autore, 3/11: «inserisci fogli di calcolo per ora solo in
+//! I fogli di calcolo in sola lettura (richiesta dell'autore, 3/11: «inserisci fogli di calcolo per ora solo in
 //! visualizzazione»), coi lettori e il modello di GridCraft (ricerca 2026-11-03-gridcraft-api).
 //!
 //! Si apre da byte, coi tetti per un telefono ([`apertura`]); i valori sono quelli salvati da

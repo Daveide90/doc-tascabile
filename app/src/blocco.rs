@@ -247,6 +247,19 @@ impl TascabileApp {
             Ok(()) => {
                 diagnosi(if acceso { "impostazioni: blocco dell'app acceso" } else { "impostazioni: blocco dell'app spento" });
                 self.impostazioni.blocco = acceso;
+                // Revisione esterna del 3/11 (D4): col blocco acceso anche la modalità riservata,
+                // se non c'era già (screenshot, registrazioni e anteprima delle app recenti neri).
+                // Resta spegnibile a mano nelle Impostazioni.
+                if acceso && !self.impostazioni.riservata {
+                    match impostazioni::scrivi_riservata(&self.piattaforma.cartella_app(), true) {
+                        Ok(()) => {
+                            diagnosi("impostazioni: modalità riservata accesa col blocco");
+                            self.impostazioni.riservata = true;
+                            self.piattaforma.riservata(true);
+                        }
+                        Err(e) => diagnosi(format!("impostazioni: modalità riservata non scritta ({:?})", e.kind())),
+                    }
+                }
             }
             Err(e) => {
                 diagnosi(format!("impostazioni: blocco dell'app non scritto ({:?})", e.kind()));

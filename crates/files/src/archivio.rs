@@ -349,7 +349,7 @@ mod test {
         zip::ZipArchive::new(std::io::Cursor::new(b)).is_ok()
     }
 
-    // Revisione del 31/10 (docs/sicurezza/revisione-2026-10-31.md, punto 1): il controllo e il
+    // Revisione del 31/10 (un documento interno di lavoro, punto 1): il controllo e il
     // lettore dei motori devono vedere lo stesso archivio.
 
     /// La misura della directory centrale (nella fine dell'archivio) a zero: zip non la usa.

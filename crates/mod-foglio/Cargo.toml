@@ -6,7 +6,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
-# I fogli di calcolo in sola lettura (l'autore, 3/11): i lettori e il modello di GridCraft, senza il
+# I fogli di calcolo in sola lettura (richiesta dell'autore, 3/11): i lettori e il modello di GridCraft, senza il
 # motore né la sua interfaccia (ricerca 2026-11-03-gridcraft-api, sezioni 1 e 13).
 gridcraft-xlsx.workspace = true
 gridcraft-model.workspace = true

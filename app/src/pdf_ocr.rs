@@ -57,7 +57,7 @@ pub(crate) const GALLERIA: &str = "Galleria";
 /// Gli strumenti della pagina che si vede, nella barra sotto la pagina.
 pub(crate) const ASPETTO: &str = "Aspetto";
 pub(crate) const TOGLI: &str = "Togli";
-/// Il cancellino della pagina (l'autore, 3/11): col dito si sbiancano le macchie.
+/// Il cancellino della pagina (richiesta dell'autore, 3/11): col dito si sbiancano le macchie.
 pub(crate) const GOMMA: &str = "Gomma";
 pub(crate) const ANNULLA_PASSATA: &str = "Annulla";
 pub(crate) const MISURE_GOMMA: [&str; 3] = ["Sottile", "Media", "Larga"];

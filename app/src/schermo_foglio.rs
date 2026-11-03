@@ -1,4 +1,4 @@
-//! I fogli di calcolo in sola lettura (0.9.0, l'autore il 3/11: «inserisci fogli di calcolo per ora
+//! I fogli di calcolo in sola lettura (0.9.0, richiesta dell'autore del 3/11: «inserisci fogli di calcolo per ora
 //! solo in visualizzazione»). Si apre su un thread suo con lo stack grande (i lettori di GridCraft
 //! vanno in profondità); la griglia la disegna egui dai dati di `tascabile_foglio::vista`: le
 //! intestazioni delle colonne (A, B, C) e delle righe (1, 2, 3), le righe e le colonne bloccate

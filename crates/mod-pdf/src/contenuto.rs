@@ -305,7 +305,7 @@ impl Modifica {
     }
 
     /// Il testo nuovo di un paragrafo, largo `quanto` volte quello di prima: la presa della
-    /// scrittura (l'autore, 3/11: «poter aumentare allargando il box delle parole che correggo per
+    /// scrittura (richiesta dell'autore, 3/11: «poter aumentare allargando il box delle parole che correggo per
     /// evitare che vada a capo»). Il testo senza gli a capo di prima, che si rifà nella larghezza
     /// nuova; testo e larghezza in una modifica sola, che Annulla toglie insieme.
     pub fn testo_largo(o: &Oggetto, info: &PageInfo, testo: &str, quanto: f32) -> Option<Modifica> {

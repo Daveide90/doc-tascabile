@@ -469,7 +469,7 @@ impl TascabileApp {
                 azione = Some(Box::new(move |app| app.metti_cursore_pdf(byte)));
             }
             // La presa per allargare il paragrafo, sul bordo destro del riquadro: trascinata, il
-            // riquadro si allarga o si stringe, fino al bordo della pagina (l'autore, 3/11).
+            // riquadro si allarga o si stringe, fino al bordo della pagina (richiesta dell'autore, 3/11).
             let mut dopo_la_presa = 0.0;
             if let Some((base, massimo)) = posto.allargabile {
                 let centro = pos2(dentro.right() + 8.0, dentro.center().y);
@@ -1776,7 +1776,7 @@ pub(crate) fn posto_sulla_pagina(p: &crate::schermo_pdf::PdfAperto, ctx: &egui::
             };
             // Un paragrafo del PDF va a capo dove ci andrà nel PDF, nella sua larghezza per quanto
             // è allargato: una riga sola che andava avanti fino al bordo dello schermo, nel PDF
-            // andava a capo sopra la riga sotto (l'autore, 3/11). Gli altri: una riga sola va
+            // andava a capo sopra la riga sotto (segnalazione dell'autore, 3/11). Gli altri: una riga sola va
             // avanti fino al bordo, un paragrafo va a capo nella sua larghezza.
             let (largo, allargabile) = if o.genere == GenereOggetto::Testo {
                 let base = r.width() * 1.02;

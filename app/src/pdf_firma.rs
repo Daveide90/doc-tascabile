@@ -431,7 +431,7 @@ impl TascabileApp {
 
     /// Una firma nuova è pronta: va dove si è scelto e si salva per le volte dopo. Se ce n'è già
     /// una salvata, prima di sostituirla si chiede (revisione del 31/10, punto 3: un collega col
-    /// telefono in mano metteva la sua al posto di quella dell'autore, senza domande).
+    /// telefono in mano metteva la sua al posto di quella di chi usa l'app, senza domande).
     fn firma_nuova_pdf(&mut self, iniziali: bool, firma: Firma) {
         if self.firme().di(iniziali).is_some() {
             diagnosi(format!("firma: {} nuova, si chiede se sostituire la salvata", nome(iniziali)));
@@ -820,7 +820,7 @@ impl TascabileApp {
             }
             // In fondo il tratto, il colore, Cancella e Fatto. In verticale: le chip del tratto su
             // una fila loro; sotto Cancella, i colori in mezzo e Fatto, larghi quanto c'è posto
-            // (sul telefono dell'autore, 372 dp, a 120 dp si toccavano quasi: 0.8.3). In orizzontale
+            // (sul telefono da 372 dp, a 120 dp si toccavano quasi: 0.8.3). In orizzontale
             // una fila sola: le chip, i colori, poi Cancella e Fatto a destra.
             let fila =
                 Rect::from_min_max(pos2(schermo.left() + 16.0, schermo.bottom() - 64.0), pos2(schermo.right() - 16.0, schermo.bottom() - 12.0));

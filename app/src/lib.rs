@@ -2926,7 +2926,7 @@ mod test {
         assert_eq!(testi(&app), risposte);
     }
 
-    /// L'app con la checklist nell'Editor, aperta dalla Home come farebbe l'autore.
+    /// L'app con la checklist nell'Editor, aperta dalla Home come farebbe chi la usa.
     fn telefono_con_la_checklist(nome: &str) -> Telefono {
         let mut h = telefono(app_di_prova(nome));
         dalle_impostazioni(&mut h, "Checklist della tastiera");
@@ -3238,7 +3238,7 @@ mod test {
         h.run_steps(2);
     }
 
-    /// I fogli di calcolo in sola lettura (0.9.0, l'autore il 3/11): un .xlsx dalle cartelle si apre
+    /// I fogli di calcolo in sola lettura (0.9.0, richiesta dell'autore del 3/11): un .xlsx dalle cartelle si apre
     /// nella sua schermata, con la griglia, le schede dei fogli visibili (non quello nascosto), il
     /// tocco su una cella che mostra testo e formula; va nei recenti coi suoi fogli; Indietro
     /// chiude prima la cella, poi torna alla Home. Nella diagnosi niente nomi né celle.
@@ -4359,7 +4359,7 @@ mod test {
         p.motore.stato().campi.iter().find(|x| x.suggerimento.as_deref() == Some(c.suggerimento())).expect("campo che non c'è").clone()
     }
 
-    /// Un modulo sul telefono dell'autore (372 dp): nella barra alta Annulla, Cerca e il menu, e il
+    /// Un modulo sul telefono da 372 dp: nella barra alta Annulla, Cerca e il menu, e il
     /// sottotitolo dice prima quanti campi restano, intero (0.8.3: con quattro icone restavano
     /// 116 dp e si leggeva «Non salvato · 2 da c…»). Ripeti è in cima al menu quando c'è da
     /// ripetere; a 412 dp resta nella barra.
@@ -5373,7 +5373,7 @@ mod test {
 
     /// Revisione del 31/10, punto 3: con una firma già salvata, la nuova va sul documento e poi si
     /// chiede se salvarla al posto di quella; «Tieni quella di prima» la lascia, «Salva la nuova» la
-    /// cambia. Un collega col telefono in mano non sostituisce più la firma dell'autore senza domande.
+    /// cambia. Un collega col telefono in mano non sostituisce più la firma di chi usa l'app senza domande.
     #[test]
     fn prima_di_sostituire_la_firma_salvata_si_chiede() {
         let (piattaforma, dir) = piattaforma_di_prova("pdf-firma-sostituita");
@@ -5562,6 +5562,9 @@ mod test {
         tocca(&mut h, impostazioni::BLOCCO_APP);
         h.run_steps(2);
         assert!(h.state().impostazioni.blocco && impostazioni::leggi_blocco(&d.join("app")));
+        // Revisione esterna del 3/11 (D4): col blocco acceso anche la modalità riservata.
+        assert!(h.state().impostazioni.riservata && impostazioni::leggi_riservata(&d.join("app")));
+        assert!(h.state().piattaforma.riservata_accesa());
         // Fuori per poco: niente.
         h.input_mut().focused = false;
         h.run_steps(2);
@@ -6660,7 +6663,7 @@ mod test {
         assert!(!diag.contains("Recente 0") && !diag.contains("Recente 1"), "{diag}");
     }
 
-    /// «Scansiona» apre la scansione vuota con Fotocamera e Galleria (0.8.3, l'autore: «dai la
+    /// «Scansiona» apre la scansione vuota con Fotocamera e Galleria (0.8.3, richiesta dell'autore: «dai la
     /// possibilità di prendere la foto per lo scan dalla galleria e non farla e basta»). Tornare
     /// indietro dalla fotocamera o dalla galleria senza foto lascia la scansione aperta; Indietro la
     /// chiude.
@@ -6941,7 +6944,7 @@ mod test {
         assert!(diagnosi_della_prova().contains("] scansione: aspetto bianco e nero\n"));
     }
 
-    /// Il formato del foglio in «Sistema i bordi» (l'autore, 3/11): Automatico all'inizio; scelto
+    /// Il formato del foglio in «Sistema i bordi» (richiesta dell'autore, 3/11): Automatico all'inizio; scelto
     /// A5, la pagina è un A5 e le foto dopo partono da A5; Bordi su una pagina fatta riparte dal
     /// suo formato.
     #[test]
@@ -7281,14 +7284,14 @@ mod test {
         }
     }
 
-    /// La firma col dito sul telefono dell'autore, su uno stretto e girata (0.8.3: a 372 dp Cancella
+    /// La firma col dito sul telefono da 372 dp, su uno stretto e girata (0.8.3: a 372 dp Cancella
     /// toccava quasi il nero, in orizzontale le chip del tratto finivano sopra Cancella): ogni
     /// comando si vede, intero e senza sovrapposizioni, e fra Cancella, i colori e Fatto restano
     /// almeno 8 dp.
     #[test]
     fn i_comandi_della_firma_col_dito_si_vedono_su_ogni_telefono() {
         for (nome, misura, densita) in
-            [("davide", egui::vec2(372.0, 827.0), 3.0), ("stretto", egui::vec2(360.0, 760.0), 3.0), ("girato", egui::vec2(827.0, 372.0), 3.0)]
+            [("telefono-372", egui::vec2(372.0, 827.0), 3.0), ("stretto", egui::vec2(360.0, 760.0), 3.0), ("girato", egui::vec2(827.0, 372.0), 3.0)]
         {
             let (piattaforma, dir) = piattaforma_di_prova(&format!("firma-misure-{nome}"));
             let percorso = dir.join("radice/Modulo.pdf");
@@ -7324,12 +7327,12 @@ mod test {
         }
     }
 
-    /// La scansione e «Sistema i bordi» sul telefono dell'autore (372 dp, dove Rifai finiva sotto
+    /// La scansione e «Sistema i bordi» sul telefono da 372 dp (dove Rifai finiva sotto
     /// Altra pagina, 28/10), su uno stretto da 360 e girati: ogni pulsante si vede, intero.
     #[test]
     fn i_comandi_della_scansione_si_vedono_su_ogni_telefono() {
         for (nome, misura, densita) in
-            [("davide", egui::vec2(372.0, 827.0), 3.0), ("stretto", egui::vec2(360.0, 760.0), 3.0), ("girato", egui::vec2(827.0, 372.0), 3.0)]
+            [("telefono-372", egui::vec2(372.0, 827.0), 3.0), ("stretto", egui::vec2(360.0, 760.0), 3.0), ("girato", egui::vec2(827.0, 372.0), 3.0)]
         {
             let mut h = scansione_su(telefono_di(app_di_prova(&format!("scansione-misure-{nome}")), misura, densita), 2);
             let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, misura);
@@ -7836,7 +7839,7 @@ mod test {
         // La barra alta col percorso e quello che c'è dentro.
         h.get_by_label("Download");
         h.get_by_label("1 cartella · 2 file");
-        // I PDF e le presentazioni si aprono; quello che l'app non legge non si vede (l'autore, 3/11).
+        // I PDF e le presentazioni si aprono; quello che l'app non legge non si vede (richiesta dell'autore, 3/11).
         for etichetta in ["Bolletta.pdf", "Lezione.pptx"] {
             assert!(!h.get_by_role_and_label(Role::Button, etichetta).accesskit_node().is_disabled(), "«{etichetta}» è spenta");
         }
@@ -7855,11 +7858,11 @@ mod test {
         assert_eq!(testi(h.state()), ["Relazione"]);
     }
 
-    /// La Home sul telefono dell'autore (372 dp): col chip «Fogli» la fila non stava più e allargava
+    /// La Home sul telefono da 372 dp: col chip «Fogli» la fila non stava più e allargava
     /// tutta la Home oltre lo schermo (screenshot del 3/11). Ora la fila dei chip scorre e il resto
     /// sta dentro.
     #[test]
-    fn la_home_sta_nello_schermo_di_davide() {
+    fn la_home_sta_nello_schermo_da_372() {
         let misura = egui::vec2(372.0, 827.0);
         let (piattaforma, d) = piattaforma_di_prova("home-372");
         std::fs::create_dir_all(d.join("radice/Download")).unwrap();
@@ -7873,7 +7876,7 @@ mod test {
         assert!(h.get_by_value(home::CERCA).rect().right() <= 372.0);
     }
 
-    /// Le due viste di una cartella e il Cerca (l'autore, 3/11): «Tutti i file» mostra anche quelli
+    /// Le due viste di una cartella e il Cerca (richiesta dell'autore, 3/11): «Tutti i file» mostra anche quelli
     /// delle sottocartelle, con la sottocartella; la scelta resta per le volte dopo; il Cerca
     /// apre il campo e trova anche nelle sottocartelle; Indietro lo chiude e lo svuota.
     #[test]
@@ -8490,6 +8493,65 @@ mod test {
         assert!(!d.contains("Zanzibar") && !d.contains("Torino"), "{d}");
     }
 
+    /// Revisione esterna del 3/11 (D5): la copia di recupero di un PDF aperto con la password non
+    /// porta il documento in chiaro nella cartella dell'app. La scrive il motore col salvataggio
+    /// incrementale: i byte devono restare cifrati come il file (con `/Encrypt`), senza il testo
+    /// della pagina né quello della nota appena messa, e senza la password non si apre.
+    #[test]
+    fn la_copia_di_recupero_di_un_pdf_con_password_resta_cifrata() {
+        let contiene = |byte: &[u8], cosa: &[u8]| byte.windows(cosa.len()).any(|w| w == cosa);
+        // Il PDF `originale` aperto (con la password, se c'è), una nota col suo testo come dal
+        // foglio delle annotazioni, l'app che perde il fuoco: i byte della copia di recupero.
+        fn copia_con_una_nota(prova: &str, originale: &[u8], password: Option<&str>) -> Vec<u8> {
+            let (piattaforma, d) = piattaforma_di_prova(prova);
+            let percorso = d.join("radice/Referto.pdf");
+            std::fs::write(&percorso, originale).unwrap();
+            let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+            h.state_mut().apri_file(&percorso, "Referto.pdf");
+            if let Some(password) = password {
+                aspetta_la_password(&mut h);
+                scrivi(&mut h, password);
+                tocca(&mut h, schermo_pdf::APRI);
+            }
+            aspetta_il_lettore(&mut h);
+            let info = h.state().pdf.as_ref().unwrap().motore.stato().geometrie[0].clone();
+            let nota = tascabile_pdf::Modifica::nota(0, &info, [120.0, 200.0], "Diagnosi Zanzibar", [1.0, 0.82, 0.0], "Anna").unwrap();
+            h.state_mut().modifica_pdf_di_prova(nota);
+            aspetta_il_motore(&mut h);
+            assert!(h.state().modifiche_da_salvare());
+            h.input_mut().focused = false;
+            h.run_steps(1);
+            h.input_mut().focused = true;
+            aspetta_il_motore(&mut h);
+            assert!(h.state().pdf_ha_la_copia(), "la copia non c'è");
+            let copie: Vec<_> = std::fs::read_dir(d.join("app/ripristino-pdf"))
+                .unwrap()
+                .map(|v| v.unwrap().path())
+                .filter(|p| p.extension().is_some_and(|e| e == "pdf"))
+                .collect();
+            assert_eq!(copie.len(), 1, "{copie:?}");
+            let byte = std::fs::read(&copie[0]).unwrap();
+            assert!(byte.len() > originale.len(), "la copia non ha la modifica");
+            byte
+        }
+        // Il controllo vede davvero il testo: in un PDF senza password la nota della copia si
+        // legge in chiaro nei byte.
+        let in_chiaro = copia_con_una_nota("recupero-pdf-in-chiaro", &tascabile_pdf::prova::modulo(), None);
+        assert!(contiene(&in_chiaro, b"Diagnosi Zanzibar"), "il testo della nota non si trova nemmeno senza password");
+        // Con la password: la prova ha senso solo se il file stesso non ha la pagina in chiaro.
+        let originale = tascabile_pdf::prova::cifrato("Kilimangiaro9");
+        assert!(contiene(&originale, b"/Encrypt") && !contiene(&originale, b"Pagina protetta"));
+        let byte = copia_con_una_nota("recupero-pdf-password", &originale, Some("Kilimangiaro9"));
+        assert!(contiene(&byte, b"/Encrypt"), "la copia non è cifrata");
+        for chiaro in [&b"Pagina protetta"[..], b"Diagnosi Zanzibar", b"Zanzibar", b"Anna", b"Kilimangiaro"] {
+            assert!(!contiene(&byte, chiaro), "«{}» in chiaro nella copia di recupero", String::from_utf8_lossy(chiaro));
+        }
+        // Senza la password non si apre; con la password sì, con la nota.
+        assert!(tascabile_pdf::Pdf::apri(byte.clone(), None).is_err_and(|e| e.chiede_password()));
+        let riaperta = tascabile_pdf::Pdf::apri(byte, Some("Kilimangiaro9")).unwrap();
+        assert!(riaperta.annotazioni().iter().any(|a| a.testo == "Diagnosi Zanzibar" && a.autore == "Anna"));
+    }
+
     /// La copia del PDF si scrive anche con l'app in primo piano, poco dopo l'ultima modifica; se
     /// ne va annullando fino al PDF di prima e uscendo con «Non salvare».
     #[test]
@@ -8732,12 +8794,12 @@ mod test {
         assert!(!d.contains("Quale mondo") && !d.contains("nostro"), "{d}");
     }
 
-    /// Il foglio delle revisioni con una modifica e un commento, sul telefono dell'autore e su uno
+    /// Il foglio delle revisioni con una modifica e un commento, sul telefono da 372 dp e su uno
     /// stretto (0.8.3: a 372 dp Rispondi, Risolvi ed Elimina allargavano il foglio, che usciva dai
     /// due lati): i pulsanti, il commento e la X stanno nello schermo.
     #[test]
     fn il_foglio_delle_revisioni_sta_nello_schermo_di_ogni_telefono() {
-        for (nome, misura) in [("davide", egui::vec2(372.0, 827.0)), ("stretto", egui::vec2(360.0, 760.0))] {
+        for (nome, misura) in [("telefono-372", egui::vec2(372.0, 827.0)), ("stretto", egui::vec2(360.0, 760.0))] {
             let mut h = telefono_di(app_di_prova(&format!("revisioni-{nome}")), misura, 3.0);
             h.state_mut().cambia_documento(testo_semplice("prova", "Ciao mondo"));
             h.run_steps(4);
@@ -8772,13 +8834,13 @@ mod test {
         }
     }
 
-    /// La riga dei colori della penna sul telefono dell'autore e su uno stretto (0.8.3: a 372 dp il
+    /// La riga dei colori della penna sul telefono da 372 dp e su uno stretto (0.8.3: a 372 dp il
     /// tratto spesso usciva dalla pillola): i cinque colori e i tre spessori stanno nella pillola,
     /// senza sovrapporsi, e l'ultimo spessore sta dal bordo destro quanto il primo colore dal
     /// sinistro.
     #[test]
     fn la_riga_dei_colori_della_penna_sta_nella_pillola_su_ogni_telefono() {
-        for (nome, misura) in [("davide", egui::vec2(372.0, 827.0)), ("stretto", egui::vec2(360.0, 760.0))] {
+        for (nome, misura) in [("telefono-372", egui::vec2(372.0, 827.0)), ("stretto", egui::vec2(360.0, 760.0))] {
             let (piattaforma, dir) = piattaforma_di_prova(&format!("penna-{nome}"));
             let percorso = lettera_da_annotare(&dir);
             let mut h = telefono_di(TascabileApp::new(piattaforma, Instant::now()), misura, 3.0);
@@ -9567,11 +9629,11 @@ mod test {
         assert!(!d.contains("Medicazione") && !d.contains("Bozza"), "{d}");
     }
 
-    /// La barra dell'immagine sul telefono dell'autore e su uno stretto (0.8.3: a 372 dp Elimina
+    /// La barra dell'immagine sul telefono da 372 dp e su uno stretto (0.8.3: a 372 dp Elimina
     /// restava fuori, da scorrere): le quattro voci si vedono intere, dentro la barra.
     #[test]
     fn la_barra_dell_immagine_si_vede_tutta_su_ogni_telefono() {
-        for (nome, misura) in [("davide", egui::vec2(372.0, 827.0)), ("stretto", egui::vec2(360.0, 760.0))] {
+        for (nome, misura) in [("telefono-372", egui::vec2(372.0, 827.0)), ("stretto", egui::vec2(360.0, 760.0))] {
             let mut app = app_di_prova(&format!("immagine-{nome}"));
             app.cambia_documento(testo_semplice("prova", "Prima\nDopo"));
             app.editor_mut().unwrap().s.run("caret.set", &serde_json::json!({ "pos": Pos::body(0, 5) })).unwrap();

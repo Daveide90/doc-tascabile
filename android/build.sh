@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tascabile: libtascabile.so con cargo-ndk, poi APK con Gradle. Niente emulatore: l'APK va sul telefono.
 #   ./build.sh            APK di prova, firmato con la chiave di debug: DocTascabile_v<versione>_debug_<data>.apk
-#   ./build.sh rilascio   APK di rilascio, con R8 e la chiave vera:     DocTascabile_v<versione>_<data>.apk (anche in ~/Downloads)
+#   ./build.sh rilascio   APK di rilascio, con R8 e la chiave vera:     DocTascabile_v<versione>_<data>.apk (in android/uscita/)
 set -euo pipefail
 cd "$(dirname "$0")"                       # cartella android/
 
@@ -168,16 +168,17 @@ if [ "$MODO" = rilascio ]; then
     echo "Firma: chiave di rilascio (SHA-256 $TROVATA)."
 fi
 
-# 6. Nella cartella di Telegram Desktop, col nome degli APK di prova o di rilascio
+# 6. L'APK in android/uscita/ (fuori da git). Le copie personali, se servono, le fa
+#    privato/dopo-build.sh, anch'esso fuori da git, con il percorso dell'APK e il modo.
 VERSIONE=$(grep -m1 '^version' ../Cargo.toml | cut -d'"' -f2)
-DEST="$HOME/.var/app/org.telegram.desktop/data/TelegramDesktop"
+DEST="$(pwd)/uscita"
+mkdir -p "$DEST"
 if [ "$MODO" = rilascio ]; then
     APK="$DEST/DocTascabile_v${VERSIONE}_$(date +%Y%m%d).apk"
 else
     APK="$DEST/DocTascabile_v${VERSIONE}_debug_$(date +%Y%m%d).apk"
 fi
 cp "$USCITA" "$APK"
-# l'autore (24/10): l'APK di rilascio va anche in Download.
-if [ "$MODO" = rilascio ]; then cp "$USCITA" "$HOME/Downloads/$(basename "$APK")"; echo "Copia in Download: $HOME/Downloads/$(basename "$APK")"; fi
+if [ -x ../privato/dopo-build.sh ]; then ../privato/dopo-build.sh "$APK" "$MODO"; fi
 ls -l --block-size=K "$SO" "$APK"
 echo "APK pronto: $APK"

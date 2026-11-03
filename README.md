@@ -4,7 +4,7 @@
 
 Documents, PDFs, slides and spreadsheets on the phone, offline, made for the finger. · Documenti, PDF, slide e fogli di calcolo sul telefono, senza rete, fatti per il dito.
 
-Version 0.9.2 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
+Version 0.9.3 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
 
 <p align="center">
   <a href="https://github.com/Daveide90/doc-tascabile/releases/latest/download/DocTascabile.apk"><img src="docs/pulsante-download.svg" width="340" alt="Download APK · Scarica l'APK"></a>
@@ -104,7 +104,7 @@ Microsoft Word, Excel and PowerPoint are trademarks of Microsoft; WhatsApp and T
 
 ### Feedback
 
-Problems and ideas: open an issue on this repository. For security problems use GitHub's private reporting (Security tab › Report a vulnerability), not a public issue.
+Problems and ideas: open an issue on this repository. For security problems use GitHub's private reporting (Security tab › Report a vulnerability), not a public issue. Security policy: [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -186,4 +186,4 @@ Microsoft Word, Excel e PowerPoint sono marchi di Microsoft; WhatsApp e Telegram
 
 ### Segnalazioni
 
-Problemi e idee: apri una issue su questo repository. Per i problemi di sicurezza usa la segnalazione privata di GitHub (scheda Security › Report a vulnerability), non una issue pubblica.
+Problemi e idee: apri una issue su questo repository. Per i problemi di sicurezza usa la segnalazione privata di GitHub (scheda Security › Report a vulnerability), non una issue pubblica. Regole per le segnalazioni di sicurezza: [SECURITY.md](SECURITY.md).

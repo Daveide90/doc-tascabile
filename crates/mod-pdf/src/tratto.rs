@@ -1,4 +1,4 @@
-//! Il tratto della firma col dito (ritocchi della 0.8.2, R2). l'autore il 28/10: «la firma con il
+//! Il tratto della firma col dito (ritocchi della 0.8.2, R2). L'autore il 28/10: «la firma con il
 //! dito non è bella, il tratto è troppo omogeneo, usa un tratto tipo stilografico o fammi
 //! scegliere più tratti».
 //!

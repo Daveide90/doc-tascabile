@@ -82,7 +82,7 @@ pub(crate) const PARTI: [(&str, &str); 11] = [
         "Nelle Impostazioni. Il blocco dell'app chiede l'impronta o il PIN del telefono all'apertura e quando torni dopo 2 \
          minuti fuori dall'app. L'impronta per la firma fa mettere la firma salvata solo dopo l'impronta o il PIN, e poi per 5 \
          minuti non la richiede. La modalità riservata rende nero lo schermo negli screenshot, nelle registrazioni e nelle \
-         videochiamate. Blocco e impronta per la firma si spengono solo con l'impronta, e funzionano se nel telefono c'è un \
+         videochiamate. Accendendo il blocco si accende anche la modalità riservata; la si può spegnere a parte. Blocco e impronta per la firma si spengono solo con l'impronta, e funzionano se nel telefono c'è un \
          blocco dello schermo: PIN, sequenza o impronta.",
     ),
     (

@@ -39,7 +39,7 @@ fn paragrafo(s: &mut Session, stile: &str, testo: &str) {
     }
 }
 
-/// La checklist della Fase 0: l'autore scrive «sì» o «no» accanto a ogni voce.
+/// La checklist della Fase 0: chi prova scrive «sì» o «no» accanto a ogni voce.
 pub fn checklist() -> Session {
     let mut s = crate::documento::nuovo();
     esegui(&mut s, "para.heading1", json!({}));

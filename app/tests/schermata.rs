@@ -1,5 +1,5 @@
 //! Schermate a misura di telefono (412 × 915 dp, densità 2,625, o quella di `TASCABILE_SCHERMO`,
-//! come «372x827@3» per il telefono dell'autore), disegnate con wgpu senza finestra.
+//! come «372x827@3» per il telefono da 372 dp), disegnate con wgpu senza finestra.
 //! Senza le barre di sistema: kittest misura l'immagine dalla zona libera e, con le barre, ne
 //! taglierebbe il fondo; accanto ai bozzetti, che le hanno, tutto sta 28 dp più in alto.
 //! Ci sono la Home con dei recenti finti, il suo foglio «Nuovo» e il menu di un recente, una
@@ -144,7 +144,7 @@ fn una_alla_volta() -> std::sync::MutexGuard<'static, ()> {
 
 /// Salva l'immagine in target/tmp/schermate e la restituisce.
 /// La misura del telefono delle schermate, in dp, e la sua densità: 412 × 915 a 2,625, o quella
-/// di `TASCABILE_SCHERMO`, scritta come «372x827@3» (il telefono dell'autore), per rifarle tutte a
+/// di `TASCABILE_SCHERMO`, scritta come «372x827@3» (il telefono da 372 dp), per rifarle tutte a
 /// quella misura (0.8.3: Rifai finiva sotto Altra pagina solo sul suo telefono).
 fn misura_e_densita() -> (egui::Vec2, f32) {
     std::env::var("TASCABILE_SCHERMO")

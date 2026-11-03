@@ -1,6 +1,6 @@
 //! Piattaforma Android (GameActivity): l'unico file del crate che parla JNI.
 //! I metodi nativi di MainActivity stanno nell'app (devono finire nel .so) e chiamano le
-//! funzioni `ricevi_*` qui sotto. Ricerca: docs/ricerca/2026-10-15-android-egui-tastiera.md.
+//! funzioni `ricevi_*` qui sotto. Ricerca: un documento interno di lavoro.
 //!
 //! Thread: le letture semplici (cartelle, permesso, appunti) si fanno subito dal thread di
 //! android_main (`with_activity`); quello che apre schermate o scrive negli appunti va sul thread

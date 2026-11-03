@@ -70,7 +70,7 @@ pub struct Ritocchi {
     pub formato: Formato,
 }
 
-/// Il formato del foglio fotografato (l'autore, 3/11: «fai in modo che l'utente possa scegliere che
+/// Il formato del foglio fotografato (richiesta dell'autore, 3/11: «fai in modo che l'utente possa scegliere che
 /// foglio è, un A4, un A3 o un A5 o biglietto da visita, in modo che il PDF sappia già cos'è quando
 /// stampa»): la pagina ne prende le proporzioni e, nel PDF, la misura vera. Automatico: le
 /// proporzioni vere del foglio, uguali a quelle di un A4 o di un foglio Lettera quando ci sono
@@ -724,7 +724,7 @@ mod test {
         assert!(scuri(&girata, &|_, _, _, _| true) > 100);
     }
 
-    /// Il formato scelto è la misura vera della pagina nel PDF (l'autore, 3/11: «in modo che il PDF
+    /// Il formato scelto è la misura vera della pagina nel PDF (richiesta dell'autore, 3/11: «in modo che il PDF
     /// sappia già cos'è quando stampa»), e la pagina ne prende le proporzioni.
     #[test]
     fn il_formato_scelto_e_la_misura_della_pagina_nel_pdf() {
@@ -763,7 +763,7 @@ mod test {
         assert_eq!(rapporto_credibile(None, 0.81), 0.81);
     }
 
-    /// Un A4 fotografato col telefono inclinato di 50 gradi (la foto del registro dell'autore, 3/11):
+    /// Un A4 fotografato col telefono inclinato di 50 gradi (la foto di un registro, 3/11):
     /// coi lati come si vedono la pagina usciva quasi quadrata, ora è un A4.
     #[test]
     fn un_a4_fotografato_storto_resta_un_a4() {

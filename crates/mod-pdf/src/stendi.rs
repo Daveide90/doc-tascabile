@@ -328,7 +328,7 @@ mod test {
         // Inclinato di 55 gradi e girato di 15: le due fughe misurano la distanza focale.
         let r = proporzione_vera(fotografato(210.0, 297.0, 55.0, 15.0, 3000.0), 4000.0, 3000.0, None).unwrap();
         assert!(vicino(r, a4, 0.02), "{r}");
-        // Solo inclinato all'indietro, come la foto del registro dell'autore: una fuga sola, la
+        // Solo inclinato all'indietro, come la foto del registro del 3/11: una fuga sola, la
         // distanza focale tipica (qui quella vera è un poco diversa).
         for f in [2880.0, 3000.0, 3120.0] {
             let angoli = fotografato(210.0, 297.0, 60.0, 0.0, f);

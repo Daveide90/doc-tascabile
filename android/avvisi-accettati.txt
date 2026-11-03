@@ -1,5 +1,5 @@
 # Avvisi di sicurezza delle librerie (cargo-audit, registro RustSec) già guardati e non
 # raggiungibili dall'app. Formato: identificativo, uno spazio, il perché. android/build.sh rilascio
-# si ferma per ogni avviso che non è qui. Rapporti: docs/sicurezza/controllo-indipendente-2026-10-27.md
-# e docs/sicurezza/audit-2026-10-30.md.
+# si ferma per ogni avviso che non è qui. Rapporti: un documento interno di lavoro
+# e un documento interno di lavoro.
 RUSTSEC-2023-0071 rsa 0.10 (attacco Marvin, si ricava la chiave privata dai tempi): la usa solo pdfcraft-sign con una chiave privata, e l'app non firma con chiavi private, legge soltanto le firme digitali.

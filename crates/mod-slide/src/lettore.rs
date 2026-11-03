@@ -920,7 +920,7 @@ mod test {
         assert_eq!(l.larghezze_miniature(), vec![549; 4]);
     }
 
-    /// Col telefono dell'autore girato (827 × 372 dp) la griglia nel foglio è larga 791 dp: con
+    /// Col telefono da 372 dp girato (827 × 372 dp) la griglia nel foglio è larga 791 dp: con
     /// tre colonne una riga sarebbe alta 184 dp e la seconda finirebbe tutta sotto il bordo del
     /// foglio. Una riga non va oltre due quinti dello schermo (149 dp): quattro colonne.
     #[test]
