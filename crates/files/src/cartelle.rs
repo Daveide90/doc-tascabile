@@ -34,30 +34,45 @@ pub fn elenca(cartella: &Path) -> io::Result<Vec<Voce>> {
     raccogli(fs::read_dir(cartella)?.map(|voce| voce.map(|v| (v.file_name(), v.path()))))
 }
 
-/// Tutti i file di `cartella` e delle sue sottocartelle (fino a sei livelli, senza le nascoste),
-/// i più recenti prima, al più `massimo`: la vista «Tutti i file» di una cartella e la sua
-/// ricerca. Una sottocartella che non si legge si salta. I collegamenti a cartelle non si seguono:
-/// un giro tornerebbe su se stesso.
-pub fn elenca_tutto(cartella: &Path, massimo: usize) -> Vec<Voce> {
+/// Le voci che `elenca_tutto` guarda al più: una radice con centinaia di migliaia di foto non
+/// deve girare per minuti.
+const VOCI_VISTE: usize = 200_000;
+
+/// Tutti i file di `cartella` e delle sue sottocartelle che passano `tiene` (fino a sei livelli,
+/// senza le nascoste), i più recenti prima, al più `massimo`: la vista «Tutti i file» di una
+/// cartella e la sua ricerca. Il tetto conta solo quelli che passano e tiene i più recenti, non i
+/// primi trovati: in WhatsApp le foto riempivano il tetto prima dei documenti (revisione del
+/// 3/11). Una sottocartella che non si legge si salta. I collegamenti a cartelle non si seguono:
+/// un giro tornerebbe su se stesso. Legge il disco a lungo: va chiamata su un thread.
+pub fn elenca_tutto(cartella: &Path, massimo: usize, tiene: impl Fn(&Voce) -> bool) -> Vec<Voce> {
+    let ordine = |a: &Voce, b: &Voce| b.modificato.cmp(&a.modificato).then_with(|| confronta_nomi(&a.nome, &b.nome, true));
     let mut file = Vec::new();
+    let mut viste = 0usize;
     let mut da_vedere = vec![(cartella.to_path_buf(), 0usize)];
-    while let Some((c, livello)) = da_vedere.pop() {
+    'giro: while let Some((c, livello)) = da_vedere.pop() {
         let Ok(voci) = elenca(&c) else { continue };
         for v in voci {
+            viste += 1;
+            if viste > VOCI_VISTE {
+                break 'giro;
+            }
             if v.cartella {
                 let collegamento = fs::symlink_metadata(&v.percorso).is_ok_and(|m| m.file_type().is_symlink());
                 if livello < 6 && !collegamento {
                     da_vedere.push((v.percorso, livello + 1));
                 }
-            } else if file.len() < massimo {
+            } else if tiene(&v) {
                 file.push(v);
+                // I più recenti: ogni tanto si ordina e si taglia, così la memoria resta poca.
+                if file.len() >= 2 * massimo.max(1) {
+                    file.sort_by(ordine);
+                    file.truncate(massimo);
+                }
             }
         }
-        if file.len() >= massimo {
-            break;
-        }
     }
-    file.sort_by(|a, b| b.modificato.cmp(&a.modificato).then_with(|| confronta_nomi(&a.nome, &b.nome, true)));
+    file.sort_by(ordine);
+    file.truncate(massimo);
     file
 }
 
@@ -212,19 +227,20 @@ const SCORCIATOIE: &[(&str, &str)] = &[
     ("Telegram", "Download/Telegram"),
 ];
 
-/// Il file che si chiama `nome` nelle cartelle delle scorciatoie (il più recente, se sono più
-/// d'uno): un documento arrivato con «Apri con» da un'altra app, quando il permesso di leggerlo
-/// non c'è più e i suoi byte non si possono confrontare.
-pub fn per_nome(radice: &Path, nome: &str) -> Option<PathBuf> {
+/// La cartella delle scorciatoie (il nome da mostrare) dove c'è un file che si chiama `nome`, il
+/// più recente se sono più d'uno: per dirlo quando un documento arrivato con «Apri con» non si
+/// apre più. Solo da dire, mai da aprire: lo stesso nome può essere un altro documento, il
+/// referto di un altro paziente (revisione del 3/11, M3). Lo stesso file si riconosce solo dai
+/// byte, con [`lo_stesso_file`].
+pub fn cartella_dell_omonimo(radice: &Path, nome: &str) -> Option<&'static str> {
     if nome.is_empty() || Path::new(nome).file_name().is_none_or(|f| f != nome) {
         return None;
     }
     SCORCIATOIE
         .iter()
-        .map(|(_, dove)| radice.join(dove).join(nome))
-        .filter_map(|p| fs::metadata(&p).ok().filter(|m| m.is_file()).map(|m| (m.modified().ok(), p)))
+        .filter_map(|(etichetta, dove)| fs::metadata(radice.join(dove).join(nome)).ok().filter(|m| m.is_file()).map(|m| (m.modified().ok(), *etichetta)))
         .max_by_key(|(quando, _)| *quando)
-        .map(|(_, p)| p)
+        .map(|(_, etichetta)| etichetta)
 }
 
 /// Il file del telefono che ha questi `byte`, in una delle cartelle delle scorciatoie (prima uno
@@ -232,9 +248,13 @@ pub fn per_nome(radice: &Path, nome: &str) -> Option<PathBuf> {
 /// con» da WhatsApp, Telegram o da Download è quasi sempre lì: aperto da lì resta nei recenti
 /// anche quando il permesso di «Apri con» se ne va (dopo un aggiornamento dell'app: «Non si apre
 /// più: riaprilo da WhatsApp», segnalazione del 3/11) e Salva scrive nel file vero. Solo un file
-/// con gli stessi byte, mai uno che gli somiglia.
-pub fn lo_stesso_file(radice: &Path, nome: &str, byte: &[u8]) -> Option<PathBuf> {
-    let cartelle: Vec<PathBuf> = SCORCIATOIE.iter().map(|(_, dove)| radice.join(dove)).filter(|c| c.is_dir()).collect();
+/// con gli stessi byte, mai uno che gli somiglia. Con gli stessi byte in più cartelle, prima
+/// quelle dell'app che l'ha mandato (`da`, «WhatsApp» o «Telegram»): aperto da WhatsApp, si
+/// salvava nella copia di Download (revisione del 3/11).
+pub fn lo_stesso_file(radice: &Path, nome: &str, byte: &[u8], da: Option<&str>) -> Option<PathBuf> {
+    let mut scorciatoie: Vec<&(&str, &str)> = SCORCIATOIE.iter().collect();
+    scorciatoie.sort_by_key(|(etichetta, _)| da.is_none_or(|app| !etichetta.starts_with(app)));
+    let cartelle: Vec<PathBuf> = scorciatoie.iter().map(|(_, dove)| radice.join(dove)).filter(|c| c.is_dir()).collect();
     let uguale = |p: &Path| fs::metadata(p).is_ok_and(|m| m.is_file() && m.len() == byte.len() as u64) && fs::read(p).is_ok_and(|b| b == byte);
     // Un nome con dentro una cartella non è un nome di file.
     let semplice = !nome.is_empty() && Path::new(nome).file_name().is_some_and(|f| f == nome);
@@ -439,11 +459,24 @@ mod test {
         file(&d.join("Lavoro"), &["Relazione.pdf"]);
         file(&d.join("Lavoro/Turni"), &["Novembre.xlsx"]);
         file(&d.join(".nascosta"), &["Segreto.pdf"]);
-        let mut nomi: Vec<String> = elenca_tutto(&d, 100).into_iter().map(|v| v.nome).collect();
+        let tutti = |_: &Voce| true;
+        let mut nomi: Vec<String> = elenca_tutto(&d, 100, tutti).into_iter().map(|v| v.nome).collect();
         nomi.sort();
         assert_eq!(nomi, ["Novembre.xlsx", "Relazione.pdf", "Verbale.docx"]);
-        assert_eq!(elenca_tutto(&d, 2).len(), 2);
-        assert!(elenca_tutto(&d.join("non c'è"), 10).is_empty());
+        assert_eq!(elenca_tutto(&d, 2, tutti).len(), 2);
+        assert!(elenca_tutto(&d.join("non c'è"), 10, tutti).is_empty());
+        // Il tetto conta solo quelli che passano, e tiene i più recenti: tante foto in una
+        // sottocartella non nascondono il documento più nuovo (revisione del 3/11).
+        let foto = d.join("Media");
+        fs::create_dir_all(&foto).unwrap();
+        let immagini: Vec<String> = (0..30).map(|i| format!("IMG_{i}.jpg")).collect();
+        file(&foto, &immagini.iter().map(String::as_str).collect::<Vec<_>>());
+        let pdf = |v: &Voce| v.tipo == Tipo::Pdf || v.tipo == Tipo::Documento;
+        let nomi: Vec<String> = elenca_tutto(&d, 5, pdf).into_iter().map(|v| v.nome).collect();
+        assert_eq!(nomi.len(), 2, "{nomi:?}");
+        let vecchio = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
+        fs::File::options().write(true).open(d.join("Verbale.docx")).unwrap().set_modified(vecchio).unwrap();
+        assert_eq!(elenca_tutto(&d, 1, pdf)[0].nome, "Relazione.pdf");
     }
 
     #[test]
@@ -455,17 +488,22 @@ mod test {
         fs::write(ricevuti.join("Referto.pdf"), b"%PDF-1.7 il referto").unwrap();
         // Lo stesso nome con un altro contenuto (un'altra versione): non è lui.
         fs::write(r.join("Download/Referto.pdf"), b"%PDF-1.7 un altro").unwrap();
-        assert_eq!(lo_stesso_file(&r, "Referto.pdf", b"%PDF-1.7 il referto"), Some(ricevuti.join("Referto.pdf")));
+        assert_eq!(lo_stesso_file(&r, "Referto.pdf", b"%PDF-1.7 il referto", None), Some(ricevuti.join("Referto.pdf")));
         // WhatsApp a volte lo chiama in un altro modo: si ritrova dai byte.
-        assert_eq!(lo_stesso_file(&r, "Referto (1).pdf", b"%PDF-1.7 il referto"), Some(ricevuti.join("Referto.pdf")));
+        assert_eq!(lo_stesso_file(&r, "Referto (1).pdf", b"%PDF-1.7 il referto", None), Some(ricevuti.join("Referto.pdf")));
         // Niente con quei byte; un nome che è un percorso non esce dalle cartelle.
-        assert_eq!(lo_stesso_file(&r, "Referto.pdf", b"%PDF-1.7 mai visto"), None);
+        assert_eq!(lo_stesso_file(&r, "Referto.pdf", b"%PDF-1.7 mai visto", None), None);
         fs::write(r.join("segreto.pdf"), b"%PDF-1.7 fuori").unwrap();
-        assert_eq!(lo_stesso_file(&r, "../../../segreto.pdf", b"%PDF-1.7 fuori"), None);
-        // Senza i byte, per nome: il più recente.
-        assert!(per_nome(&r, "Referto.pdf").is_some());
-        assert_eq!(per_nome(&r, "Mai visto.pdf"), None);
-        assert_eq!(per_nome(&r, "../segreto.pdf"), None);
+        assert_eq!(lo_stesso_file(&r, "../../../segreto.pdf", b"%PDF-1.7 fuori", None), None);
+        // Gli stessi byte in Download e in WhatsApp: senza sapere chi l'ha mandato vince Download,
+        // ma da WhatsApp si apre la copia di WhatsApp.
+        fs::write(r.join("Download/Referto.pdf"), b"%PDF-1.7 il referto").unwrap();
+        assert_eq!(lo_stesso_file(&r, "Referto.pdf", b"%PDF-1.7 il referto", None), Some(r.join("Download/Referto.pdf")));
+        assert_eq!(lo_stesso_file(&r, "Referto.pdf", b"%PDF-1.7 il referto", Some("WhatsApp")), Some(ricevuti.join("Referto.pdf")));
+        // Senza i byte, per nome: solo la cartella, da dire.
+        assert!(matches!(cartella_dell_omonimo(&r, "Referto.pdf"), Some("Download" | "WhatsApp ricevuti")));
+        assert_eq!(cartella_dell_omonimo(&r, "Mai visto.pdf"), None);
+        assert_eq!(cartella_dell_omonimo(&r, "../segreto.pdf"), None);
     }
 
     #[test]

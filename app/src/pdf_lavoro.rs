@@ -755,6 +755,9 @@ impl TascabileApp {
         let pagine = |t: &Toccate| t.quante().map_or_else(|| "tutte le pagine".to_string(), |n| format!("{n} pagine"));
         match f.evento {
             Evento::Applicata { genere, toccate, rovinate } => {
+                if let Some(p) = self.pdf.as_mut() {
+                    p.modifica.correzione = None;
+                }
                 let firme = if rovinate > 0 { format!(", {rovinate} firme non più valide") } else { String::new() };
                 diagnosi(format!("pdf: modifica ({}) applicata in {ms} ms, {} toccate{firme}", genere.nome(), pagine(&toccate)));
             }
@@ -765,6 +768,16 @@ impl TascabileApp {
             Evento::NonApplicata { genere, errore } => {
                 diagnosi(format!("pdf: modifica ({}) non applicata ({errore})", genere.nome()));
                 self.errore = Some(Errore { titolo: "Modifica non riuscita", testo: messaggio_della_modifica(genere, errore).to_string() });
+                // Una correzione della scansione: la scrittura si riapre col testo scritto, da
+                // accorciare, invece di riscriverlo tutto.
+                if let Some((chiave, testo)) = self.pdf.as_mut().and_then(|p| p.modifica.correzione.take())
+                    && let Some(p) = self.pdf.as_mut()
+                    && p.modifica.oggetto(chiave).is_some()
+                {
+                    diagnosi("pdf: correzione della scansione riaperta col testo scritto");
+                    p.modifica.scelto = Some(chiave);
+                    self.apri_scrittura_pdf(crate::pdf_compila::Bersaglio::Oggetto(chiave), &testo, false);
+                }
             }
             Evento::Annullata { toccate } => diagnosi(format!("pdf: annullato in {ms} ms, {} toccate", pagine(&toccate))),
             Evento::Ripetuta { toccate } => diagnosi(format!("pdf: ripetuto in {ms} ms, {} toccate", pagine(&toccate))),
@@ -883,6 +896,9 @@ fn messaggio_della_modifica(genere: GenereModifica, errore: &str) -> &'static st
         "senza la foto della scansione" => "Sotto questo testo non c'è la foto di una scansione da correggere: la correzione non si fa. Il PDF è rimasto com'era.",
         "lettere della scansione" => "Nella foto non riesco a trovare le lettere di questa riga (troppo chiare o sbiadite): la correzione non si fa. Il PDF è rimasto com'era.",
         "riga della scansione piena" => "Il testo nuovo non entra nella riga della scansione: accorcialo un poco e riprova. Il PDF è rimasto com'era.",
+        "lettera fuori dal carattere della scansione" => {
+            "Nel testo nuovo c'è un simbolo che il carattere della scansione non ha (le lettere italiane sì): la correzione non si fa. Il PDF è rimasto com'era."
+        }
         "firma digitale" => {
             "Questo PDF firmato non si può modificare così: il motore dovrebbe riscriverlo tutto e le firme non sarebbero più valide."
         }

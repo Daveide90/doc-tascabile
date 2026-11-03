@@ -288,22 +288,77 @@ impl TascabileApp {
     }
 }
 
+/// Dove sta il foglio sullo schermo. Le righe e le colonne bloccate stanno ferme, ma al più per il
+/// 60% della griglia: quelle oltre non si vedono. Il resto scorre. Il disegno, il tocco, il
+/// pizzico e le intestazioni usano queste stesse misure (revisione del 3/11: il tocco usava le
+/// bloccate intere e apriva la cella sbagliata).
+#[derive(Clone, Copy)]
+struct Vista {
+    celle: Rect,
+    z: f32,
+    scorre: Vec2,
+    /// Fin dove arrivano le bloccate nel foglio, pixel a 96 dpi.
+    fino: Vec2,
+    /// Quanto prendono le bloccate sullo schermo, dp.
+    ferme: Vec2,
+}
+
+impl Vista {
+    fn di(f: &FoglioAperto, celle: Rect, z: f32) -> Vista {
+        let (_, _, fy, fx) = bloccate(f.foglio(), &f.assi);
+        let ferme = vec2((fx * z).min(celle.width() * 0.6), (fy * z).min(celle.height() * 0.6));
+        Vista { celle, z, scorre: f.scorre, fino: vec2(fx, fy), ferme }
+    }
+
+    /// Una x del foglio sullo schermo, nella parte ferma o in quella che scorre.
+    fn x(&self, scorre: bool, x: f32) -> f32 {
+        if scorre { self.celle.left() + self.ferme.x + (x - self.fino.x - self.scorre.x) * self.z } else { self.celle.left() + x * self.z }
+    }
+
+    fn y(&self, scorre: bool, y: f32) -> f32 {
+        if scorre { self.celle.top() + self.ferme.y + (y - self.fino.y - self.scorre.y) * self.z } else { self.celle.top() + y * self.z }
+    }
+
+    /// La striscia dello schermo della parte ferma o di quella che scorre, in orizzontale e in
+    /// verticale.
+    fn striscia_x(&self, scorre: bool) -> (f32, f32) {
+        if scorre { (self.celle.left() + self.ferme.x, self.celle.right()) } else { (self.celle.left(), self.celle.left() + self.ferme.x) }
+    }
+
+    fn striscia_y(&self, scorre: bool) -> (f32, f32) {
+        if scorre { (self.celle.top() + self.ferme.y, self.celle.bottom()) } else { (self.celle.top(), self.celle.top() + self.ferme.y) }
+    }
+
+    /// Il punto del foglio sotto un punto dello schermo.
+    fn punto(&self, p: Pos2) -> Vec2 {
+        let d = p - self.celle.min;
+        let x = if d.x < self.ferme.x { d.x / self.z } else { (d.x - self.ferme.x) / self.z + self.fino.x + self.scorre.x };
+        let y = if d.y < self.ferme.y { d.y / self.z } else { (d.y - self.ferme.y) / self.z + self.fino.y + self.scorre.y };
+        vec2(x, y)
+    }
+}
+
 /// La griglia in `dove`: le intestazioni, i quattro pezzi (righe e colonne bloccate ferme, il
-/// resto che scorre), il dito che scorre, il pizzico, il tocco su una cella.
+/// resto che scorre), il dito che scorre, il pizzico, il tocco su una cella. Si disegnano solo le
+/// righe e le colonne visibili, con un tetto per pezzo (`tascabile_foglio::vista`).
 fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
     let celle = Rect::from_min_max(dove.min + vec2(LARGO_RIGHE, ALTO_COLONNE), dove.max);
     let risposta = ui.interact(celle, Id::new("griglia_del_foglio"), Sense::click_and_drag());
     risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, GRIGLIA));
     // Il pizzico ingrandisce attorno alle dita; il dito scorre.
     let (zoom_delta, centro) = ui.input(|i| (i.zoom_delta(), i.multi_touch().map(|m| m.center_pos).or(i.pointer.hover_pos())));
-    let (_, _, fy, fx) = bloccate(f.foglio(), &f.assi);
     if (zoom_delta - 1.0).abs() > 1e-3 {
         let nuovo = (f.zoom * zoom_delta).clamp(ZOOM_MINIMO, ZOOM_MASSIMO);
         if let Some(c) = centro.filter(|c| celle.contains(*c)) {
-            // Il punto del foglio sotto le dita resta lì.
-            let dentro = c - celle.min - vec2(fx, fy) * f.zoom;
-            let punto = f.scorre + dentro / f.zoom;
-            f.scorre = punto - dentro / nuovo;
+            // Il punto del foglio sotto le dita resta lì, dove il foglio scorre.
+            let (prima, dopo) = (Vista::di(f, celle, f.zoom), Vista::di(f, celle, nuovo));
+            let (punto, d) = (prima.punto(c), c - celle.min);
+            if d.x >= prima.ferme.x && d.x >= dopo.ferme.x {
+                f.scorre.x = punto.x - dopo.fino.x - (d.x - dopo.ferme.x) / nuovo;
+            }
+            if d.y >= prima.ferme.y && d.y >= dopo.ferme.y {
+                f.scorre.y = punto.y - dopo.fino.y - (d.y - dopo.ferme.y) / nuovo;
+            }
         }
         f.zoom = nuovo;
     }
@@ -311,17 +366,16 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
         f.scorre -= risposta.drag_delta() / f.zoom;
     }
     // Fin dove si scorre: un poco oltre l'ultima cella usata.
-    let sh = f.foglio();
-    let usato = sh.used_range().map_or((20, 10), |r| (r.end.row + 20, r.end.col + 5));
-    let massimo = vec2(f.assi.colonne.start(usato.1) as f32 - fx, f.assi.righe.start(usato.0) as f32 - fy);
-    let vista = celle.size() / f.zoom - vec2(fx, fy);
+    let v = Vista::di(f, celle, f.zoom);
+    let usato = f.foglio().used_range().map_or((20, 10), |r| (r.end.row + 20, r.end.col + 5));
+    let massimo = vec2(f.assi.colonne.start(usato.1) as f32, f.assi.righe.start(usato.0) as f32) - v.fino;
+    let vista = (celle.size() - v.ferme) / f.zoom;
     f.scorre = vec2(f.scorre.x.clamp(0.0, (massimo.x - vista.x).max(0.0)), f.scorre.y.clamp(0.0, (massimo.y - vista.y).max(0.0)));
     if risposta.clicked()
         && let Some(p) = risposta.interact_pointer_pos()
     {
-        let x = if p.x - celle.left() < fx * f.zoom { (p.x - celle.left()) / f.zoom } else { (p.x - celle.left()) / f.zoom + f.scorre.x };
-        let y = if p.y - celle.top() < fy * f.zoom { (p.y - celle.top()) / f.zoom } else { (p.y - celle.top()) / f.zoom + f.scorre.y };
-        let c = f.assi.cella_a(f64::from(x), f64::from(y));
+        let q = Vista::di(f, celle, f.zoom).punto(p);
+        let c = f.assi.cella_a(f64::from(q.x), f64::from(q.y));
         let d = tascabile_foglio::dettaglio(&f.cartella.cartella, f.foglio(), c);
         diagnosi(format!("foglio di calcolo: cella toccata, formula {}", if d.formula.is_some() { "sì" } else { "no" }));
         f.dettaglio = Some(d);
@@ -330,41 +384,38 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
     painter.rect_filled(dove, 0.0, tema::FOGLIO);
     let f: &FoglioAperto = f;
     let sh = f.foglio();
-    let (fr, fc, fy, fx) = bloccate(sh, &f.assi);
-    let z = f.zoom;
+    let (fr, fc, _, _) = bloccate(sh, &f.assi);
+    let v = Vista::di(f, celle, f.zoom);
+    let z = v.z;
     // I quattro pezzi: (righe, colonne) bloccate o che scorrono.
-    let bloccate_y = (fy * z).min(celle.height() * 0.6);
-    let bloccate_x = (fx * z).min(celle.width() * 0.6);
-    let pezzi = [(false, false), (false, true), (true, false), (true, true)];
-    for (scorre_y, scorre_x) in pezzi {
-        let clip = Rect::from_min_max(
-            pos2(if scorre_x { celle.left() + bloccate_x } else { celle.left() }, if scorre_y { celle.top() + bloccate_y } else { celle.top() }),
-            pos2(if scorre_x { celle.right() } else { celle.left() + bloccate_x }, if scorre_y { celle.bottom() } else { celle.top() + bloccate_y }),
-        );
-        if clip.width() <= 0.0 || clip.height() <= 0.0 {
-            continue;
-        }
-        // Dal foglio allo schermo in questo pezzo.
-        let ox = if scorre_x { celle.left() + bloccate_x - (fx + f.scorre.x) * z } else { celle.left() };
-        let oy = if scorre_y { celle.top() + bloccate_y - (fy + f.scorre.y) * z } else { celle.top() };
-        let a_schermo = |x: f64, y: f64| pos2(ox + x as f32 * z, oy + y as f32 * z);
-        let (x0, x1) = if scorre_x { (fx + f.scorre.x, fx + f.scorre.x + clip.width() / z) } else { (0.0, fx) };
-        let (y0, y1) = if scorre_y { (fy + f.scorre.y, fy + f.scorre.y + clip.height() / z) } else { (0.0, fy) };
-        let righe = (f.assi.righe.at(f64::from(y0)), f.assi.righe.at(f64::from(y1)));
-        let colonne = (f.assi.colonne.at(f64::from(x0)), f.assi.colonne.at(f64::from(x1)));
+    for (scorre_y, scorre_x) in [(false, false), (false, true), (true, false), (true, true)] {
         if (!scorre_y && fr == 0) || (!scorre_x && fc == 0) {
             continue;
         }
+        let ((xa, xb), (ya, yb)) = (v.striscia_x(scorre_x), v.striscia_y(scorre_y));
+        let clip = Rect::from_min_max(pos2(xa, ya), pos2(xb, yb));
+        if clip.width() <= 0.0 || clip.height() <= 0.0 {
+            continue;
+        }
+        // Dal foglio allo schermo in questo pezzo, e il pezzo di foglio che si vede.
+        let (ox, oy) = (v.x(scorre_x, 0.0), v.y(scorre_y, 0.0));
+        let a_schermo = |x: f64, y: f64| pos2(ox + x as f32 * z, oy + y as f32 * z);
+        let righe = (f.assi.righe.at(f64::from((ya - oy) / z)), f.assi.righe.at(f64::from((yb - oy) / z)));
+        let colonne = (f.assi.colonne.at(f64::from((xa - ox) / z)), f.assi.colonne.at(f64::from((xb - ox) / z)));
         let p = ui.painter_at(clip);
         // La griglia leggera.
         if sh.show_gridlines {
-            for r in righe.0..=righe.1 + 1 {
-                let y = a_schermo(0.0, f.assi.righe.start(r)).y;
-                p.line_segment([pos2(clip.left(), y), pos2(clip.right(), y)], Stroke::new(1.0, RIGA_GRIGLIA));
+            for r in f.assi.righe_visibili(righe.0, righe.1) {
+                for y in [f.assi.righe.start(r), f.assi.righe.start(r + 1)] {
+                    let y = a_schermo(0.0, y).y;
+                    p.line_segment([pos2(clip.left(), y), pos2(clip.right(), y)], Stroke::new(1.0, RIGA_GRIGLIA));
+                }
             }
-            for c in colonne.0..=colonne.1 + 1 {
-                let x = a_schermo(f.assi.colonne.start(c), 0.0).x;
-                p.line_segment([pos2(x, clip.top()), pos2(x, clip.bottom())], Stroke::new(1.0, RIGA_GRIGLIA));
+            for c in f.assi.colonne_visibili(colonne.0, colonne.1) {
+                for x in [f.assi.colonne.start(c), f.assi.colonne.start(c + 1)] {
+                    let x = a_schermo(x, 0.0).x;
+                    p.line_segment([pos2(x, clip.top()), pos2(x, clip.bottom())], Stroke::new(1.0, RIGA_GRIGLIA));
+                }
             }
         }
         let caselle = tascabile_foglio::vista::caselle(&f.cartella.cartella, sh, &f.assi, righe, colonne);
@@ -373,64 +424,60 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
         }
     }
     // Le linee delle righe e colonne bloccate, un poco più scure.
-    if bloccate_y > 0.0 {
-        painter.line_segment([pos2(celle.left(), celle.top() + bloccate_y), pos2(celle.right(), celle.top() + bloccate_y)], Stroke::new(1.5, tema::MATITA));
+    if v.ferme.y > 0.0 {
+        painter.line_segment([pos2(celle.left(), celle.top() + v.ferme.y), pos2(celle.right(), celle.top() + v.ferme.y)], Stroke::new(1.5, tema::MATITA));
     }
-    if bloccate_x > 0.0 {
-        painter.line_segment([pos2(celle.left() + bloccate_x, celle.top()), pos2(celle.left() + bloccate_x, celle.bottom())], Stroke::new(1.5, tema::MATITA));
+    if v.ferme.x > 0.0 {
+        painter.line_segment([pos2(celle.left() + v.ferme.x, celle.top()), pos2(celle.left() + v.ferme.x, celle.bottom())], Stroke::new(1.5, tema::MATITA));
     }
-    // Le intestazioni: le lettere delle colonne in alto, i numeri delle righe a sinistra.
+    // Le intestazioni: le lettere delle colonne in alto, i numeri delle righe a sinistra. Ferme e
+    // che scorrono, ognuna nella sua striscia; solo le visibili, fino all'ultima del foglio.
     let alto = Rect::from_min_max(pos2(celle.left(), dove.top()), pos2(celle.right(), celle.top()));
     let sinistra = Rect::from_min_max(pos2(dove.left(), celle.top()), pos2(celle.left(), celle.bottom()));
     painter.rect_filled(alto, 0.0, FONDO_INTESTAZIONI);
     painter.rect_filled(sinistra, 0.0, FONDO_INTESTAZIONI);
     painter.rect_filled(Rect::from_min_max(dove.min, celle.min), 0.0, FONDO_INTESTAZIONI);
     let font = FontId::proportional(12.0);
-    let pa = ui.painter_at(alto);
-    let ps = ui.painter_at(sinistra);
-    let colonna_x = |c: u32| {
-        let x = f.assi.colonne.start(c) as f32;
-        if x < fx { celle.left() + x * z } else { celle.left() + bloccate_x + (x - fx - f.scorre.x) * z }
-    };
-    let riga_y = |r: u32| {
-        let y = f.assi.righe.start(r) as f32;
-        if y < fy { celle.top() + y * z } else { celle.top() + bloccate_y + (y - fy - f.scorre.y) * z }
-    };
-    let prima_colonna = f.assi.colonne.at(f64::from(fx + f.scorre.x));
-    let prima_riga = f.assi.righe.at(f64::from(fy + f.scorre.y));
-    for c in (0..fc).chain(prima_colonna..) {
-        let (a, b) = (colonna_x(c), colonna_x(c + 1));
-        if a > alto.right() {
-            break;
-        }
-        if b - a < 1.0 {
-            continue;
-        }
-        pa.line_segment([pos2(b, alto.top()), pos2(b, alto.bottom())], Stroke::new(1.0, RIGA_GRIGLIA));
-        if b - a > 14.0 {
-            pa.text(pos2((a + b) / 2.0, alto.center().y), Align2::CENTER_CENTER, tascabile_foglio::nome_colonna(c), font.clone(), tema::MATITA);
+    let colonne_ferme = if fc > 0 { f.assi.colonne_visibili(0, f.assi.colonne.at(f64::from(v.ferme.x / z)).min(fc - 1)) } else { Vec::new() };
+    let righe_ferme = if fr > 0 { f.assi.righe_visibili(0, f.assi.righe.at(f64::from(v.ferme.y / z)).min(fr - 1)) } else { Vec::new() };
+    let da = v.fino + v.scorre;
+    let fine = da + (celle.size() - v.ferme) / z;
+    let colonne_mobili = f.assi.colonne_visibili(f.assi.colonne.at(f64::from(da.x)), f.assi.colonne.at(f64::from(fine.x)));
+    let righe_mobili = f.assi.righe_visibili(f.assi.righe.at(f64::from(da.y)), f.assi.righe.at(f64::from(fine.y)));
+    for (scorre, colonne) in [(false, colonne_ferme), (true, colonne_mobili)] {
+        let (xa, xb) = v.striscia_x(scorre);
+        let pa = ui.painter_at(Rect::from_min_max(pos2(xa, alto.top()), pos2(xb, alto.bottom())));
+        for c in colonne {
+            let (a, b) = (v.x(scorre, f.assi.colonne.start(c) as f32), v.x(scorre, f.assi.colonne.start(c + 1) as f32));
+            pa.line_segment([pos2(b, alto.top()), pos2(b, alto.bottom())], Stroke::new(1.0, RIGA_GRIGLIA));
+            if b - a > 14.0 {
+                pa.text(pos2((a + b) / 2.0, alto.center().y), Align2::CENTER_CENTER, tascabile_foglio::nome_colonna(c), font.clone(), tema::MATITA);
+            }
         }
     }
-    for r in (0..fr).chain(prima_riga..) {
-        let (a, b) = (riga_y(r), riga_y(r + 1));
-        if a > sinistra.bottom() {
-            break;
-        }
-        if b - a < 1.0 {
-            continue;
-        }
-        ps.line_segment([pos2(sinistra.left(), b), pos2(sinistra.right(), b)], Stroke::new(1.0, RIGA_GRIGLIA));
-        if b - a > 10.0 {
-            ps.text(pos2(sinistra.center().x, (a + b) / 2.0), Align2::CENTER_CENTER, (r + 1).to_string(), font.clone(), tema::MATITA);
+    for (scorre, righe) in [(false, righe_ferme), (true, righe_mobili)] {
+        let (ya, yb) = v.striscia_y(scorre);
+        let ps = ui.painter_at(Rect::from_min_max(pos2(sinistra.left(), ya), pos2(sinistra.right(), yb)));
+        for r in righe {
+            let (a, b) = (v.y(scorre, f.assi.righe.start(r) as f32), v.y(scorre, f.assi.righe.start(r + 1) as f32));
+            ps.line_segment([pos2(sinistra.left(), b), pos2(sinistra.right(), b)], Stroke::new(1.0, RIGA_GRIGLIA));
+            if b - a > 10.0 {
+                ps.text(pos2(sinistra.center().x, (a + b) / 2.0), Align2::CENTER_CENTER, (r + 1).to_string(), font.clone(), tema::MATITA);
+            }
         }
     }
-    // La cella toccata, col bordo blu.
+    // La cella toccata, col bordo blu, nella striscia dove sta.
     if let Some(d) = &f.dettaglio
         && let Some(c) = cella_da_nome(&d.dove)
     {
         let area = sh.merge_at(c).unwrap_or(tascabile_foglio::RangeRef::cell(c));
-        let rett = Rect::from_min_max(pos2(colonna_x(area.start.col), riga_y(area.start.row)), pos2(colonna_x(area.end.col + 1), riga_y(area.end.row + 1)));
-        ui.painter_at(celle).rect_stroke(rett, 0.0, Stroke::new(2.0, tema::BLU), egui::StrokeKind::Inside);
+        let (sx, sy) = (area.start.col >= fc, area.start.row >= fr);
+        let rett = Rect::from_min_max(
+            pos2(v.x(sx, f.assi.colonne.start(area.start.col) as f32), v.y(sy, f.assi.righe.start(area.start.row) as f32)),
+            pos2(v.x(sx, f.assi.colonne.start(area.end.col + 1) as f32), v.y(sy, f.assi.righe.start(area.end.row + 1) as f32)),
+        );
+        let ((xa, xb), (ya, yb)) = (v.striscia_x(sx), v.striscia_y(sy));
+        ui.painter_at(Rect::from_min_max(pos2(xa, ya), pos2(xb, yb))).rect_stroke(rett, 0.0, Stroke::new(2.0, tema::BLU), egui::StrokeKind::Inside);
     }
 }
 
@@ -476,7 +523,7 @@ fn disegna_casella(ui: &egui::Ui, p: &egui::Painter, clip: Rect, k: &Casella, a_
         let mut g = if k.a_capo { p.layout(k.testo.clone(), font.clone(), colore, largo) } else { p.layout_no_wrap(k.testo.clone(), font.clone(), colore) };
         // Un numero che non sta nella colonna: i cancelletti, come Excel.
         let spazio = Rect::from_min_max(pos2(a_schermo(k.spazio[0], 0.0).x, rett.top()), pos2(a_schermo(k.spazio[1], 0.0).x, rett.bottom()));
-        if k.orizzontale == Allinea::Fine && k.spazio == [k.rett[0], k.rett[2]] && g.size().x > largo && k.testo.chars().any(|c| c.is_ascii_digit()) {
+        if k.numero && k.spazio == [k.rett[0], k.rett[2]] && g.size().x > largo {
             let cancelletto = p.layout_no_wrap("#".into(), font.clone(), colore).size().x.max(1.0);
             g = p.layout_no_wrap("#".repeat((largo / cancelletto).floor().max(1.0) as usize), font, colore);
         }
@@ -520,5 +567,22 @@ mod test {
         assert_eq!(cella_da_nome("B7"), Some(CellRef::new(6, 1)));
         assert_eq!(cella_da_nome("AB12"), Some(CellRef::new(11, 27)));
         assert_eq!(cella_da_nome("7"), None);
+    }
+
+    #[test]
+    fn il_tocco_sotto_le_bloccate_tagliate_prende_la_riga_che_si_vede() {
+        let c = Cartella::apri(&tascabile_foglio::prova::cartella_di_prova()).unwrap();
+        let mut f = FoglioAperto::nuovo(c, "prova.xlsx".into(), None);
+        // Le due righe bloccate a zoom 4 prendono più del 60% di una griglia alta 100: si tagliano.
+        f.zoom = 4.0;
+        let celle = Rect::from_min_size(pos2(0.0, 0.0), vec2(300.0, 100.0));
+        let v = Vista::di(&f, celle, f.zoom);
+        assert!((v.ferme.y - 60.0).abs() < 1e-3);
+        // Appena sotto il taglio c'è la prima riga che scorre (la 3), e il disegno la mette lì.
+        let sotto = v.punto(pos2(10.0, 61.0));
+        assert_eq!(f.assi.cella_a(f64::from(sotto.x), f64::from(sotto.y)).row, 2);
+        assert!((v.y(true, f.assi.righe.start(2) as f32) - 60.0).abs() < 1e-3);
+        let sopra = v.punto(pos2(10.0, 59.0));
+        assert_eq!(f.assi.cella_a(f64::from(sopra.x), f64::from(sopra.y)).row, 0);
     }
 }

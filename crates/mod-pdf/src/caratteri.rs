@@ -19,6 +19,10 @@ const FAMIGLIE: [&str; 4] = ["Carlito", "Liberation Sans", "Liberation Serif", "
 const STILI: [(&str, bool, bool); 4] = [("Regular", false, false), ("Bold", true, false), ("Italic", false, true), ("Bold Italic", true, true)];
 /// Margine intorno al disegno di una parola, in pixel: i bordi sfumati non escono dalla tela.
 const MARGINE: f64 = 5.0;
+/// La tela più grande, in pixel (64 MB di float): una parola della foto è di qualche centinaio di
+/// pixel. Oltre, un disegno vuoto: una parola di 300 lettere alta quanto una foto di 40.000 pixel
+/// chiedeva decine di GB, e l'app si chiudeva di colpo (revisione del 3/11, B5).
+const TELA_MASSIMA: usize = 16 << 20;
 
 /// Un carattere fra cui scegliere.
 pub(crate) struct Carattere {
@@ -88,6 +92,14 @@ impl Disegno {
 }
 
 impl Carattere {
+    /// Vero se il carattere ha tutte le lettere di `testo`: una che non ha diventa il suo
+    /// `.notdef`, vuoto (Liberation Serif) o un rettangolo (Carlito), e la parola nuova spariva
+    /// dalla foto e dal testo (revisione del 3/11).
+    pub(crate) fn ha_le_lettere(&self, testo: &str) -> bool {
+        let glifi = deckcraft_fonts::shape_range(&self.faccia, testo, 0..testo.len(), &ShapeParams::default(), |c| c);
+        glifi.iter().all(|g| g.gid != 0)
+    }
+
     /// `testo` disegnato con un em di `em` pixel, stirato in orizzontale di `stira` (1 com'è).
     pub(crate) fn disegna(&self, testo: &str, em: f64, stira: f64) -> Disegno {
         let db = archivio();
@@ -110,12 +122,16 @@ impl Carattere {
             y0 = y0.min(s[1]).min(s[3]);
             y1 = y1.max(s[1]).max(s[3]);
         }
+        let vuoto = Disegno { largo: 0, alto: 0, copertura: Vec::new(), penna: [0.0, 0.0], avanza, inchiostro: None };
         if segmenti.is_empty() || ![x0, y0, x1, y1].iter().all(|v| v.is_finite()) {
-            return Disegno { largo: 0, alto: 0, copertura: Vec::new(), penna: [0.0, 0.0], avanza, inchiostro: None };
+            return vuoto;
         }
         let (dx, dy) = (MARGINE - x0.floor(), MARGINE - y0.floor());
         let largo = (x1.ceil() - x0.floor() + 2.0 * MARGINE) as usize;
         let alto = (y1.ceil() - y0.floor() + 2.0 * MARGINE) as usize;
+        if largo.checked_mul(alto).is_none_or(|p| p > TELA_MASSIMA) {
+            return vuoto;
+        }
         let mut tela = Tela::new(largo, alto);
         for s in &segmenti {
             tela.linea([(s[0] + dx) as f32, (s[1] + dy) as f32], [(s[2] + dx) as f32, (s[3] + dy) as f32]);
@@ -316,6 +332,9 @@ mod test {
         assert!((c.disegna("Hi", 100.0, 0.5).avanza - 47.2).abs() < 0.5);
         // Uno spazio non ha inchiostro.
         assert_eq!(c.disegna(" ", 100.0, 1.0).inchiostro, None);
+        // Una parola che non sta nella tela più grande: un disegno vuoto, senza chiedere la memoria.
+        let enorme = c.disegna(&"M".repeat(300), 2_800.0, 1.0);
+        assert_eq!((enorme.largo, enorme.inchiostro), (0, None));
     }
 
     #[test]

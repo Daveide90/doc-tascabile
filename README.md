@@ -4,7 +4,7 @@
 
 Documents, PDFs, slides and spreadsheets on the phone, offline, made for the finger. · Documenti, PDF, slide e fogli di calcolo sul telefono, senza rete, fatti per il dito.
 
-Version 0.9.0 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
+Version 0.9.1 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
 
 <p align="center">
   <a href="https://github.com/Daveide90/doc-tascabile/releases/latest/download/DocTascabile.apk"><img src="docs/pulsante-download.svg" width="340" alt="Download APK · Scarica l'APK"></a>

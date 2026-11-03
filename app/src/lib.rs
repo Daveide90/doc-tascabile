@@ -1297,6 +1297,11 @@ impl TascabileApp {
             diagnosi("indietro: apertura del pdf annullata");
             return;
         }
+        // Lo stesso per un foglio di calcolo (revisione del 3/11: si aspettava la fine).
+        if self.apertura_foglio.take().is_some() {
+            diagnosi("indietro: apertura del foglio di calcolo annullata");
+            return;
+        }
         if std::mem::take(&mut self.menu_editor) {
             diagnosi("indietro: menu dell'editor chiuso");
             return;
@@ -1524,8 +1529,10 @@ impl TascabileApp {
     ) -> Result<(), ErroreLettura> {
         // «apertura➡pagina» conta anche lettura e conversione del file.
         let inizio = Instant::now();
-        // Un altro documento al posto del PDF che chiedeva la password.
+        // Un altro documento al posto del PDF che chiedeva la password, e del foglio di calcolo
+        // che si stava aprendo: finito dopo, chiuderebbe questo (revisione del 3/11).
         self.annulla_password();
+        self.apertura_foglio = None;
         let etichetta = da.etichetta();
         let tipo = documento::estensione_nota(nome).unwrap_or_else(|| "sconosciuto".to_string());
         let byte = match leggi(&self.piattaforma) {
@@ -1543,8 +1550,9 @@ impl TascabileApp {
             return Ok(());
         }
         // I fogli di calcolo: per nome, o per contenuto (un pacchetto di Excel, un .xls, un
-        // OpenDocument di fogli) se il nome non lo dice.
-        if tipo_da_nome(nome) == Tipo::Foglio || (tipo_da_nome(nome) != Tipo::Documento && tascabile_foglio::sembra_foglio(&byte)) {
+        // OpenDocument di fogli) se il nome non dice niente: senza estensione o con una che non
+        // conosciamo, mai per una presentazione (revisione del 3/11, B3).
+        if tipo_da_nome(nome) == Tipo::Foglio || (tipo_da_nome(nome) == Tipo::Altro && tascabile_foglio::sembra_foglio(&byte)) {
             self.apri_foglio(da, byte, nome, chiave, inizio);
             return Ok(());
         }
@@ -1594,7 +1602,7 @@ impl TascabileApp {
         // lì, così resta nei recenti anche quando il permesso di «Apri con» se ne va, dopo un
         // aggiornamento dell'app (segnalazione dell'autore del 3/11), e Salva scrive nel file.
         let sul_telefono = match &letti {
-            Ok(byte) if self.home.accesso() => tascabile_files::lo_stesso_file(&self.piattaforma.radice_archivio(), &nome, byte),
+            Ok(byte) if self.home.accesso() => tascabile_files::lo_stesso_file(&self.piattaforma.radice_archivio(), &nome, byte, home::provenienza(&r.uri)),
             _ => None,
         };
         let esito = match sul_telefono {
@@ -1649,20 +1657,20 @@ impl TascabileApp {
         let Err(e) = esito else { return };
         if uri && non_si_apre_piu(&e.genere) {
             self.home.dimentica(&r.chiave);
-            // Lo stesso nome nelle cartelle del telefono (WhatsApp, Download…): si apre da lì, e il
-            // recente diventa il file (segnalazione dell'autore del 3/11).
-            if self.home.accesso()
-                && let Some(percorso) = tascabile_files::per_nome(&self.piattaforma.radice_archivio(), &r.nome)
-            {
-                diagnosi("recenti: un documento arrivato da un'altra app ritrovato nelle cartelle del telefono");
-                self.apri_file(&percorso, &r.nome);
-                return;
-            }
             diagnosi("recenti: tolto un documento arrivato da un'altra app, che non si apre più");
-            self.errore = Some(Errore::apertura(match home::provenienza(&r.chiave) {
+            let mut messaggio = match home::provenienza(&r.chiave) {
                 Some(app) => format!("Non si apre più: riaprilo da {app}."),
                 None => "Non si apre più: riaprilo dall'app da cui era arrivato.".to_string(),
-            }));
+            };
+            // Un file con lo stesso nome nelle cartelle del telefono si dice, non si apre: può
+            // essere un altro documento, e Salva ci scriverebbe sopra (revisione del 3/11, M3).
+            if self.home.accesso()
+                && let Some(cartella) = tascabile_files::cartella_dell_omonimo(&self.piattaforma.radice_archivio(), &r.nome)
+            {
+                diagnosi("recenti: un file con lo stesso nome nelle cartelle del telefono, detto e non aperto");
+                messaggio.push_str(&format!(" In «{cartella}» c'è un file con lo stesso nome: se è lui, aprilo da lì."));
+            }
+            self.errore = Some(Errore::apertura(messaggio));
         } else if !uri && e.genere == "NotFound" {
             diagnosi("recenti: file non trovato, lasciato nei recenti");
             self.errore = Some(Errore::apertura(NON_TROVATO));
@@ -3303,6 +3311,18 @@ mod test {
         assert_eq!(nome_di_apri_con(&r(xlsx, Some("Turni"))), "Turni.xlsx");
         assert_eq!(nome_di_apri_con(&r("text/csv", Some("Elenco.csv"))), "Elenco.csv");
         assert_eq!(nome_di_apri_con(&r("application/vnd.ms-excel", Some("Vecchio"))), "Vecchio.xls");
+        // Indietro mentre un foglio si apre: l'apertura si lascia andare e si resta dove si era
+        // (revisione del 3/11).
+        indietro(&mut h);
+        h.run_steps(2);
+        assert_eq!(h.state().schermata, Schermata::Home);
+        h.state_mut().apri_file(&senza_nome, "allegato");
+        assert!(h.state().foglio_in_apertura());
+        indietro(&mut h);
+        assert!(!h.state().foglio_in_apertura());
+        h.run_steps(5);
+        assert_eq!(h.state().schermata, Schermata::Home);
+        assert!(diagnosi_della_prova().contains("] indietro: apertura del foglio di calcolo annullata\n"));
     }
 
     #[test]
@@ -5454,7 +5474,7 @@ mod test {
         assert_eq!((segni(&h), h.state().piattaforma.impronte_chieste()), (1, 3));
         tocca(&mut h, pdf_lavoro::ANNULLA_MODIFICA);
         aspetta_il_motore(&mut h);
-        h.state_mut().blocco.riuscita_alle = Some(std::time::SystemTime::now() - blocco::VALE_UN_IMPRONTA);
+        h.state_mut().blocco.riuscita_dall_accensione = tascabile_platform::dall_accensione().checked_sub(blocco::VALE_UN_IMPRONTA);
         metti_la_salvata(&mut h, EsitoImpronta::Annullata);
         assert_eq!((segni(&h), h.state().piattaforma.impronte_chieste()), (0, 4));
         // Spenta nelle Impostazioni: la firma salvata va senza domande, anche la volta dopo.
@@ -5499,14 +5519,15 @@ mod test {
         assert_eq!(chieste(&h), 2);
         let acceso = h.get_by_role_and_label(Role::Button, impostazioni::IMPRONTA_FIRMA).accesskit_node().toggled();
         assert_eq!(acceso, Some(egui::accesskit::Toggled::False));
-        // Riaccesa subito; rispenta entro cinque minuti dall'impronta, senza richiederla.
+        // Riaccesa subito; per rispegnerla l'impronta si chiede di nuovo, anche entro cinque minuti
+        // (revisione del 3/11, M4: la grazia vale solo per posare la firma).
         tocca(&mut h, impostazioni::IMPRONTA_FIRMA);
         h.run_steps(2);
         assert!(h.state().impostazioni.impronta_firma);
         tocca(&mut h, impostazioni::IMPRONTA_FIRMA);
         h.run_steps(2);
         assert!(!h.state().impostazioni.impronta_firma);
-        assert_eq!(chieste(&h), 2);
+        assert_eq!(chieste(&h), 3);
         let piattaforma = Piattaforma::con_cartelle(d.join("app"), d.join("cache"), d.join("radice"));
         let altra = telefono(TascabileApp::new(piattaforma, Instant::now()));
         assert!(!altra.state().impostazioni.impronta_firma);
@@ -6988,8 +7009,37 @@ mod test {
         tocca(&mut h, pdf_ocr::RUOTA);
         finche(&mut h, "la pagina girata", |h| !h.state().lavoro_in_corso());
         assert_eq!(h.state().ritocchi_scansionati()[0].cancellature.len(), 1);
+        // Annulla senza passate nuove toglie quella di prima (revisione del 3/11: non si toglieva
+        // più), e la pagina si rifà.
+        tocca(&mut h, pdf_ocr::GOMMA);
+        h.run_steps(2);
+        tocca(&mut h, pdf_ocr::ANNULLA_PASSATA);
+        h.get_by_label(pdf_ocr::PASSATA_TOLTA);
+        finche(&mut h, "la pagina senza la passata", |h| !h.state().lavoro_in_corso() && h.state().ritocchi_scansionati()[0].cancellature.is_empty());
+        // Bordi spostati: le passate cadrebbero altrove, si tolgono e si dice. La pagina girata
+        // sta in un altro posto: la passata nel suo mezzo.
+        tocca(&mut h, pdf_ocr::GOMMA);
+        h.run_steps(2);
+        let girata = h.get_by_label("Passa il dito sulle macchie da togliere").rect();
+        trascina(&mut h, egui::pos2(girata.left() + 20.0, girata.center().y), egui::pos2(girata.right() - 20.0, girata.center().y));
+        tocca(&mut h, pdf_ocr::FATTO);
+        finche(&mut h, "la pagina con la passata", |h| !h.state().lavoro_in_corso() && h.state().ritocchi_scansionati()[0].cancellature.len() == 1);
+        tocca(&mut h, pdf_ocr::BORDI);
+        finche(&mut h, "i bordi della pagina", |h| h.state().bordi_aperti() && !h.state().lavoro_in_corso());
+        h.run_steps(2);
+        let dove = h.get_by_label(pdf_ocr::ANGOLI[2]).rect().center();
+        trascina(&mut h, dove + egui::vec2(-4.0, -4.0), dove + egui::vec2(-34.0, -24.0));
+        tocca(&mut h, pdf_ocr::FATTO);
+        h.get_by_label(pdf_ocr::PASSATE_TOLTE);
+        finche(&mut h, "la pagina coi bordi nuovi", |h| !h.state().lavoro_in_corso() && h.state().ritocchi_scansionati()[0].cancellature.is_empty());
         let d = diagnosi_della_prova();
-        for r in ["] scansione: gomma aperta\n", "] scansione: gomma chiusa senza passate\n", "] scansione: gomma, 1 passate\n"] {
+        for r in [
+            "] scansione: gomma aperta\n",
+            "] scansione: gomma chiusa senza passate\n",
+            "] scansione: gomma, 1 passate\n",
+            "] scansione: gomma, tolta una passata di prima\n",
+            "] scansione: bordi cambiati, tolte 1 passate di gomma\n",
+        ] {
             assert!(d.contains(r), "manca «{r}»:\n{d}");
         }
     }
@@ -7494,10 +7544,25 @@ mod test {
         assert!(h.state().errore.is_none());
         // Il testo di una scansione non si sposta col dito.
         assert!(!o.genere.si_muove());
+        // Un testo che non sta nella riga: l'avviso, e la scrittura si riapre con quel testo, da
+        // accorciare (revisione del 3/11: si perdeva).
+        let corretto = oggetti_pdf(&h, 0).into_iter().find(|o| o.genere == GenereOggetto::Scansione && o.testo == "Dieci giorni fa").unwrap();
+        let c = centro_dell_oggetto(&h, &corretto);
+        tocca_in(&mut h, c);
+        h.run_steps(3);
+        let lungo = "Dieci giorni fa, dopo una lunga e faticosa giornata di lavoro in reparto";
+        h.state_mut().apri_scrittura_pdf(pdf_compila::Bersaglio::Oggetto(corretto.chiave()), &lungo[..lungo.len() - 1], false);
+        h.run_steps(2);
+        scrivi(&mut h, "o");
+        tocca(&mut h, pdf_compila::FATTO);
+        finche(&mut h, "l'avviso della riga piena", |h| h.state().errore.is_some());
+        let s = h.state().pdf.as_ref().unwrap().compila.scrittura.as_ref().expect("la scrittura riaperta");
+        assert_eq!(s.campo.testo(), lungo);
         let d = diagnosi_della_prova();
         for riga in [
             "] pdf: testo da riscrivere (testo della scansione)\n",
             "] pdf: scansione da correggere nella pagina 1\n",
+            "] pdf: correzione della scansione riaperta col testo scritto\n",
         ] {
             assert!(d.contains(riga), "manca «{riga}»:\n{d}");
         }
@@ -7535,14 +7600,51 @@ mod test {
         h.run_steps(2);
         scrivi(&mut h, "X");
         assert_eq!(testo(&h).as_deref(), Some("XPagina di prova"));
-        // Il dito trascinato verso la fine porta il cursore in fondo.
+        // Il dito trascinato verso la fine porta il cursore in fondo. Con la «X» il testo non sta
+        // più nella larghezza del paragrafo: l'anteprima va a capo come il PDF, e la fine è in
+        // basso a destra.
         let scrittura = h.get_by_label(pdf_modifica::SCRITTURA_SULLA_PAGINA).rect();
-        trascina_col_dito(&mut h, egui::pos2(scrittura.left() + 4.0, scrittura.center().y), egui::vec2(scrittura.width() - 6.0, 0.0));
+        let da = egui::pos2(scrittura.left() + 4.0, scrittura.top() + 6.0);
+        trascina_col_dito(&mut h, da, scrittura.right_bottom() - egui::vec2(3.0, 4.0) - da);
         scrivi(&mut h, "!");
         assert_eq!(testo(&h).as_deref(), Some("XPagina di prova!"));
         tocca(&mut h, pdf_compila::FATTO);
         finche(&mut h, "il paragrafo riscritto", |h| oggetti_pdf(h, 0).iter().any(|o| o.testo == "XPagina di prova!"));
         assert!(testo(&h).is_none());
+    }
+
+    /// L'autore, 3/11: «mi serve poter aumentare allargando il box delle parole che correggo nel
+    /// pdf, per evitare che vada a capo». L'anteprima va a capo dove ci andrà nel PDF; la presa sul
+    /// bordo destro allarga il riquadro, e il titolo resta su una riga.
+    #[test]
+    fn il_riquadro_del_paragrafo_si_allarga_mentre_si_scrive() {
+        let contenuto = "BT /F1 24 Tf 60 700 Td (Turno di notte) Tj ET";
+        let byte = tascabile_pdf::prova::pdf(&[tascabile_pdf::prova::Pagina { larghezza: 595.0, altezza: 842.0, rotazione: 0, contenuto }]);
+        let mut h = telefono_col_pdf("allarga-scrittura", byte);
+        tocca(&mut h, "Modifica");
+        finche(&mut h, "gli oggetti della prima pagina", |h| !oggetti_pdf(h, 0).is_empty());
+        let o = oggetti_pdf(&h, 0).into_iter().find(|o| o.testo == "Turno di notte").unwrap();
+        let c = centro_dell_oggetto(&h, &o);
+        tocca_in(&mut h, c);
+        h.run_steps(3);
+        let lungo = "Turno di notte in reparto di medicina";
+        h.state_mut().apri_scrittura_pdf(pdf_compila::Bersaglio::Oggetto(o.chiave()), lungo, false);
+        h.run_steps(2);
+        // Nella larghezza del titolo il testo lungo va a capo, e l'anteprima lo mostra.
+        let a_capo = h.get_by_label(pdf_modifica::SCRITTURA_SULLA_PAGINA).rect();
+        let presa = h.get_by_label(pdf_modifica::ALLARGA_SCRITTURA).rect().center();
+        trascina(&mut h, presa, presa + egui::vec2(400.0, 0.0));
+        h.run_steps(2);
+        let allargato = h.get_by_label(pdf_modifica::SCRITTURA_SULLA_PAGINA).rect();
+        assert!(allargato.width() > a_capo.width() * 2.0 && allargato.height() < a_capo.height() * 0.7, "{a_capo:?} → {allargato:?}");
+        // Mai oltre il bordo della pagina.
+        let pagina = h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(0, [0.0, 0.0, 595.0, 842.0]).unwrap();
+        assert!(allargato.right() <= pagina.right() + 8.0, "{allargato:?} {pagina:?}");
+        tocca(&mut h, pdf_compila::FATTO);
+        finche(&mut h, "il titolo riscritto", |h| oggetti_pdf(h, 0).iter().any(|o| o.testo == lungo));
+        let nuovo = oggetti_pdf(&h, 0).into_iter().find(|o| o.testo == lungo).unwrap();
+        assert_eq!(nuovo.righe.lines().filter(|r| !r.trim().is_empty()).count(), 1, "{:?}", nuovo.righe);
+        assert!(diagnosi_della_prova().contains("] pdf: testo riscritto (paragrafo), allargato\n"));
     }
 
     #[test]
@@ -7787,6 +7889,8 @@ mod test {
         assert!(acceso(&h, home::VISTA_CARTELLE) && !acceso(&h, home::VISTA_TUTTI));
         assert!(h.query_by_label("Relazione.docx").is_none());
         tocca(&mut h, home::VISTA_TUTTI);
+        // Si leggono su un thread: intanto «Cerco i documenti…».
+        finche(&mut h, "tutti i file", |h| h.query_by_label(home::CERCO_I_DOCUMENTI).is_none());
         h.get_by_role_and_label(Role::Button, "Relazione.docx");
         assert!(h.query_by_label("Lavoro").is_none(), "nella vista di tutti i file le cartelle non ci sono");
         assert!(h.query_by_label("foto.jpg").is_none());
@@ -8032,10 +8136,10 @@ mod test {
     }
 
     /// Segnalazione dell'autore del 3/11: un recente arrivato da WhatsApp non si apriva più. Se un
-    /// file con lo stesso nome è nelle cartelle del telefono, si apre da lì e il recente diventa
-    /// il file.
+    /// file con lo stesso nome è nelle cartelle del telefono, il messaggio dice dove, ma non lo
+    /// apre: può essere un altro documento (revisione del 3/11, M3).
     #[test]
-    fn un_recente_che_non_si_apre_piu_si_ritrova_per_nome() {
+    fn un_recente_che_non_si_apre_piu_dice_dove_c_e_un_file_con_lo_stesso_nome() {
         let (piattaforma, d) = piattaforma_di_prova("recente-ritrovato");
         let ricevuti = d.join("radice/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents/Private");
         std::fs::create_dir_all(&ricevuti).unwrap();
@@ -8052,12 +8156,15 @@ mod test {
         finti.salva(&file_recenti).unwrap();
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
         tocca(&mut h, "Zanzibar");
-        assert_eq!(h.state().schermata, Schermata::Editor);
-        assert!(h.state().errore.is_none());
-        let voci = Recenti::carica(&file_recenti);
-        assert_eq!(voci.voci().len(), 1);
-        assert_eq!(voci.voci()[0].chiave, ricevuti.join("Zanzibar.docx").to_str().unwrap());
-        assert!(diagnosi_della_prova().contains("] recenti: un documento arrivato da un'altra app ritrovato nelle cartelle del telefono\n"));
+        // Non si apre l'omonimo: si resta nella Home, e il messaggio dice dove guardare.
+        assert_eq!(h.state().schermata, Schermata::Home);
+        h.get_by_label_contains("In «WhatsApp ricevuti» c'è un file con lo stesso nome");
+        tocca(&mut h, HO_CAPITO);
+        // Il recente che non si apre più se ne va; il file non diventa un recente.
+        assert!(Recenti::carica(&file_recenti).voci().is_empty());
+        let d = diagnosi_della_prova();
+        assert!(d.contains("] recenti: un file con lo stesso nome nelle cartelle del telefono, detto e non aperto\n"));
+        assert!(!d.contains("Zanzibar"));
     }
 
     /// Segnalato dall'autore il 1/11: dopo l'aggiornamento dell'app dei file «non esistevano più» e al

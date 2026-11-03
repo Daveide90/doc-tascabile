@@ -824,7 +824,9 @@ impl TascabileApp {
         // Un testo di Fill & Sign confermato è un segno posato: la sua scrittura finisce sempre
         // (scriverlo ancora ne poserebbe un altro).
         let chiudi = chiudi || !matches!(bersaglio, Bersaglio::Campo(_));
-        let cambiato = testo != s.confermato;
+        // Un paragrafo allargato con la presa è cambiato anche col testo di prima.
+        let allargato = matches!(bersaglio, Bersaglio::Oggetto(_)) && self.pdf.as_ref().and_then(|p| p.modifica.allargata).is_some_and(|k| (k - 1.0).abs() > 0.01);
+        let cambiato = testo != s.confermato || allargato;
         if cambiato {
             let autore = self.impostazioni.autore.clone();
             match &bersaglio {

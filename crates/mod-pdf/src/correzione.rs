@@ -53,6 +53,8 @@ pub(crate) enum ErroreCorrezione {
     SenzaLettere,
     /// Il testo nuovo non entra nella riga.
     NonSta,
+    /// Il testo nuovo ha una lettera che il carattere della scansione non ha.
+    Lettera,
 }
 
 impl ErroreCorrezione {
@@ -64,6 +66,7 @@ impl ErroreCorrezione {
             ErroreCorrezione::Foto => "foto della scansione",
             ErroreCorrezione::SenzaLettere => "lettere della scansione",
             ErroreCorrezione::NonSta => "riga della scansione piena",
+            ErroreCorrezione::Lettera => "lettera fuori dal carattere della scansione",
         }
     }
 }
@@ -73,6 +76,7 @@ impl From<Intoppo> for ErroreCorrezione {
         match i {
             Intoppo::NonSta => ErroreCorrezione::NonSta,
             Intoppo::SenzaLettere => ErroreCorrezione::SenzaLettere,
+            Intoppo::Lettera => ErroreCorrezione::Lettera,
         }
     }
 }
@@ -131,7 +135,18 @@ pub(crate) fn risolvi(d: &Document, p: Pulizia, edit: Edit) -> Result<Edit, Erro
         .unwrap_or(misura.0)
         .min(misura.0.saturating_sub(1));
     // Prima i riquadri veri di tutte le righe, poi le righe cambiate si rifanno.
-    let affinate: Vec<Option<(Vec<ParolaFoto>, crate::ritocco::Inchiostro)>> = righe_foto.iter().map(|r| crate::ritocco::affina_riga(&rgb, r)).collect();
+    // Ogni riga fra la metà dello spazio verso quella sopra e quella sotto.
+    let su_giu: Vec<Option<(u32, u32)>> = righe_foto.iter().map(|r| Some((r.iter().map(|p| p.r[1]).min()?, r.iter().map(|p| p.r[3]).max()?))).collect();
+    let affinate: Vec<Option<(Vec<ParolaFoto>, crate::ritocco::Inchiostro)>> = righe_foto
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let (su, giu) = su_giu[i].unwrap_or((0, u32::MAX));
+            let sopra = i.checked_sub(1).and_then(|j| su_giu[j]).map_or(0, |(_, g)| (g + su) / 2);
+            let sotto = su_giu.get(i + 1).copied().flatten().map_or(u32::MAX, |(s, _)| (giu + s).div_ceil(2));
+            crate::ritocco::affina_riga_fra(&rgb, r, (sopra, sotto))
+        })
+        .collect();
     let mut finali: Vec<ParolaFoto> = Vec::new();
     for (i, riga) in righe_foto.iter().enumerate() {
         let voci = &per_riga[i];
@@ -144,6 +159,14 @@ pub(crate) fn risolvi(d: &Document, p: Pulizia, edit: Edit) -> Result<Edit, Erro
                 let fondo = |r: Option<&Vec<ParolaFoto>>, alto: bool| r.and_then(|r| if alto { r.iter().map(|p| p.r[1]).min() } else { r.iter().map(|p| p.r[3]).max() });
                 let sopra = i.checked_sub(1).and_then(|j| fondo(affinate[j].as_ref().map(|a| &a.0), false)).unwrap_or(0);
                 let sotto = affinate.get(i + 1).and_then(|a| fondo(a.as_ref().map(|a| &a.0), true)).unwrap_or(misura.1);
+                // Fin dove arriva questa riga: prima del primo inchiostro alla sua destra (l'altra
+                // colonna, l'altro campo), con lo spazio di mezza riga; se no il margine della
+                // pagina. Prima arrivava sempre al margine e cancellava il testo accanto.
+                let fine_vecchia = parole.iter().map(|p| p.r[2]).max().unwrap_or(0);
+                let (a, b) = (parole.iter().map(|p| p.r[1]).min().unwrap_or(0), parole.iter().map(|p| p.r[3]).max().unwrap_or(0));
+                let margine = b.saturating_sub(a) / 6;
+                let destra = crate::ritocco::inchiostro_a_destra(&rgb, inchiostro, fine_vecchia + 1, destra, a + margine, b.saturating_sub(margine))
+                    .map_or(destra, |x| x.saturating_sub(b.saturating_sub(a) / 2).max(fine_vecchia));
                 finali.extend(crate::ritocco::riscrivi_riga(&mut rgb, parole, inchiostro, voci, destra, (sopra, sotto))?);
             }
         }
@@ -194,7 +217,10 @@ fn parole_del_paragrafo(blocco: &pdfcraft_engine::TextBlock, righe: &[pdfcraft_e
 
 /// Il testo nuovo diviso fra le righe di prima: per ogni riga le sue parole rimaste (il loro
 /// numero) e quelle nuove, nell'ordine. Le parole si confrontano col metodo della sottosequenza
-/// comune più lunga; una parola nuova va nella riga della parola di prima che la precede.
+/// comune più lunga. In un tratto cambiato la k-esima parola nuova va nella riga della k-esima
+/// tolta, quelle in più nella riga dell'ultima tolta: un cambio a cavallo di un a capo metteva
+/// tutte le nuove nella riga sotto, che non le teneva (revisione del 3/11). Senza parole tolte,
+/// una nuova va nella riga della parola di prima che la precede.
 pub(crate) fn allinea(vecchie: &[Vec<&str>], nuove: &[&str]) -> Vec<Vec<Voce>> {
     let tutte: Vec<(usize, usize, &str)> = vecchie.iter().enumerate().flat_map(|(r, riga)| riga.iter().enumerate().map(move |(k, t)| (r, k, *t))).collect();
     let (n, m) = (tutte.len(), nuove.len());
@@ -215,8 +241,16 @@ pub(crate) fn allinea(vecchie: &[Vec<&str>], nuove: &[&str]) -> Vec<Vec<Voce>> {
         let mut tolte = Vec::new();
         let mut aggiunte = Vec::new();
         let scarica = |passi: &mut Vec<(Option<usize>, Option<usize>)>, tolte: &mut Vec<usize>, aggiunte: &mut Vec<usize>| {
-            passi.extend(tolte.drain(..).map(|t| (Some(prima + t), None)));
-            passi.extend(aggiunte.drain(..).map(|g| (None, Some(prima + g))));
+            for k in 0..tolte.len().max(aggiunte.len()) {
+                if let Some(t) = tolte.get(k) {
+                    passi.push((Some(prima + t), None));
+                }
+                if let Some(g) = aggiunte.get(k) {
+                    passi.push((None, Some(prima + g)));
+                }
+            }
+            tolte.clear();
+            aggiunte.clear();
         };
         while i < a.len() || j < b.len() {
             if i < a.len() && j < b.len() && a[i].2 == b[j] {
@@ -467,6 +501,15 @@ mod test {
         // Tutto uguale; tutto tolto.
         assert_eq!(allinea(&righe, &["Area", "lavoro/istruzione", "Tempo", "libero/hobby"]), vec![vec![Tenuta(0), Tenuta(1)], vec![Tenuta(0), Tenuta(1)]]);
         assert_eq!(allinea(&righe, &[]), vec![Vec::<Voce>::new(), Vec::new()]);
+        // Un cambio a cavallo dell'a capo: ogni parola nuova al posto di una tolta, nella sua riga.
+        assert_eq!(
+            allinea(&righe, &["Area", "studio", "Ore", "libero/hobby"]),
+            vec![vec![Tenuta(0), Nuova("studio".into())], vec![Nuova("Ore".into()), Tenuta(1)]]
+        );
+        let tre = vec![vec!["Il", "paziente", "riferisce", "dolore"], vec!["addominale", "da", "tre", "giorni"]];
+        let nuove = ["La", "signora", "lamenta", "fitte", "addominali", "da", "due", "giorni"];
+        let r = allinea(&tre, &nuove);
+        assert_eq!((r[0].len(), r[1].len()), (4, 4), "{r:?}");
     }
 
     #[test]

@@ -64,6 +64,8 @@ pub(crate) const MISURE_GOMMA: [&str; 3] = ["Sottile", "Media", "Larga"];
 /// Il raggio della gomma sullo schermo, per misura (dp).
 const RAGGI_GOMMA: [f32; 3] = [7.0, 14.0, 26.0];
 const SPIEGA_GOMMA: &str = "Passa il dito sulle macchie da togliere";
+pub(crate) const PASSATE_TOLTE: &str = "Bordi nuovi: le passate della gomma sono state tolte, ripassale.";
+pub(crate) const PASSATA_TOLTA: &str = "Tolta l'ultima passata della gomma.";
 /// La fila dei formati del foglio in «Sistema i bordi», dp.
 const ALTO_FORMATI: f32 = 48.0;
 /// I punti in mezzo ai lati, per l'accessibilità e le prove.
@@ -260,10 +262,14 @@ pub(crate) struct Bordi {
     partenza: Angoli,
     /// I punti in mezzo ai lati: dritti, o curvi per un foglio piegato.
     lati: Lati,
-    /// Le passate della gomma della pagina che si rifà: restano.
+    /// Le passate della gomma della pagina che si rifà: restano se i bordi restano com'erano.
     cancellature: Vec<Cancellatura>,
     /// Il formato del foglio: A4, A3, A5, biglietto da visita o automatico.
     formato: Formato,
+    /// I lati e il formato da cui si è partiti: cambiati loro o gli angoli, le passate della gomma
+    /// cadrebbero su un altro punto del foglio.
+    lati_di_partenza: Lati,
+    formato_di_partenza: Formato,
     /// Il punto preso col dito (gli angoli da 0 a 3, i punti in mezzo ai lati da 4 a 7) e lo
     /// scarto fra il dito e il punto, nei pixel della foto.
     preso: Option<(usize, [f32; 2])>,
@@ -717,8 +723,23 @@ impl TascabileApp {
                 }
             }
             ToccoGomma::Tocco(p, raggio) => g.passate.push(Cancellatura { punti: vec![p], raggio }),
-            ToccoGomma::Annulla => {
+            ToccoGomma::Annulla if !g.passate.is_empty() => {
                 g.passate.pop();
+            }
+            // Senza passate nuove, Annulla toglie l'ultima delle volte prima: una volta fatte non
+            // si toglievano più (revisione del 3/11). La pagina si rifà, la gomma si chiude.
+            ToccoGomma::Annulla => {
+                let Some((p, _)) = s.pagine.get(s.corrente) else { return };
+                if p.ritocchi.cancellature.is_empty() {
+                    return;
+                }
+                s.gomma = None;
+                let mut ritocchi = p.ritocchi.clone();
+                ritocchi.cancellature.pop();
+                let (foto, angoli, aspetto, giri, posto) = (p.foto.clone(), p.angoli, p.aspetto, p.giri, Some(s.corrente));
+                diagnosi("scansione: gomma, tolta una passata di prima");
+                self.avviso_breve.avvisa(PASSATA_TOLTA);
+                self.fai_la_pagina(ctx, foto, angoli, ritocchi, aspetto, giri, posto);
             }
             ToccoGomma::Misura(m) => g.misura = m.min(2),
             ToccoGomma::Fatto => {
@@ -997,6 +1018,8 @@ impl TascabileApp {
                         lati,
                         cancellature: p.ritocchi.cancellature,
                         formato: p.ritocchi.formato,
+                        lati_di_partenza: lati,
+                        formato_di_partenza: p.ritocchi.formato,
                         preso: None,
                         aspetto: p.aspetto,
                         giri: p.giri,
@@ -1836,6 +1859,15 @@ impl TascabileApp {
                     "spostati"
                 };
                 diagnosi(format!("scansione: bordi fatti, {spostati}"));
+                // Le passate della gomma sono in coordinate della pagina raddrizzata: con altri
+                // angoli, lati o formato cadrebbero su un altro punto, magari su una firma
+                // (revisione del 3/11). Si tolgono, e si dice.
+                let mut b = b;
+                if !b.cancellature.is_empty() && (b.angoli != b.partenza || b.lati != b.lati_di_partenza || b.formato != b.formato_di_partenza) {
+                    diagnosi(format!("scansione: bordi cambiati, tolte {} passate di gomma", b.cancellature.len()));
+                    b.cancellature.clear();
+                    self.avviso_breve.avvisa(PASSATE_TOLTE);
+                }
                 // La pagina va al posto di quella da rifare (Rifai, Bordi), o in fondo.
                 let posto = self.scansione.as_mut().and_then(|s| s.da_rifare.take());
                 let lati = lati_curvi(b.angoli, b.lati).then_some(b.lati);

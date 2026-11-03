@@ -92,8 +92,9 @@ const FINE64: [u8; 4] = [0x50, 0x4b, 0x06, 0x06];
 
 /// Le voci dichiarate da tutte le fini d'archivio del file, anche a metà: `zip` cerca la fine in
 /// tutto il file e legge il numero a 8 byte dall'inizio della fine, o a 24 e 32 in quella zip64. Un
-/// numero a 0xFFFF rimanda alla fine zip64, guardata a parte.
-fn voci_dichiarate(b: &[u8], tetto: u64) -> Result<(), ErroreZip> {
+/// numero a 0xFFFF rimanda alla fine zip64, guardata a parte. Pubblica per chi apre uno zip solo
+/// per riconoscerlo (`tascabile_foglio::sembra_foglio`).
+pub fn voci_dichiarate(b: &[u8], tetto: u64) -> Result<(), ErroreZip> {
     let mut da = 0;
     while let Some(p) = b[da..].iter().position(|&c| c == b'P') {
         let i = da + p;

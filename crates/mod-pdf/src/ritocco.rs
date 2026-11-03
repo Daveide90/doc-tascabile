@@ -1,7 +1,9 @@
 //! Riscrivere una riga di una scansione nei pixel della sua foto: le parole cambiate si
 //! ridisegnano col carattere più simile a quello stampato, alla sua misura, sulla sua linea di
 //! base e col colore del suo inchiostro; le parole rimaste sono i pixel di prima, spostati solo se
-//! serve a far posto. Il resto della pagina non si tocca.
+//! serve a far posto. Il resto della pagina non si ridisegna; ma la foto intera si riscrive, e un
+//! JPEG si ricomprime (qualità 90) a ogni correzione: dieci correzioni sulla stessa pagina sono
+//! dieci passaggi di compressione su tutta la pagina (revisione del 3/11).
 //!
 //! I riquadri delle parole vengono dallo strato dell'OCR, che non sempre stringe l'inchiostro:
 //! prima si cercano le lettere vere nella foto ([`affina_riga`]).
@@ -32,6 +34,8 @@ pub(crate) enum Intoppo {
     NonSta,
     /// Nella foto non si trovano le lettere della riga (troppo chiare, o niente sotto il testo).
     SenzaLettere,
+    /// Il testo nuovo ha una lettera che il carattere della scansione non ha (un simbolo).
+    Lettera,
 }
 
 /// L'inchiostro e la carta di una riga.
@@ -52,6 +56,29 @@ impl Inchiostro {
     fn scuro(&self, p: [u8; 3]) -> f32 {
         ((self.luce_carta - luce(p)) / (self.luce_carta - self.luce_inchiostro)).clamp(0.0, 1.0) as f32
     }
+}
+
+/// Il primo inchiostro a destra di `da`, fino a `fino`, nella fascia di righe [`alto`, `basso`)
+/// della foto: il testo vicino (l'altra colonna, l'altro campo di un modulo) che una riga
+/// allungata non deve cancellare (revisione del 3/11). Conta una colonna con almeno due pixel
+/// scuri, e ne vuole due di fila: un granello di polvere non ferma niente. None: carta fino a
+/// `fino`.
+pub(crate) fn inchiostro_a_destra(foto: &RgbImage, ink: &Inchiostro, da: u32, fino: u32, alto: u32, basso: u32) -> Option<u32> {
+    let (w, h) = foto.dimensions();
+    let (fino, basso) = (fino.min(w), basso.min(h));
+    let scura = |x: u32| (alto..basso).filter(|&y| ink.scuro(foto.get_pixel(x, y).0) > 0.5).take(2).count() == 2;
+    let mut prima: Option<u32> = None;
+    for x in da..fino {
+        if scura(x) {
+            if let Some(p) = prima {
+                return Some(p);
+            }
+            prima = Some(x);
+        } else {
+            prima = None;
+        }
+    }
+    None
 }
 
 fn luce(p: [u8; 3]) -> f64 {
@@ -98,7 +125,16 @@ fn inchiostro_della_riga(foto: &RgbImage, riquadri: &[[u32; 4]]) -> Option<Inchi
 
 /// I riquadri dell'inchiostro delle parole di una riga, dai riquadri dell'OCR, e l'inchiostro della
 /// riga. None se nella foto le lettere non si vedono.
+#[cfg(test)]
 pub(crate) fn affina_riga(foto: &RgbImage, parole: &[ParolaFoto]) -> Option<(Vec<ParolaFoto>, Inchiostro)> {
+    affina_riga_fra(foto, parole, (0, u32::MAX))
+}
+
+/// Come [`affina_riga`], coi riquadri che in altezza restano fra `limiti` (pixel): la metà dello
+/// spazio verso le righe sopra e sotto. Con l'interlinea stretta il riquadro di una riga entrava
+/// nelle lettere della vicina, e la pulizia lasciava metà delle lettere vecchie (revisione del
+/// 3/11).
+pub(crate) fn affina_riga_fra(foto: &RgbImage, parole: &[ParolaFoto], limiti: (u32, u32)) -> Option<(Vec<ParolaFoto>, Inchiostro)> {
     let riquadri: Vec<[u32; 4]> = parole.iter().map(|p| p.r).collect();
     let inchiostro = inchiostro_della_riga(foto, &riquadri)?;
     let w = foto.width();
@@ -109,7 +145,7 @@ pub(crate) fn affina_riga(foto: &RgbImage, parole: &[ParolaFoto]) -> Option<(Vec
             // Non oltre la metà dello spazio fra questa parola e le vicine.
             let sinistra = if i > 0 { (parole[i - 1].r[2] + p.r[0]) / 2 } else { 0 };
             let destra = parole.get(i + 1).map_or(w, |q| (p.r[2] + q.r[0]).div_ceil(2));
-            ParolaFoto { testo: p.testo.clone(), r: affina(foto, inchiostro.soglia(), p.r, sinistra, destra) }
+            ParolaFoto { testo: p.testo.clone(), r: affina(foto, inchiostro.soglia(), p.r, sinistra, destra, limiti) }
         })
         .collect();
     Some((per_spazi(foto, inchiostro.soglia(), parole, affinate), inchiostro))
@@ -129,7 +165,8 @@ fn per_spazi(foto: &RgbImage, soglia: f64, ocr: &[ParolaFoto], mut affinate: Vec
     let alto = altezze[altezze.len() / 2].max(4);
     let da = ocr.iter().chain(&affinate).map(|p| p.r[0]).min().unwrap_or(0).saturating_sub(alto);
     let a = (ocr.iter().chain(&affinate).map(|p| p.r[2]).max().unwrap_or(w) + alto).min(w);
-    let scuro = |x: u32| (su..giu).any(|y| luce(foto.get_pixel(x, y).0) < soglia);
+    // Il filo verticale di una tabella non è inchiostro di una parola.
+    let scuro = |x: u32| (su..giu).any(|y| luce(foto.get_pixel(x, y).0) < soglia) && !filo(foto, soglia, x, su, giu);
     // I pezzi d'inchiostro, uniti sopra gli spazi fra le lettere.
     let unisci = (alto / 5).max(1);
     let mut pezzi: Vec<[u32; 2]> = Vec::new();
@@ -180,17 +217,20 @@ fn per_spazi(foto: &RgbImage, soglia: f64, ocr: &[ParolaFoto], mut affinate: Vec
 /// riquadro (un terzo dell'altezza sopra e sotto, un quarto ai lati, fra `sinistra` e `destra`),
 /// tenendo le righe di pixel con inchiostro attaccate a quella di mezzo (con buchi di un ottavo
 /// dell'altezza: il punto della i). Senza inchiostro, il riquadro dell'OCR.
-fn affina(foto: &RgbImage, soglia: f64, r: [u32; 4], sinistra: u32, destra: u32) -> [u32; 4] {
+fn affina(foto: &RgbImage, soglia: f64, r: [u32; 4], sinistra: u32, destra: u32, limiti: (u32, u32)) -> [u32; 4] {
     let (w, h) = foto.dimensions();
     let alto = r[3].saturating_sub(r[1]).max(1);
     let (mx, my) = (alto / 4, (alto / 3).max(1));
     let (x0, x1) = (r[0].saturating_sub(mx).max(sinistra), (r[2] + mx).min(destra).min(w));
-    let (y0, y1) = (r[1].saturating_sub(my), (r[3] + my).min(h));
+    let (y0, y1) = (r[1].saturating_sub(my).max(limiti.0.min(r[1])), (r[3] + my).min(h).min(limiti.1.max(r[3])));
     if x1 <= x0 || y1 <= y0 {
         return r;
     }
-    let scuro = |x: u32, y: u32| luce(foto.get_pixel(x, y).0) < soglia;
-    let con_inchiostro: Vec<bool> = (y0..y1).map(|y| (x0..x1).any(|x| scuro(x, y))).collect();
+    // Il filo di una tabella e la linea di un modulo sotto il valore non sono inchiostro della
+    // parola: un filo passa per tutte le righe di pixel e allargava il riquadro fino in fondo.
+    let fili: Vec<bool> = (x0..x1).map(|x| filo(foto, soglia, x, r[1], r[3])).collect();
+    let scuro = |x: u32, y: u32| !fili[(x - x0) as usize] && luce(foto.get_pixel(x, y).0) < soglia;
+    let con_inchiostro: Vec<bool> = (y0..y1).map(|y| (x0..x1).any(|x| scuro(x, y)) && !linea(foto, soglia, y, x0, x1)).collect();
     // La riga di pixel da cui partire: quella di mezzo, o la più vicina con inchiostro dentro il
     // riquadro dell'OCR.
     let mezzo = ((r[1] + r[3]) / 2).clamp(y0, y1 - 1);
@@ -232,6 +272,28 @@ fn affina(foto: &RgbImage, soglia: f64, r: [u32; 4], sinistra: u32, destra: u32)
     }
 }
 
+/// Una riga di pixel `y` scura per più dell'80% fra `x0` e `x1`: la linea di un modulo (o una
+/// sottolineatura), non lettere (revisione del 3/11: la pulizia ne cancellava un pezzo).
+fn linea(foto: &RgbImage, soglia: f64, y: u32, x0: u32, x1: u32) -> bool {
+    let (w, h) = foto.dimensions();
+    let (x1, largo) = (x1.min(w), x1.min(w).saturating_sub(x0));
+    y < h && largo >= 8 && (x0..x1).filter(|&x| luce(foto.get_pixel(x, y).0) < soglia).count() * 5 > largo as usize * 4
+}
+
+/// Una colonna di pixel `x` scura per tutta la fascia [`su`, `giu`) (meno un decimo) e anche sopra
+/// e sotto: il filo di una tabella, che una lettera non è (revisione del 3/11: il filo accanto
+/// all'ultima lettera diventava parte della parola).
+fn filo(foto: &RgbImage, soglia: f64, x: u32, su: u32, giu: u32) -> bool {
+    let (w, h) = foto.dimensions();
+    let alto = giu.saturating_sub(su);
+    let fuori = alto / 3 + 2;
+    if x >= w || alto < 4 || su < fuori || giu + fuori > h {
+        return false;
+    }
+    let scuro = |y: u32| luce(foto.get_pixel(x, y).0) < soglia;
+    (su..giu).filter(|&y| scuro(y)).count() * 10 >= alto as usize * 9 && scuro(su - fuori) && scuro(giu + fuori - 1)
+}
+
 /// Come una parola della foto somiglia a un carattere.
 #[derive(Debug, Clone, Copy)]
 struct Confronto {
@@ -247,7 +309,8 @@ struct Confronto {
 /// riga, e la sua misura. None per una parola troppo piccola o senza testo.
 fn osservata(foto: &RgbImage, ink: &Inchiostro, p: &ParolaFoto) -> Option<(Vec<f32>, usize, usize)> {
     let (wo, ho) = ((p.r[2] - p.r[0]) as usize, (p.r[3] - p.r[1]) as usize);
-    if ho < 4 || wo < 2 || p.testo.trim().is_empty() {
+    // Una «parola» più grande di 2000 × 1000 pixel non è una parola (revisione del 3/11, B5).
+    if ho < 4 || wo < 2 || p.testo.trim().is_empty() || wo * ho > PAROLA_MASSIMA {
         return None;
     }
     let pixel = (0..ho).flat_map(|y| (0..wo).map(move |x| (x, y))).map(|(x, y)| ink.scuro(foto.get_pixel(p.r[0] + x as u32, p.r[1] + y as u32).0)).collect();
@@ -308,6 +371,8 @@ fn differenza(osservato: &[f32], wo: usize, ho: usize, d: &Disegno, rr: [usize; 
 
 /// Le sfocature fra cui si sceglie quella della scansione (deviazione del filtro, pixel).
 const SFOCATURE: [f32; 6] = [0.0, 0.4, 0.7, 1.0, 1.4, 1.9];
+/// La parola più grande che si confronta coi caratteri, in pixel della foto: 2000 × 1000.
+const PAROLA_MASSIMA: usize = 2_000_000;
 
 /// Il disegno `d` sfocato come una foto: un filtro gaussiano di deviazione `sigma` pixel, prima per
 /// righe e poi per colonne. Stessa misura (il margine del disegno tiene la sfumatura).
@@ -419,6 +484,9 @@ pub(crate) fn riscrivi_riga(
         campioni = vecchie.iter().map(|p| (p, 1.0)).collect();
     }
     let (carattere, em) = scegli(foto, ink, &campioni).ok_or(Intoppo::SenzaLettere)?;
+    if nuove.iter().any(|v| matches!(v, Voce::Nuova(t) if !carattere.ha_le_lettere(t))) {
+        return Err(Intoppo::Lettera);
+    }
     // La linea di base: la mediana di quelle delle parole della riga, col carattere scelto.
     let mut basi: Vec<f64> = vecchie.iter().filter_map(|p| confronta(foto, ink, p, carattere)).map(|c| c.base).collect();
     if basi.is_empty() {
@@ -497,8 +565,23 @@ pub(crate) fn riscrivi_riga(
             basso = basso.max((base + (r[3] as f64 - d.penna[1])).ceil() as i64);
         }
     }
-    let alto = (alto - 2).max(i64::from(fascia.0) + 1).max(0) as u32;
-    let basso = (basso + 2).min(i64::from(fascia.1)).min(i64::from(h)) as u32;
+    let mut alto = (alto - 2).max(i64::from(fascia.0) + 1).max(0) as u32;
+    let mut basso = (basso + 2).min(i64::from(fascia.1)).min(i64::from(h)) as u32;
+    // La linea di un modulo sotto la riga, o sopra, resta: la pulizia si ferma prima.
+    let (lx0, lx1) = (vecchie.first().map_or(0, |p| p.r[0]), ultima.r[2]);
+    let linee: Vec<u32> = (alto..basso).filter(|&y| linea(foto, ink.soglia(), y, lx0, lx1)).collect();
+    for y in linee {
+        if f64::from(y) > base {
+            basso = basso.min(y);
+        } else {
+            alto = alto.max(y + 1);
+        }
+    }
+    // Una fascia chiusa (righe troppo vicine): meglio non correggere che scrivere sopra le
+    // lettere vecchie.
+    if alto >= basso {
+        return Err(Intoppo::SenzaLettere);
+    }
     // I pixel delle parole che restano, prima di ripulire.
     let ritagli: Vec<(usize, i64, RgbImage)> = posti
         .iter()
@@ -623,6 +706,51 @@ pub(crate) mod test {
         assert_eq!(affina_riga(&bianca, &[ParolaFoto { testo: "x".into(), r: [10, 10, 30, 30] }]), None);
     }
 
+    /// Il limite di una riga allungata: il testo dell'altra colonna sì, un granello di polvere no
+    /// (revisione del 3/11).
+    #[test]
+    fn l_inchiostro_a_destra_della_riga() {
+        let (mut foto, vere) = riga_scritta(cerca("Carlito", false, false), &["Cognome", "Rossi"], 40.0);
+        let (_, ink) = affina_riga(&foto, &come_l_ocr(&vere)).unwrap();
+        let fine = vere.iter().map(|p| p.r[2]).max().unwrap();
+        let (alto, basso) = (vere.iter().map(|p| p.r[1]).min().unwrap(), vere.iter().map(|p| p.r[3]).max().unwrap());
+        assert_eq!(inchiostro_a_destra(&foto, &ink, fine + 1, 900, alto, basso), None);
+        foto.put_pixel(fine + 40, (alto + basso) / 2, image::Rgb([20, 20, 20]));
+        assert_eq!(inchiostro_a_destra(&foto, &ink, fine + 1, 900, alto, basso), None, "un granello");
+        for x in 700..720 {
+            for y in alto..basso {
+                foto.put_pixel(x, y, image::Rgb([20, 20, 20]));
+            }
+        }
+        assert_eq!(inchiostro_a_destra(&foto, &ink, fine + 1, 900, alto, basso), Some(700));
+        assert_eq!(inchiostro_a_destra(&foto, &ink, fine + 1, 650, alto, basso), None);
+    }
+
+    /// La linea di un modulo sotto il valore e il filo di una tabella accanto non sono parte delle
+    /// parole: la linea resta intera sotto la parola cambiata (revisione del 3/11).
+    #[test]
+    fn la_linea_del_modulo_e_il_filo_della_tabella_restano() {
+        let c = cerca("Carlito", false, false);
+        let (mut foto, vere) = riga_scritta(c, &["Cognome", "Rossi"], 40.0);
+        let basso = vere.iter().map(|p| p.r[3]).max().unwrap();
+        let linea_y = basso + 3;
+        for x in 10..880 {
+            foto.put_pixel(x, linea_y, image::Rgb([40, 38, 45]));
+        }
+        let filo_x = vere[1].r[2] + 8;
+        for y in 20..150 {
+            foto.put_pixel(filo_x, y, image::Rgb([40, 38, 45]));
+        }
+        let (affinate, ink) = affina_riga(&foto, &come_l_ocr(&vere)).unwrap();
+        assert!(affinate[1].r[2] < filo_x, "il filo nella parola: {:?}", affinate[1]);
+        assert!(affinate.iter().all(|p| p.r[3] <= linea_y), "la linea nella parola: {affinate:?}");
+        let nuove = [Voce::Tenuta(0), Voce::Nuova("Neri".into())];
+        riscrivi_riga(&mut foto, &affinate, &ink, &nuove, filo_x - 4, (0, 160)).unwrap();
+        let scuri = (vere[1].r[0]..vere[1].r[2]).filter(|&x| ink.scuro(foto.get_pixel(x, linea_y).0) > 0.5).count();
+        assert!(scuri as u32 * 10 >= (vere[1].r[2] - vere[1].r[0]) * 9, "la linea sotto la parola cambiata: {scuri}");
+        assert!(ink.scuro(foto.get_pixel(filo_x, 60).0) > 0.5);
+    }
+
     #[test]
     fn si_riconosce_il_carattere_della_scansione() {
         for (famiglia, grassetto, corsivo) in [("Carlito", true, false), ("Liberation Serif", false, false), ("Liberation Sans", false, false), ("Carlito", false, true)] {
@@ -668,6 +796,14 @@ pub(crate) mod test {
         let r = vere[1].r;
         let qui = foto.get_pixel(r[2] - 3, (r[1] + r[3]) / 2).0;
         assert!(qui.iter().zip([245u8, 237, 219]).all(|(a, b)| a.abs_diff(b) <= 2), "{qui:?}");
+        // Un simbolo che il carattere non ha: niente correzione, la foto resta com'era.
+        let (mut foto, vere) = riga_scritta(c, &["Area", "lavoro/istruzione", "fine"], 40.0);
+        let (affinate, ink) = affina_riga(&foto, &come_l_ocr(&vere)).unwrap();
+        let prima = foto.clone();
+        let nuove = [Voce::Tenuta(0), Voce::Nuova("☐".into()), Voce::Tenuta(2)];
+        assert_eq!(riscrivi_riga(&mut foto, &affinate, &ink, &nuove, 880, (0, 160)).unwrap_err(), Intoppo::Lettera);
+        assert!(foto == prima);
+        assert!(c.ha_le_lettere("perché") && !c.ha_le_lettere("☐"));
     }
 
     /// Il caso della «M» di «MEDICA» (3/11): l'OCR mette il riquadro di una parola mezza lettera

@@ -132,6 +132,10 @@ pub(crate) fn trova_il_foglio(rgba: &[u8], w: u32, h: u32) -> Option<Trovato> {
         let (x, y) = (p[0].floor(), p[1].floor());
         x >= 0.0 && y >= 0.0 && (x as usize) < pw && (y as usize) < ph && dentro(x as usize, y as usize)
     };
+    // Un lato è curvo solo se lo è tutto: a un quarto e a tre quarti una curva si scosta circa tre
+    // quarti di quanto si scosta a metà. Un pollice o un'intestazione scura che tocca il bordo a
+    // metà fanno una tacca sola, e il lato resta dritto (revisione del 3/11: la pagina usciva
+    // tirata nel mezzo).
     let mut curvi = false;
     let lati: [[f32; 2]; 4] = std::array::from_fn(|i| {
         let (a, b) = (angoli[i], angoli[(i + 1) % 4]);
@@ -142,19 +146,28 @@ pub(crate) fn trova_il_foglio(rgba: &[u8], w: u32, h: u32) -> Option<Trovato> {
             n = [-n[0], -n[1]];
         }
         let lontano = CURVA_MASSIMA * l;
-        let mut s = lontano;
-        while s >= -lontano {
-            let p = |d: f32| [m[0] + n[0] * (s - d), m[1] + n[1] * (s - d)];
-            if nel_foglio(p(0.0)) && nel_foglio(p(1.0)) && nel_foglio(p(2.0)) {
-                if s.abs() >= (CURVA_MINIMA * l).max(1.0) {
-                    curvi = true;
-                    return [m[0] + n[0] * s, m[1] + n[1] * s];
+        // Quanto si scosta il bordo del foglio dal lato dritto nel punto `t` del lato (0 in `a`, 1
+        // in `b`): il primo punto del foglio lungo la perpendicolare.
+        let scarto = |t: f32| {
+            let q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+            let mut s = lontano;
+            while s >= -lontano {
+                let p = |d: f32| [q[0] + n[0] * (s - d), q[1] + n[1] * (s - d)];
+                if nel_foglio(p(0.0)) && nel_foglio(p(1.0)) && nel_foglio(p(2.0)) {
+                    return Some(s);
                 }
-                return m;
+                s -= 0.5;
             }
-            s -= 0.5;
+            None
+        };
+        let Some(s) = scarto(0.5).filter(|s| s.abs() >= (CURVA_MINIMA * l).max(1.0)) else { return m };
+        let coerente = |q: Option<f32>| q.is_some_and(|q| (q - 0.75 * s).abs() <= 0.35 * s.abs() + 1.0);
+        if coerente(scarto(0.25)) && coerente(scarto(0.75)) {
+            curvi = true;
+            [m[0] + n[0] * s, m[1] + n[1] * s]
+        } else {
+            m
         }
-        m
     });
     let a_foto = |p: [f32; 2]| [p[0] * k as f32, p[1] * k as f32];
     Some(Trovato { angoli: angoli.map(a_foto), lati: curvi.then(|| lati.map(a_foto)) })
@@ -346,6 +359,16 @@ pub(crate) mod test {
         // Un foglio coi lati dritti non ha lati curvi.
         let dritto = foto(1000, 1250, [[150.0, 120.0], [850.0, 120.0], [850.0, 1100.0], [150.0, 1100.0]], [45, 35, 30], [240, 238, 230]);
         assert_eq!(trova_il_foglio(&dritto, 1000, 1250).unwrap().lati, None);
+        // Un pollice scuro a metà del lato basso fa una tacca, non una curva: il lato resta dritto
+        // (revisione del 3/11).
+        let mut pollice = dritto.clone();
+        for y in 1040..1100u32 {
+            for x in 470..530u32 {
+                let i = ((y * 1000 + x) * 4) as usize;
+                pollice[i..i + 3].copy_from_slice(&[120, 80, 70]);
+            }
+        }
+        assert_eq!(trova_il_foglio(&pollice, 1000, 1250).unwrap().lati, None);
     }
 
     #[test]

@@ -74,9 +74,12 @@ pub(crate) struct Blocco {
     da_chiedere: bool,
     /// La richiesta in corso: il suo numero, e per che cosa.
     pub(crate) in_corso: Option<(i32, PerCosa)>,
-    /// L'ultima impronta riuscita. L'ora del sistema e non `Instant`, che col telefono addormentato
-    /// non va avanti; con l'orologio spostato indietro non vale più (si richiede).
+    /// L'ultima impronta riuscita, all'ora del sistema: per il blocco al ritorno (un'impronta
+    /// fatta mentre si era fuori sblocca).
     pub(crate) riuscita_alle: Option<SystemTime>,
+    /// La stessa, sull'orologio dall'accensione (sonno compreso, e non si sposta): per la grazia
+    /// di 5 minuti della firma.
+    pub(crate) riuscita_dall_accensione: Option<Duration>,
     /// Da quando l'app è senza fuoco.
     pub(crate) fuori_dal: Option<SystemTime>,
     /// Perché l'app non si è sbloccata, sulla schermata del blocco.
@@ -89,9 +92,11 @@ impl Blocco {
         Self { bloccata: acceso, da_chiedere: acceso, ..Self::default() }
     }
 
-    /// Un'impronta è riuscita da meno di `VALE_UN_IMPRONTA`.
-    fn recente(&self, adesso: SystemTime) -> bool {
-        self.riuscita_alle.and_then(|t| adesso.duration_since(t).ok()).is_some_and(|d| d < VALE_UN_IMPRONTA)
+    /// Un'impronta è riuscita da meno di `VALE_UN_IMPRONTA`, misurati sull'orologio
+    /// dall'accensione (`adesso`), che spostare l'ora del telefono non cambia (revisione del 3/11,
+    /// M4: prima l'ora di sistema, e portandola indietro la grazia si allungava).
+    fn recente(&self, adesso: Duration) -> bool {
+        self.riuscita_dall_accensione.and_then(|t| adesso.checked_sub(t)).is_some_and(|d| d < VALE_UN_IMPRONTA)
     }
 
     /// Al ritorno nell'app: si è stati fuori almeno `BLOCCO_DOPO` (o l'orologio è andato indietro),
@@ -107,7 +112,8 @@ impl Blocco {
 impl TascabileApp {
     /// Fa `per` dopo l'impronta: subito se ne è riuscita una da poco (non per sbloccare l'app).
     pub(crate) fn con_l_impronta(&mut self, per: PerCosa) {
-        if per != PerCosa::Sblocca && self.blocco.recente(SystemTime::now()) {
+        // La grazia vale solo per la firma: per spegnere una protezione l'impronta si chiede sempre.
+        if matches!(per, PerCosa::Firma(_)) && self.blocco.recente(tascabile_platform::dall_accensione()) {
             self.dopo_l_impronta(per);
             return;
         }
@@ -127,6 +133,7 @@ impl TascabileApp {
             diagnosi(format!("impronta: {} per {}", esito.genere(), per.nome()));
             if esito == EsitoImpronta::Riuscita {
                 self.blocco.riuscita_alle = Some(SystemTime::now());
+                self.blocco.riuscita_dall_accensione = Some(tascabile_platform::dall_accensione());
                 self.dopo_l_impronta(per);
             } else {
                 self.senza_l_impronta(per, esito);
@@ -159,6 +166,7 @@ impl TascabileApp {
         self.blocco.bloccata = true;
         self.blocco.da_chiedere = true;
         self.blocco.riuscita_alle = None;
+        self.blocco.riuscita_dall_accensione = None;
         self.blocco.in_corso = None;
         self.blocco.messaggio = None;
         self.conferma_scrittura_pdf(false);
@@ -323,14 +331,22 @@ mod test {
 
     #[test]
     fn un_impronta_vale_cinque_minuti_e_non_con_l_orologio_indietro() {
-        let adesso = SystemTime::now();
+        // Sull'orologio dall'accensione, che l'ora del telefono non sposta (revisione del 3/11, M4).
+        let adesso = Duration::from_secs(10_000);
         let mut b = Blocco::default();
         assert!(!b.recente(adesso));
-        b.riuscita_alle = Some(adesso - Duration::from_secs(60));
+        b.riuscita_dall_accensione = Some(adesso - Duration::from_secs(60));
         assert!(b.recente(adesso));
-        b.riuscita_alle = Some(adesso - VALE_UN_IMPRONTA);
+        b.riuscita_dall_accensione = Some(adesso - VALE_UN_IMPRONTA);
         assert!(!b.recente(adesso));
-        b.riuscita_alle = Some(adesso + Duration::from_secs(60));
+        b.riuscita_dall_accensione = Some(adesso + Duration::from_secs(60));
         assert!(!b.recente(adesso));
+        // L'ora di sistema spostata non conta più: la grazia si misura solo dall'accensione.
+        b.riuscita_dall_accensione = Some(adesso - Duration::from_secs(60));
+        b.riuscita_alle = Some(SystemTime::now() + Duration::from_secs(3600));
+        assert!(b.recente(adesso));
+        // L'orologio dall'accensione va avanti da solo.
+        let a = tascabile_platform::dall_accensione();
+        assert!(tascabile_platform::dall_accensione() >= a);
     }
 }

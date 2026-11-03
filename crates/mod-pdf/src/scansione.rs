@@ -74,7 +74,8 @@ pub struct Ritocchi {
 /// foglio è, un A4, un A3 o un A5 o biglietto da visita, in modo che il PDF sappia già cos'è quando
 /// stampa»): la pagina ne prende le proporzioni e, nel PDF, la misura vera. Automatico: le
 /// proporzioni vere del foglio, uguali a quelle di un A4 o di un foglio Lettera quando ci sono
-/// vicine, e il lato lungo di un A4.
+/// vicine (il Lettera solo molto vicine), e il lato lungo di quel foglio; se no, e per tutta la
+/// foto, quello di un A4.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Formato {
     #[default]
@@ -122,8 +123,17 @@ impl Formato {
 }
 
 /// I fogli di cui le proporzioni automatiche prendono la forma esatta quando ci sono vicine (lato
-/// corto su lato lungo, lato lungo in millimetri, quanto vicine): la serie A e il Lettera.
-const FOGLI_NOTI: [(f64, f64, f64); 2] = [(std::f64::consts::FRAC_1_SQRT_2, 297.0, 0.06), (215.9 / 279.4, 279.4, 0.04)];
+/// corto su lato lungo, lato lungo in millimetri, quanto vicine): la serie A e il Lettera. Il
+/// Lettera solo molto vicino: in Italia un foglio fra i due è quasi sempre un A4 stimato un poco
+/// largo, e con ±4% una foto 3:4 diventava Lettera (revisione del 3/11).
+const FOGLI_NOTI: [(f64, f64, f64); 2] = [(std::f64::consts::FRAC_1_SQRT_2, 297.0, 0.06), (215.9 / 279.4, 279.4, 0.02)];
+
+/// Il rapporto stimato dalla prospettiva, se è credibile: fra la metà e il doppio di quello dei
+/// lati come si vedono (`visto`), e fra 1:5 e 5:1. Se no quello dei lati: con angoli molto a
+/// trapezio e senza la focale della foto, la stima dava una striscia (revisione del 3/11).
+fn rapporto_credibile(stimato: Option<f64>, visto: f64) -> f64 {
+    stimato.filter(|r| (0.2..=5.0).contains(r) && (visto / 2.0..=visto * 2.0).contains(r)).unwrap_or(visto)
+}
 
 /// Il rapporto fra lato corto e lato lungo della pagina e il suo lato lungo in millimetri, dal
 /// rapporto `stimato` (larghezza su altezza) e dal formato scelto.
@@ -452,19 +462,22 @@ impl std::fmt::Debug for PaginaScansionata {
 pub fn fai_pagina(foto: Arc<FotoScansionata>, angoli: Angoli, ritocchi: Ritocchi, aspetto: Aspetto, giri: u8) -> Result<PaginaScansionata, ErroreFoto> {
     let rgb = foto.rgb()?;
     let (w, h) = rgb.dimensions();
+    let intera = ritocchi.lati.is_none() && angoli == foto.tutta();
     // Il lato lungo della pagina in millimetri, per la sua misura nel PDF.
-    let (rgb, w, h, lungo_mm) = if ritocchi.lati.is_none() && angoli == foto.tutta() {
-        let (_, lungo) = proporzioni(f64::from(w) / f64::from(h.max(1)), ritocchi.formato);
-        (rgb.into_raw(), w, h, lungo)
+    let (rgb, w, h, lungo_mm) = if intera && ritocchi.formato == Formato::Automatico {
+        // Tutta la foto com'è: nessun foglio noto da agganciare, il lato lungo di un A4.
+        (rgb.into_raw(), w, h, A4_LUNGO_MM)
     } else {
-        if !angoli_buoni(&angoli, w, h) {
+        if !intera && !angoli_buoni(&angoli, w, h) {
             return Err(ErroreFoto::Angoli);
         }
         // Le proporzioni vere del foglio (la prospettiva le accorcia: segnalazione del 3/11) o
         // quelle del formato scelto, voltate come il foglio; il lato lungo tiene i pixel della foto.
+        // Anche con tutta la foto, se il formato è scelto: la pagina ne prende le proporzioni.
         let lati = ritocchi.lati.unwrap_or_else(|| lati_dritti(angoli));
         let (largo, alto) = crate::stendi::lunghezze(angoli, lati);
-        let stimato = crate::stendi::proporzione_vera(angoli, f64::from(w), f64::from(h), foto.focale.map(f64::from)).unwrap_or(largo / alto.max(1.0));
+        let visto = largo / alto.max(1.0);
+        let stimato = if intera { visto } else { rapporto_credibile(crate::stendi::proporzione_vera(angoli, f64::from(w), f64::from(h), foto.focale.map(f64::from)), visto) };
         let (corto_su_lungo, lungo_mm) = proporzioni(stimato, ritocchi.formato);
         let lungo = largo.max(alto).round().max(1.0);
         let corto = (lungo * corto_su_lungo).round().max(1.0);
@@ -729,6 +742,25 @@ mod test {
             let p = &pagine[i];
             assert!((f64::from(p.larghezza) / f64::from(p.altezza) - corto / lungo).abs() < 0.01, "{f:?}: {p:?}");
         }
+    }
+
+    /// Tutta la foto: in Automatico la foto com'è col lato lungo di un A4 (una foto 3:4 diventava
+    /// Lettera); con un formato scelto la pagina ne prende le proporzioni (revisione del 3/11).
+    #[test]
+    fn tutta_la_foto_in_automatico_e_col_formato() {
+        assert_eq!(proporzioni(0.75, Formato::Automatico), (0.75, A4_LUNGO_MM));
+        assert_eq!(proporzioni(215.9 / 279.4, Formato::Automatico).1, 279.4);
+        let foto = preparata();
+        let tutta = foto.tutta();
+        let fatta = |formato| fai_pagina(foto.clone(), tutta, Ritocchi { formato, ..Ritocchi::default() }, Aspetto::Grigi, 0).unwrap();
+        let auto = fatta(Formato::Automatico);
+        assert_eq!((auto.larghezza, auto.altezza), (foto.larghezza, foto.altezza));
+        let a5 = fatta(Formato::A5);
+        assert!((f64::from(a5.larghezza.min(a5.altezza)) / f64::from(a5.larghezza.max(a5.altezza)) - 148.0 / 210.0).abs() < 0.01, "{a5:?}");
+        // Il rapporto della prospettiva solo se credibile.
+        assert_eq!(rapporto_credibile(Some(0.063), 0.81), 0.81);
+        assert_eq!(rapporto_credibile(Some(0.70), 0.81), 0.70);
+        assert_eq!(rapporto_credibile(None, 0.81), 0.81);
     }
 
     /// Un A4 fotografato col telefono inclinato di 50 gradi (la foto del registro dell'autore, 3/11):

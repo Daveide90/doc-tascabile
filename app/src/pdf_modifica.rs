@@ -107,6 +107,8 @@ const PIE: [(&str, &str); 3] = [("Pagina <<1>> di <<n>>", "Pagina 1 di 5"), ("<<
 /// La misura dei testi nuovi, in pt, e i suoi passi.
 const MISURA: f32 = 14.0;
 const PASSO_MISURA: f32 = 2.0;
+/// La presa sul bordo destro del paragrafo che si scrive, per allargarlo.
+pub(crate) const ALLARGA_SCRITTURA: &str = "Allarga il riquadro";
 /// La maniglia dell'oggetto scelto, come quella dei segni di Fill & Sign.
 const MANIGLIA: f32 = 7.0;
 const FUORI_DALL_ANGOLO: f32 = 12.0;
@@ -213,6 +215,13 @@ pub(crate) struct StatoModifica {
     lavoro: Option<(PerFoto, ImmagineInArrivo)>,
     /// La riscrittura che cambierebbe carattere, in attesa della risposta all'avviso.
     pub(crate) carattere: Option<Modifica>,
+    /// La correzione di una scansione mandata al motore: il paragrafo e il testo scritto. Se non
+    /// riesce (il testo non sta nella riga), la scrittura si riapre con quel testo, che prima si
+    /// perdeva (revisione del 3/11).
+    pub(crate) correzione: Option<(Chiave, String)>,
+    /// Quanto è allargato il paragrafo che si scrive (1 com'era), con la presa sul bordo destro
+    /// del riquadro: va al motore con il testo, a «Fatto».
+    pub(crate) allargata: Option<f32>,
     /// La misura (pt) e il colore dei testi nuovi.
     misura: Option<f32>,
     colore: usize,
@@ -440,7 +449,10 @@ impl TascabileApp {
             let font = Carattere::Testo.font(&ctx, posto.misura);
             let (mostrato, colore) = if testo.is_empty() { (crate::pdf_compila::VUOTO_TESTO, tema::MATITA) } else { (testo, posto.colore) };
             let g = painter.layout(mostrato.to_string(), font, colore, posto.largo);
-            let dentro = Rect::from_min_size(posto.riquadro.min, posto.riquadro.size().max(g.size())).expand2(vec2(4.0, 3.0));
+            // Un paragrafo allargabile è largo quanto la sua larghezza di adesso: si vede fin dove
+            // arriva il testo prima di andare a capo.
+            let largo_del_riquadro = if posto.allargabile.is_some() { posto.largo } else { posto.riquadro.width() };
+            let dentro = Rect::from_min_size(posto.riquadro.min, vec2(largo_del_riquadro, posto.riquadro.height()).max(g.size())).expand2(vec2(4.0, 3.0));
             painter.rect(dentro, 2.0, tema::FOGLIO, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
             let origine = dentro.min + vec2(4.0, 3.0);
             painter.galley(origine, g.clone(), colore);
@@ -456,13 +468,34 @@ impl TascabileApp {
                 let byte = testo.char_indices().nth(lettera).map_or(testo.len(), |(b, _)| b);
                 azione = Some(Box::new(move |app| app.metti_cursore_pdf(byte)));
             }
-            // «Fatto» accanto al testo, a destra; se lì non c'è posto, sopra l'angolo.
+            // La presa per allargare il paragrafo, sul bordo destro del riquadro: trascinata, il
+            // riquadro si allarga o si stringe, fino al bordo della pagina (l'autore, 3/11).
+            let mut dopo_la_presa = 0.0;
+            if let Some((base, massimo)) = posto.allargabile {
+                let centro = pos2(dentro.right() + 8.0, dentro.center().y);
+                painter.rect(Rect::from_center_size(centro, vec2(7.0, 26.0)), 3.5, tema::BLU, Stroke::new(1.5, tema::FOGLIO), StrokeKind::Outside);
+                let presa = ui.interact(Rect::from_center_size(centro, vec2(PRESA_MANIGLIA, PRESA_MANIGLIA.max(dentro.height()))), Id::new("allarga_scrittura"), Sense::drag());
+                presa.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, ALLARGA_SCRITTURA));
+                if presa.dragged() {
+                    let k = posto.largo / base.max(1.0) + presa.drag_delta().x / base.max(1.0);
+                    p.modifica.allargata = Some(k.clamp(0.3, massimo));
+                }
+                dopo_la_presa = PRESA_MANIGLIA / 2.0 + 8.0;
+            }
+            // «Fatto» accanto al testo, a destra (dopo la presa); se lì non c'è posto, sopra
+            // l'angolo, o sotto se sopra c'è la barra. Sempre dentro le pagine che si vedono: con
+            // la pagina ingrandita finiva fuori dallo schermo (revisione del 3/11).
             let lato = tema::PULSANTE;
-            let quadro = if dentro.right() + lato + 6.0 <= pagine.right() {
-                Rect::from_min_size(pos2(dentro.right() + 6.0, dentro.center().y - lato / 2.0), Vec2::splat(lato))
+            let angolo = if dentro.right() + dopo_la_presa + lato + 6.0 <= pagine.right() {
+                pos2(dentro.right() + dopo_la_presa + 6.0, dentro.center().y - lato / 2.0)
+            } else if dentro.top() - lato - 6.0 >= pagine.top() {
+                pos2(dentro.right() - lato, dentro.top() - lato - 6.0)
             } else {
-                Rect::from_min_size(pos2(dentro.right() - lato, dentro.top() - lato - 6.0), Vec2::splat(lato))
+                pos2(dentro.right() - lato, dentro.bottom() + 6.0)
             };
+            let x = angolo.x.min(pagine.right() - lato - 4.0).max(pagine.left() + 4.0);
+            let y = angolo.y.min(pagine.bottom() - lato - 4.0).max(pagine.top() + 4.0);
+            let quadro = Rect::from_min_size(pos2(x, y), Vec2::splat(lato));
             painter.circle(quadro.center(), lato / 2.0, tema::FOGLIO, Stroke::new(1.0, TRATTO));
             if ui.put(quadro, PulsanteIcona::new(icone::CHECK, crate::pdf_compila::FATTO).colore(tema::BLU)).clicked() {
                 azione = Some(Box::new(|app| app.conferma_scrittura_pdf(true)));
@@ -579,6 +612,7 @@ impl TascabileApp {
         diagnosi(format!("pdf: testo da riscrivere ({})", o.genere.nome()));
         if let Some(p) = self.pdf.as_mut() {
             p.modifica.scelto = Some(o.chiave());
+            p.modifica.allargata = None;
         }
         self.apri_scrittura_pdf(Bersaglio::Oggetto(o.chiave()), &o.testo, false);
     }
@@ -780,18 +814,24 @@ impl TascabileApp {
                         && let Some(m) = Modifica::correggi_scansione(&o, testo)
                     {
                         diagnosi(format!("pdf: scansione da correggere nella pagina {}", o.pagina + 1));
+                        p.modifica.correzione = Some((o.chiave(), testo.to_string()));
                         self.modifica_pdf(m);
                     }
                     return;
                 }
                 let Some(info) = p.motore.stato().geometrie.get(o.pagina).cloned() else { return };
+                // Allargato con la presa: testo e larghezza nuova insieme.
+                let allargata = p.modifica.allargata.take().filter(|k| (k - 1.0).abs() > 0.01 && o.genere == GenereOggetto::Testo);
                 let m = if testo.trim().is_empty() && o.genere != GenereOggetto::Testo {
                     Modifica::togli_oggetto(&o)
+                } else if let Some(k) = allargata {
+                    Modifica::testo_largo(&o, &info, testo, k)
                 } else {
                     Modifica::testo_dell_oggetto(&o, &info, testo)
                 };
                 if let Some(m) = m {
-                    diagnosi(format!("pdf: testo riscritto ({})", o.genere.nome()));
+                    let allargato = if allargata.is_some() { ", allargato" } else { "" };
+                    diagnosi(format!("pdf: testo riscritto ({}){allargato}", o.genere.nome()));
                     self.modifica_pdf(m);
                 }
                 // Un paragrafo del PDF riscritto non resta scelto: scorrendo la pagina col dito
@@ -1699,6 +1739,9 @@ pub(crate) struct PostoSullaPagina {
     /// Quanto può andare largo prima di andare a capo (dp).
     pub(crate) largo: f32,
     pub(crate) colore: Color32,
+    /// Per un paragrafo del PDF: la sua larghezza (dp) e quante volte si può allargare prima del
+    /// bordo della pagina. La presa sul bordo destro del riquadro lo allarga.
+    pub(crate) allargabile: Option<(f32, f32)>,
 }
 
 /// Dove si scrive sulla pagina, se la scrittura è di un testo della pagina nel modo Modifica. La
@@ -1731,9 +1774,23 @@ pub(crate) fn posto_sulla_pagina(p: &crate::schermo_pdf::PdfAperto, ctx: &egui::
                 }
                 _ => return None,
             };
-            // Una riga sola va avanti fino al bordo; un paragrafo va a capo nella sua larghezza.
-            let largo = if quante == 1 { (pagine.right() - r.left() - tema::PULSANTE - 16.0).max(r.width()) } else { r.width() * 1.02 };
-            Some(PostoSullaPagina { riquadro: r, misura: misura.clamp(8.0, 120.0), largo, colore })
+            // Un paragrafo del PDF va a capo dove ci andrà nel PDF, nella sua larghezza per quanto
+            // è allargato: una riga sola che andava avanti fino al bordo dello schermo, nel PDF
+            // andava a capo sopra la riga sotto (l'autore, 3/11). Gli altri: una riga sola va
+            // avanti fino al bordo, un paragrafo va a capo nella sua larghezza.
+            let (largo, allargabile) = if o.genere == GenereOggetto::Testo {
+                let base = r.width() * 1.02;
+                let info = p.motore.stato().geometrie.get(o.pagina).cloned();
+                let pagina = info.and_then(|i| p.lettore.sullo_schermo(o.pagina, [0.0, 0.0, i.width, i.height]));
+                let massimo = pagina.map_or(1.0, |pg| ((pg.right() - 4.0 - r.left()) / base.max(1.0)).max(1.0));
+                let k = p.modifica.allargata.unwrap_or(1.0).clamp(0.3, massimo);
+                (base * k, Some((base, massimo)))
+            } else if quante == 1 {
+                ((pagine.right() - r.left() - tema::PULSANTE - 16.0).max(r.width()), None)
+            } else {
+                (r.width() * 1.02, None)
+            };
+            Some(PostoSullaPagina { riquadro: r, misura: misura.clamp(8.0, 120.0), largo, colore, allargabile })
         }
         Bersaglio::TestoNuovo { pagina, punto } => {
             let a = p.lettore.sullo_schermo(pagina, [punto[0], punto[1], punto[0], punto[1]])?;
@@ -1741,7 +1798,13 @@ pub(crate) fn posto_sulla_pagina(p: &crate::schermo_pdf::PdfAperto, ctx: &egui::
             let colore = COLORI[p.modifica.colore].0;
             let colore = Color32::from_rgb((colore[0] * 255.0) as u8, (colore[1] * 255.0) as u8, (colore[2] * 255.0) as u8);
             let misura = (p.modifica.misura() * k).max(6.0);
-            Some(PostoSullaPagina { riquadro: Rect::from_min_size(a.min, vec2(0.0, misura)), misura, largo: (pagine.right() - a.left() - tema::PULSANTE - 16.0).max(80.0), colore })
+            Some(PostoSullaPagina {
+                riquadro: Rect::from_min_size(a.min, vec2(0.0, misura)),
+                misura,
+                largo: (pagine.right() - a.left() - tema::PULSANTE - 16.0).max(80.0),
+                colore,
+                allargabile: None,
+            })
         }
         _ => None,
     }

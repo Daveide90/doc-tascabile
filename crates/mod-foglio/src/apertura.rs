@@ -44,6 +44,8 @@ pub enum Genere {
     Illeggibile,
     /// Nessun foglio da mostrare (tutti nascosti).
     SenzaFogli,
+    /// Una pagina web salvata col nome di un foglio: tanti portali esportano così l'«Excel».
+    PaginaWeb,
 }
 
 impl Genere {
@@ -56,6 +58,7 @@ impl Genere {
             Genere::NonFoglio => "non è un foglio di calcolo",
             Genere::Illeggibile => "illeggibile",
             Genere::SenzaFogli => "senza fogli da mostrare",
+            Genere::PaginaWeb => "pagina web col nome di un foglio",
         }
     }
 
@@ -68,6 +71,7 @@ impl Genere {
             Genere::NonFoglio => "non è un foglio di calcolo che so leggere.",
             Genere::Illeggibile => "il foglio di calcolo è rovinato o di un formato troppo vecchio.",
             Genere::SenzaFogli => "il foglio di calcolo ha solo fogli nascosti.",
+            Genere::PaginaWeb => "è una pagina web salvata come foglio di calcolo: aprila col browser.",
         }
     }
 }
@@ -120,6 +124,8 @@ impl Cartella {
             Format::Ods => gridcraft_xlsx::read_ods(byte),
             Format::Xls => gridcraft_xlsx::read_xls(byte),
             Format::Csv if byte.len() > LIMITE_CSV_MB * 1024 * 1024 => return Err(Genere::TroppoGrande),
+            Format::Csv if campi_del_csv(byte) > CELLE_MASSIME => return Err(Genere::Gonfiato),
+            Format::Csv if pagina_web(byte) => return Err(Genere::PaginaWeb),
             Format::Csv => gridcraft_xlsx::read_csv_with_report(byte, &CsvOptions { delimiter: 0, parse_values: false, ..CsvOptions::default() }),
             Format::Encrypted => return Err(Genere::Password),
             Format::LegacyBinary | Format::Unknown => return Err(Genere::NonFoglio),
@@ -148,10 +154,62 @@ impl Cartella {
     }
 }
 
+/// Una pagina web e non un testo separato da virgole: comincia con «<» e ha una tabella o
+/// l'intestazione di una pagina (revisione del 3/11: gestionali e portali esportano l'«Excel»
+/// così, e si leggeva come CSV coi tag nelle celle).
+fn pagina_web(byte: &[u8]) -> bool {
+    let inizio = byte.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(byte);
+    let testa = String::from_utf8_lossy(&inizio[..inizio.len().min(64 * 1024)]).to_ascii_lowercase();
+    testa.trim_start().starts_with('<') && ["<table", "<html", "<!doctype html"].iter().any(|t| testa.contains(t))
+}
+
+/// I campi non vuoti di un CSV, al più: il lettore crea una cella per campo e il tetto delle celle
+/// si controlla solo dopo, quando un CSV da 20 MB di virgole ne ha già fatte dieci milioni, un
+/// GB (revisione del 3/11, B2). Si contano sui byte per ognuno dei separatori che il lettore può
+/// scegliere (virgola, punto e virgola, tabulazione), e vale il conto più alto. Le virgolette come
+/// le legge il lettore: aprono solo all'inizio di un campo. In UTF-16 una «"» può essere metà di
+/// un altro carattere: lì le virgolette non si guardano, e il conto può solo crescere.
+fn campi_del_csv(byte: &[u8]) -> usize {
+    let utf16 = byte.starts_with(&[0xFF, 0xFE]) || byte.starts_with(&[0xFE, 0xFF]);
+    let campi = |separatore: u8| {
+        let (mut n, mut pieno, mut tra_virgolette, mut gia_tra_virgolette) = (0usize, false, false, false);
+        let mut i = 0;
+        while let Some(&c) = byte.get(i) {
+            i += 1;
+            if tra_virgolette {
+                if c == b'"' && byte.get(i) == Some(&b'"') {
+                    i += 1;
+                    pieno = true;
+                } else if c == b'"' {
+                    tra_virgolette = false;
+                } else {
+                    pieno = true;
+                }
+            } else if c == b'"' && !utf16 && !pieno && !gia_tra_virgolette {
+                (tra_virgolette, gia_tra_virgolette) = (true, true);
+            } else if c == separatore || c == b'\r' || c == b'\n' {
+                if c == b'\r' && byte.get(i) == Some(&b'\n') {
+                    i += 1;
+                }
+                n += usize::from(pieno);
+                (pieno, gia_tra_virgolette) = (false, false);
+            } else {
+                pieno = true;
+            }
+        }
+        n + usize::from(pieno)
+    };
+    b",;\t".iter().copied().map(campi).max().unwrap_or(0)
+}
+
 /// I byte sono un foglio di calcolo anche senza il nome giusto: un pacchetto con
 /// `xl/workbook.xml` (o `.bin`), un OpenDocument di fogli, un .xls. Uno zip qualunque no: anche
-/// un .docx è uno zip.
+/// un .docx è uno zip. Uno zip con più voci dichiarate dei tetti no, prima di aprirlo: il
+/// riconoscimento leggerebbe tutta la directory, fino a tre volte (revisione del 3/11, B3).
 pub fn sembra_foglio(byte: &[u8]) -> bool {
+    if byte.starts_with(b"PK") && tascabile_files::archivio::voci_dichiarate(byte, TETTI.voci).is_err() {
+        return false;
+    }
     match gridcraft_xlsx::sniff(byte) {
         Format::Xls => true,
         Format::Xlsx | Format::Xlsb | Format::Ods => {
@@ -200,5 +258,28 @@ mod test {
         let foglio = c.cartella.sheet(0).unwrap();
         assert_eq!(foglio.value(gridcraft_core::CellRef::new(1, 1)), gridcraft_core::Value::Text("1,500".into()));
         assert!(!sembra_foglio(b"Nome;Dose\n"));
+        // Una pagina web col nome .xls lo dice; un CSV con un «<» no.
+        let html = b"\n  <html><body><table><tr><td>Rossi</td></tr></table></body></html>";
+        assert_eq!(Cartella::apri(html).unwrap_err(), Genere::PaginaWeb);
+        assert!(Cartella::apri(b"Valore;Nota\n<5;basso\n").is_ok());
+    }
+
+    #[test]
+    fn un_csv_con_troppi_campi_si_ferma_prima_del_lettore() {
+        // Tre milioni di campi in 6 MB: oltre il tetto delle celle, senza crearle.
+        let virgole = b"a,".repeat(3_000_000);
+        assert_eq!(campi_del_csv(&virgole), 3_000_000);
+        let inizio = std::time::Instant::now();
+        assert_eq!(Cartella::apri(&virgole).unwrap_err(), Genere::Gonfiato);
+        assert!(inizio.elapsed() < std::time::Duration::from_secs(2));
+        // Una virgoletta in mezzo al primo campo non apre le virgolette, come nel lettore.
+        let mut furbo = b"x\"".to_vec();
+        furbo.extend(b"a,".repeat(10));
+        assert_eq!(campi_del_csv(&furbo), 10);
+        // Le virgolette all'inizio di un campo sì, con «""» dentro; i campi vuoti non contano.
+        assert_eq!(campi_del_csv(b"\"a,\"\"b\";c;;\r\nd\n"), 3);
+        assert_eq!(campi_del_csv(b"1,5;2,5;3,5\n"), 4);
+        // In UTF-16 le virgolette non si guardano.
+        assert_eq!(campi_del_csv(&[0xFF, 0xFE, b'"', 0, b',', 0, b'a', 0]), 2);
     }
 }

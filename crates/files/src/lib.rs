@@ -11,7 +11,7 @@ mod posizioni;
 mod recenti;
 pub mod temporanei;
 
-pub use cartelle::{Scorciatoia, Voce, cartella_tascabile, elenca, elenca_tutto, lo_stesso_file, nome_contiene, per_nome, scorciatoie};
+pub use cartelle::{Scorciatoia, Voce, cartella_dell_omonimo, cartella_tascabile, elenca, elenca_tutto, lo_stesso_file, nome_contiene, scorciatoie};
 pub use metadati::senza_metadati;
 pub use nomi::{MASSIMO_CARATTERI_NOME, NOME_DI_RIPIEGO, nome_libero, nome_pulito};
 pub use posizioni::{MASSIMO_POSIZIONI, Posizione, Posizioni, impronta};

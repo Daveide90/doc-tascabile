@@ -50,6 +50,8 @@ pub const VISTA_TUTTI: &str = "Tutti i file";
 pub const FILE_VISTA: &str = "vista-cartelle";
 /// I file al più nella vista «Tutti i file» e nella ricerca di una cartella.
 const TUTTI_AL_MASSIMO: usize = 2000;
+/// Mentre si leggono tutti i file di una cartella.
+pub(crate) const CERCO_I_DOCUMENTI: &str = "Cerco i documenti…";
 /// Gli avvisi brevi della Home stanno sopra il «Nuovo»: tanto dal fondo della zona libera (il
 /// pulsante è a 18 dp dal fondo, alto `tema::NUOVO`).
 pub const SOPRA_IL_NUOVO: f32 = tema::MARGINE_LARGO + tema::NUOVO;
@@ -217,8 +219,10 @@ struct Cartella {
     percorso: PathBuf,
     /// Il contenuto, oppure l'errore della lettura: mai un elenco a metà.
     voci: io::Result<Vec<Voce>>,
-    /// Tutti i file anche delle sottocartelle, letti la prima volta che servono.
+    /// Tutti i file anche delle sottocartelle, letti la prima volta che servono, su un thread
+    /// (una cartella grande fermava lo schermo per secondi: revisione del 3/11).
     tutti: Option<Vec<Voce>>,
+    in_lettura: Option<std::sync::mpsc::Receiver<Vec<Voce>>>,
 }
 
 /// Che cosa si è toccato in una voce dei recenti.
@@ -442,7 +446,7 @@ impl Home {
             }
             Err(e) => diagnosi(format!("cartella: errore di lettura ({:?})", e.kind())),
         }
-        self.cartella = Some(Cartella { percorso, voci, tutti: None });
+        self.cartella = Some(Cartella { percorso, voci, tutti: None, in_lettura: None });
     }
 
     /// Si può salire di una cartella: solo dentro la radice.
@@ -730,14 +734,41 @@ impl Home {
     fn mostra_cartella(&mut self, ui: &mut Ui, c: &Contesto, azione: &mut Option<Azione>) {
         let tutti_insieme = self.tutti_insieme;
         let cercato = if self.cerca_in_cartella { self.ricerca.testo().trim().to_string() } else { String::new() };
-        // Tutti i file della cartella, letti la prima volta che servono (vista o ricerca).
+        // Tutti i file della cartella, letti la prima volta che servono (vista o ricerca), su un
+        // thread; intanto «Cerco i documenti…».
         if (tutti_insieme || !cercato.is_empty())
             && let Some(c) = self.cartella.as_mut()
             && c.tutti.is_none()
         {
-            let tutti: Vec<Voce> = elenca_tutto(&c.percorso, TUTTI_AL_MASSIMO).into_iter().filter(|v| si_apre(v.tipo)).collect();
-            diagnosi(format!("cartella: {} file con le sottocartelle", tutti.len()));
-            c.tutti = Some(tutti);
+            match &c.in_lettura {
+                None => {
+                    let (manda, arriva) = std::sync::mpsc::channel();
+                    let percorso = c.percorso.clone();
+                    let lavoro = move || {
+                        let _ = manda.send(elenca_tutto(&percorso, TUTTI_AL_MASSIMO, |v| si_apre(v.tipo)));
+                    };
+                    if std::thread::Builder::new().name("cartella-tutti".into()).spawn(lavoro).is_err() {
+                        c.tutti = Some(elenca_tutto(&c.percorso, TUTTI_AL_MASSIMO, |v| si_apre(v.tipo)));
+                    } else {
+                        c.in_lettura = Some(arriva);
+                    }
+                }
+                Some(arriva) => match arriva.try_recv() {
+                    Ok(tutti) => {
+                        diagnosi(format!("cartella: {} file con le sottocartelle", tutti.len()));
+                        c.tutti = Some(tutti);
+                        c.in_lettura = None;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        c.tutti = Some(Vec::new());
+                        c.in_lettura = None;
+                    }
+                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                },
+            }
+            if c.tutti.is_none() {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+            }
         }
         let Some(cartella) = &self.cartella else { return };
         let oggi = Locale::da_utc(c.adesso);
@@ -783,7 +814,10 @@ impl Home {
                 Scheda::new().show(ui, |ui| {
                     // La ricerca, o tutti i file insieme: con la sottocartella dove stanno.
                     if !cercato.is_empty() || tutti_insieme {
-                        let tutti = cartella.tutti.as_deref().unwrap_or(&[]);
+                        let Some(tutti) = cartella.tutti.as_deref() else {
+                            Frame::NONE.inner_margin(Margin::same(18)).show(ui, |ui| ui.label(RichText::new(CERCO_I_DOCUMENTI).color(tema::MATITA)));
+                            return;
+                        };
                         let trovati: Vec<&Voce> = tutti.iter().filter(|v| cercato.is_empty() || nome_contiene(&v.nome, &cercato)).collect();
                         if trovati.is_empty() {
                             let testo = if cercato.is_empty() { "Nessun documento qui." } else { "Nessun documento trovato." };

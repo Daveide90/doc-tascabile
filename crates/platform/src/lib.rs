@@ -159,6 +159,23 @@ pub enum EsitoFoto {
 
 /// La cartella delle foto della richiesta `richiesta`, nella cache dell'app `cache`: una per
 /// richiesta, così due richieste non scrivono mai sugli stessi file.
+/// Il tempo dall'accensione del telefono, sonno compreso (CLOCK_BOOTTIME): chi usa il telefono
+/// non lo sposta come l'ora di sistema (revisione del 3/11, M4: con l'orologio indietro la grazia
+/// di 5 minuti dell'impronta si allungava). Fuori da Linux e Android, il tempo dall'avvio dell'app.
+pub fn dall_accensione() -> std::time::Duration {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        let mut t = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+        // SAFETY: clock_gettime scrive solo nella struttura che gli diamo, valida per tutta la
+        // chiamata; CLOCK_BOOTTIME c'è su Linux da 2.6.39 e su ogni Android.
+        if unsafe { libc::clock_gettime(libc::CLOCK_BOOTTIME, &mut t) } == 0 && t.tv_sec >= 0 {
+            return std::time::Duration::new(t.tv_sec as u64, t.tv_nsec.clamp(0, 999_999_999) as u32);
+        }
+    }
+    static AVVIO: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+    AVVIO.get_or_init(std::time::Instant::now).elapsed()
+}
+
 pub fn cartella_delle_scelte(cache: &std::path::Path, richiesta: i32) -> std::path::PathBuf {
     cache.join("foto").join(format!("scelte-{richiesta}"))
 }

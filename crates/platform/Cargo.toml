@@ -8,6 +8,9 @@ publish.workspace = true
 [dependencies]
 egui.workspace = true
 log.workspace = true
+# L'orologio dall'accensione, che chi usa il telefono non sposta e che conta anche il sonno
+# (CLOCK_BOOTTIME): la grazia dell'impronta (revisione del 3/11, M4). Già nel lock.
+libc = "0.2"
 
 [target.'cfg(target_os = "android")'.dependencies]
 # La stessa winit di eframe 0.36.2, con GameActivity come nell'app.

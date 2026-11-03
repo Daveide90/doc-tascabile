@@ -304,6 +304,22 @@ impl Modifica {
         }
     }
 
+    /// Il testo nuovo di un paragrafo, largo `quanto` volte quello di prima: la presa della
+    /// scrittura (l'autore, 3/11: «poter aumentare allargando il box delle parole che correggo per
+    /// evitare che vada a capo»). Il testo senza gli a capo di prima, che si rifà nella larghezza
+    /// nuova; testo e larghezza in una modifica sola, che Annulla toglie insieme.
+    pub fn testo_largo(o: &Oggetto, info: &PageInfo, testo: &str, quanto: f32) -> Option<Modifica> {
+        if o.genere != GenereOggetto::Testo || !quanto.is_finite() || quanto <= 0.0 {
+            return None;
+        }
+        let [x0, y0, x1, y1] = o.rettangolo;
+        // La larghezza lungo la riga di base, come in `misura_oggetto`.
+        let riga = if info.rotation % 180 == 90 { y1 - y0 } else { x1 - x0 };
+        let style = BlockStyle { width: Some(f64::from(riga * quanto)), ..BlockStyle::default() };
+        let edit = Edit::EditTextBlock { page: o.pagina, block: o.bersaglio.index, text: testo.to_string(), style };
+        Some(Modifica { carattere: Some((o.pagina, o.bersaglio.index)), ..della_pagina(o.pagina, edit) })
+    }
+
     /// Un testo nuovo sulla pagina `pagina`, con l'angolo in alto a sinistra nel punto `a` (pt
     /// della pagina come si vede), `misura` in pt e `colore` RGB da 0 a 1, in Helvetica.
     pub fn testo_nuovo(pagina: usize, info: &PageInfo, a: [f32; 2], testo: &str, misura: f64, colore: [f32; 3]) -> Option<Modifica> {

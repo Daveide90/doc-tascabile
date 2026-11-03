@@ -474,8 +474,13 @@ public class MainActivity extends GameActivity {
     private boolean copia(Uri uri, File file, long massimo) {
         // Solo i content:// di altre app, come per «Apri con»: un'app scelta come galleria potrebbe
         // rispondere con un file:// o col nostro FileProvider e farci copiare un nostro file privato
-        // (revisione del 31/10, punto 5). getAuthority() è già decodificata.
-        if (uri == null || !"content".equals(uri.getScheme()) || AUTORITA_CONDIVISIONE.equalsIgnoreCase(uri.getAuthority())) {
+        // (revisione del 31/10, punto 5). getAuthority() è già decodificata. Un'autorità con
+        // l'utente davanti («0@it.tascabile.app.condivisione») è la nostra lo stesso, e Android
+        // toglie l'utente prima di aprirla: un'autorità con la «@» non si accetta mai (revisione
+        // del 3/11, B1).
+        String autorita = uri == null ? null : uri.getAuthority();
+        if (uri == null || !"content".equals(uri.getScheme()) || autorita == null || autorita.indexOf('@') >= 0
+                || AUTORITA_CONDIVISIONE.equalsIgnoreCase(autorita)) {
             file.delete();
             return false;
         }
