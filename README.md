@@ -59,6 +59,16 @@ Documents stay on the phone. There is no account, no advertising, no usage stati
 | Biometrics | For the app lock and the signature. |
 | Hide overlay windows | Stops other apps from drawing over Doc Tascabile. |
 
+### How I approached security
+
+**Secure by design.** Written in Rust, a memory-safe language. Offline by default: the app goes online only for the optional timestamp, after asking each time, and only to a short list of allowed servers. Documents are opened without running anything: Word macros never run, and linked images or templates are never downloaded. No account, no ads, no analytics; the diagnostic log never contains texts or file names and stays in memory.
+
+**Hardened as far as I could.** Limits against zip bombs and gigantic or deeply nested files, documents read away from the screen thread, patched copies of third-party components with known weaknesses, Certificate Transparency on the timestamp connection where Android supports it, app lock and fingerprint before placing a saved signature, a private mode against screenshots, the clipboard cleared after 2 minutes, release builds signed with schemes v2 and v3. Of the 53 defences in the security plan, 37 are in place, 2 in part and 14 planned.
+
+**Tested with automated attacks by AI, in several rounds.** Between 24 and 31 October 2026 four security reviews by AI agents attacked the app: crafted archives that slip past the checks, files built to freeze or crash the reader, active or remote content, leaks through logs and the network. In the last round every finding had to survive a second agent trying to disprove it, and the components were checked for known vulnerabilities (CVE). The attacks that worked were first reproduced by automated tests that failed, then fixed until the tests passed. The APK was also scanned with MobSF.
+
+**Limits.** Not an independent professional audit. Fuzzing (thousands of random malformed files) is still to do, and the app is meant for your own documents or those of people you know, not unknown files from the Internet. Report weaknesses privately (Security tab › Report a vulnerability).
+
 ### Install
 
 Tap **Download APK** at the top of this page on an Android phone (Android 11 or later), open the file and, when Android asks, allow installation from your browser or file manager. The app is not on Google Play yet. The SHA-256 fingerprint of each APK is in the release notes, to check that the file is the original.
@@ -130,6 +140,16 @@ I documenti restano sul telefono. Niente account, pubblicità o statistiche d'us
 | Internet | Solo per il timestamp, dopo averlo chiesto. |
 | Biometria | Per il blocco dell'app e per la firma. |
 | Nascondere le finestre sovrapposte | Impedisce ad altre app di disegnare sopra Doc Tascabile. |
+
+### Come ho affrontato la sicurezza
+
+**Sicura fin dal progetto.** Scritta in Rust, un linguaggio che protegge la memoria. Senza rete di base: l'app va in rete solo per il timestamp facoltativo, dopo averlo chiesto ogni volta, e solo verso un breve elenco di server ammessi. I documenti si aprono senza eseguire niente: le macro di Word non partono mai, e immagini o modelli collegati a indirizzi internet non si scaricano mai. Niente account, pubblicità o statistiche; il registro della diagnosi non contiene mai testi o nomi di file e sta solo in memoria.
+
+**Rinforzata finché ho potuto.** Limiti contro le «zip bomb» e i file giganti o annidati all'infinito, documenti letti lontano dal thread dello schermo, copie corrette di componenti di terzi con debolezze note, Certificate Transparency sul collegamento del timestamp dove Android lo permette, blocco dell'app e impronta prima di mettere la firma salvata, modalità riservata contro gli screenshot, appunti svuotati dopo 2 minuti, build di rilascio firmate con gli schemi v2 e v3. Delle 53 difese del piano di sicurezza, 37 sono fatte, 2 in parte e 14 previste.
+
+**Messa alla prova con attacchi automatici di un'IA, in più cicli.** Fra il 24 e il 31 ottobre 2026 quattro revisioni di sicurezza di agenti di intelligenza artificiale hanno attaccato l'app: archivi costruiti per scavalcare i controlli, file fatti per bloccare o far chiudere il lettore, contenuti attivi o remoti, fughe attraverso i log e la rete. Nell'ultimo giro ogni rilievo doveva resistere a un secondo agente che provava a smentirlo, e i componenti sono stati controllati per le vulnerabilità note (CVE). Gli attacchi riusciti sono stati prima riprodotti da prove automatiche che fallivano, poi corretti finché le prove passavano. L'APK è stato anche analizzato con MobSF.
+
+**Limiti.** Non è una revisione professionale indipendente. Il fuzzing (migliaia di file malformati a caso) è ancora da fare, e l'app è pensata per documenti propri o di persone che si conoscono, non per file sconosciuti presi da Internet. Le debolezze si segnalano in privato (scheda Security › Report a vulnerability).
 
 ### Installare
 
