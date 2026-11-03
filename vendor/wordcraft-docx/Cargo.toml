@@ -1,0 +1,34 @@
+# Copia di wordcraft-docx 0.10.0 di WordCraft al commit 9130181 (lo stesso del motore), per
+# passare alla zip dei controlli: vedi LEGGIMI.md. Le licenze sono quelle di WordCraft (MIT o
+# Apache 2.0, con il suo NOTICE).
+[package]
+name = "wordcraft-docx"
+version = "0.10.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+description = "WordCraft DOCX (OOXML WordprocessingML) reader and writer"
+publish = false
+
+[dependencies]
+wordcraft-doc = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+wordcraft-geom = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+quick-xml = "0.41"
+# Tascabile: la zip del controllo degli archivi (al motore originale: "3").
+zip = { version = "=9.2.3", default-features = false, features = ["deflate"] }
+thiserror = "2"
+log = "0.4"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+unicode-bidi = "0.3"
+cfb = "0.15"
+aes = "0.9"
+sha1 = "0.11"
+sha2 = "0.11"
+hmac = "0.13"
+base64 = "0.22"
+getrandom = "0.3"
+zeroize = "1"
+
+# The browser's `crypto.getRandomValues` for the salts and keys of encrypted saves.
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }

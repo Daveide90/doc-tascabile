@@ -114,7 +114,9 @@ impl Cartella {
         let formato = gridcraft_xlsx::sniff(byte);
         if matches!(formato, Format::Xlsx | Format::Xlsb | Format::Ods) {
             tascabile_files::archivio::controlla(byte, &TETTI).map_err(|e| match e {
-                tascabile_files::archivio::ErroreZip::NonValido | tascabile_files::archivio::ErroreZip::Rovinato => Genere::Illeggibile,
+                tascabile_files::archivio::ErroreZip::NonValido
+                | tascabile_files::archivio::ErroreZip::Rovinato
+                | tascabile_files::archivio::ErroreZip::Incoerente => Genere::Illeggibile,
                 _ => Genere::Gonfiato,
             })?;
         }
@@ -214,7 +216,7 @@ pub fn sembra_foglio(byte: &[u8]) -> bool {
         Format::Xls => true,
         Format::Xlsx | Format::Xlsb | Format::Ods => {
             let Ok(mut z) = zip::ZipArchive::new(std::io::Cursor::new(byte)) else { return false };
-            if z.file_names().any(|n| n == "xl/workbook.xml" || n == "xl/workbook.bin") {
+            if z.file_names().any(|n| n.is_ok_and(|n| n == "xl/workbook.xml" || n == "xl/workbook.bin")) {
                 return true;
             }
             let Ok(mut tipo) = z.by_name("mimetype") else { return false };

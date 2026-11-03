@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*", "app"]
 
 [workspace.package]
-version = "0.9.1"
+version = "0.9.2"
 edition = "2024"
 rust-version = "1.95"
 publish = false
@@ -55,6 +55,12 @@ serde_json = "1"
 # del motore.
 unicode-segmentation = "1.13"
 image = { version = "0.25", default-features = false, features = ["png"] }
+# La zip di tutti: il controllo degli archivi (crate files) e i motori in vendor/ leggono con la
+# stessa versione, così vedono gli stessi byte (correzione della 0.8.5). La 9.2.3 chiude
+# CVE-2026-115905 (intestazioni che non coincidono, dalla 9.0.5), CVE-2026-115906, CVE-2026-115909
+# e gli avvisi RUSTSEC-2026-0367, 0368, 0369 e 0429 (dalla 9.0.0). Solo deflate, come nei motori:
+# niente cifratura AES, bzip2, lzma, zstd.
+zip = { version = "=9.2.3", default-features = false, features = ["deflate"] }
 
 [patch.crates-io]
 # Come nel workspace di WordCraft: craft-pdf vuole il krilla del fork craft-libs.
@@ -77,6 +83,20 @@ roxmltree = { path = "vendor/roxmltree" }
 # pdfcraft-edit con le immagini sostituite o tolte che escono davvero dal file (vendor/pdfcraft-edit,
 # correzione della 0.8.7 per «Correggi la scansione», «Sostituisci» e «Togli» immagine).
 pdfcraft-edit = { path = "vendor/pdfcraft-edit" }
+
+# I crate dei motori che leggono e scrivono gli archivi zip, copiati in vendor/ allo stesso commit
+# dei motori: così leggono con la stessa zip del controllo degli archivi (tascabile_files::archivio).
+# Ognuno ha il suo LEGGIMI.md con le modifiche.
+[patch."https://github.com/storytold/wordcraft"]
+wordcraft-docx = { path = "vendor/wordcraft-docx" }
+wordcraft-formats = { path = "vendor/wordcraft-formats" }
+
+[patch."https://github.com/storytold/deckcraft"]
+deckcraft-format = { path = "vendor/deckcraft-format" }
+deckcraft-pptx = { path = "vendor/deckcraft-pptx" }
+
+[patch."https://github.com/storytold/gridcraft"]
+gridcraft-xlsx = { path = "vendor/gridcraft-xlsx" }
 
 [profile.dev]
 # Meno disco: solo i numeri di riga nei nostri crate.

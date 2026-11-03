@@ -14,9 +14,9 @@ gridcraft-numfmt.workspace = true
 gridcraft-core.workspace = true
 # Il controllo dell'archivio prima del lettore, come per Word e le Slide (audit del 30/10).
 tascabile-files = { path = "../files" }
-# Riconoscere un pacchetto di Excel o di LibreOffice anche senza il nome giusto; è la zip 3.0.0
-# fissata nel lock.
-zip = { version = "3.0.0", default-features = false, features = ["deflate"] }
+# Riconoscere un pacchetto di Excel o di LibreOffice anche senza il nome giusto; è la zip del
+# workspace, la stessa di gridcraft-xlsx.
+zip.workspace = true
 # I caratteri delle celle: Carlito (le misure di Calibri, il carattere di Excel) dai caratteri delle
 # Slide, già nell'APK (CRAFT_FONTS_DIR).
 deckcraft-fonts.workspace = true

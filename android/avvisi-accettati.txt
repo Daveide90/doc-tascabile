@@ -3,7 +3,3 @@
 # si ferma per ogni avviso che non è qui. Rapporti: docs/sicurezza/controllo-indipendente-2026-10-27.md
 # e docs/sicurezza/audit-2026-10-30.md.
 RUSTSEC-2023-0071 rsa 0.10 (attacco Marvin, si ricava la chiave privata dai tempi): la usa solo pdfcraft-sign con una chiave privata, e l'app non firma con chiavi private, legge soltanto le firme digitali.
-RUSTSEC-2026-0367 zip 3.0.0, permessi SUID e SGID nell'estrazione di un archivio su disco: nessuno la chiama, né l'app né i tre motori.
-RUSTSEC-2026-0368 zip 3.0.0, collegamenti simbolici nell'estrazione di un archivio su disco: nessuno la chiama, né l'app né i tre motori.
-RUSTSEC-2026-0369 zip 3.0.0, permessi attraverso i collegamenti nell'estrazione di un archivio su disco: nessuno la chiama, né l'app né i tre motori.
-RUSTSEC-2026-0429 zip 3.0.0 (CVE-2026-115909), l'app si chiude di colpo su un collegamento simbolico con una misura dichiarata enorme, in ZipArchive::extract e ZipStreamReader::extract (estrazione su disco): nessuno le chiama, né l'app né i tre motori (controllato il 3/11 nei sorgenti di wordcraft-docx, wordcraft-engine, wordcraft-formats, deckcraft-format, deckcraft-pptx e dei crate dell'app). Corretto in zip 9.0.0, quando i motori lo adottano.

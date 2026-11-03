@@ -123,3 +123,26 @@ fn la_build_controlla_rust_e_gli_avvisi_di_sicurezza() {
         assert!(id.starts_with("RUSTSEC-") && perche.trim().len() > 20, "ogni avviso accettato vuole il suo perché: {r}");
     }
 }
+
+/// Il controllo degli archivi (`tascabile_files::archivio`) legge con la stessa libreria zip dei
+/// motori, così vede gli stessi byte che vedranno loro (correzione della 0.8.5). Una seconda zip
+/// nel lock, per esempio un motore aggiornato che ne porta un'altra, riaprirebbe la differenza.
+/// La versione è quella che il controllo chiede, almeno la 9.0.5 (CVE-2026-115905, intestazioni
+/// che non coincidono; CVE-2026-115906 e 115909 e gli avvisi RUSTSEC-2026-0367, 0368, 0369 e
+/// 0429 sono corretti dalla 9.0.0).
+#[test]
+fn il_controllo_e_i_motori_leggono_con_la_stessa_zip() {
+    let lock = del_progetto("Cargo.lock");
+    let versioni: Vec<&str> = lock
+        .split("[[package]]")
+        .filter(|p| p.lines().any(|r| r.trim() == r#"name = "zip""#))
+        .filter_map(|p| p.lines().find_map(|r| r.trim().strip_prefix("version = ")))
+        .map(|v| v.trim_matches('"'))
+        .collect();
+    assert_eq!(versioni.len(), 1, "nel lock ci sono più zip: {versioni:?}");
+    let numeri: Vec<u32> = versioni[0].split('.').map(|n| n.parse().unwrap()).collect();
+    assert!(numeri >= vec![9, 0, 5], "zip {} ha le intestazioni che non coincidono (CVE-2026-115905)", versioni[0]);
+    let manifest = del_progetto("Cargo.toml");
+    let riga = manifest.lines().find(|r| r.starts_with("zip = ")).expect("manca zip fra le dipendenze del workspace");
+    assert!(riga.contains(&format!(r#""={}""#, versioni[0])), "il workspace non fissa la zip del lock: {riga}");
+}

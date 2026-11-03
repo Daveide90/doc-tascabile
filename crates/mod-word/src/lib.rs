@@ -74,7 +74,8 @@ pub(crate) mod prova {
     /// L'XML delle parti del .docx `byte` il cui nome contiene `nome`, uniti.
     pub fn xml_delle_parti(byte: &[u8], nome: &str) -> String {
         let mut z = zip::ZipArchive::new(std::io::Cursor::new(byte)).unwrap();
-        let nomi: Vec<String> = z.file_names().filter(|n| n.contains(nome) && n.ends_with(".xml")).map(str::to_string).collect();
+        let nomi: Vec<String> =
+            z.file_names().map(Result::unwrap).filter(|n| n.contains(nome) && n.ends_with(".xml")).map(|n| n.into_owned()).collect();
         let mut xml = String::new();
         for n in nomi {
             std::io::Read::read_to_string(&mut z.by_name(&n).unwrap(), &mut xml).unwrap();

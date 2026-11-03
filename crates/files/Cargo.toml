@@ -9,6 +9,6 @@ publish.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 unicode-segmentation.workspace = true
-# Il controllo degli archivi zip (archivio.rs) legge con lo stesso lettore dei motori: zip 3.0.0,
-# fissata nel lock. Le prove ci scrivono anche i loro archivi.
-zip = { version = "=3.0.0", default-features = false, features = ["deflate"] }
+# Il controllo degli archivi zip (archivio.rs) legge con lo stesso lettore dei motori: la zip del
+# workspace, la stessa dei crate dei motori in vendor/. Le prove ci scrivono anche i loro archivi.
+zip.workspace = true

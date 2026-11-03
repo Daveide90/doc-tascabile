@@ -1,0 +1,29 @@
+# Copia di gridcraft-xlsx 0.16.0 di GridCraft al commit 178f3eb (lo stesso dei fogli), per passare
+# alla zip dei controlli: vedi LEGGIMI.md. Le licenze sono quelle di GridCraft (MIT o Apache 2.0,
+# con il suo NOTICE).
+[package]
+name = "gridcraft-xlsx"
+version = "0.16.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+description = "GridCraft file formats: XLSX (SpreadsheetML) and CSV import/export"
+publish = false
+
+[features]
+# Builds password-encrypted workbooks in code for other crates' tests (a dev-dependency feature;
+# never enabled in a shipped build).
+test-support = []
+
+[dependencies]
+gridcraft-core = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+gridcraft-formula = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+gridcraft-math = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+gridcraft-model = { git = "https://github.com/storytold/gridcraft", rev = "178f3eb745a589c63b61ef97dd7b6b2d6fd48515" }
+thiserror = "2"
+quick-xml = "0.41"
+# Tascabile: la zip del controllo degli archivi (al motore originale: "3").
+zip = { version = "=9.2.3", default-features = false, features = ["deflate"] }
+aes = { version = "0.9", default-features = false }
+sha1 = { version = "0.11", default-features = false }
+sha2 = { version = "0.11", default-features = false }

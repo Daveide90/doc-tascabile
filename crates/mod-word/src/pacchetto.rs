@@ -27,6 +27,7 @@ pub fn messaggio(e: ErroreZip) -> &'static str {
         ErroreZip::TroppoGrande => "il documento supera i 64 MB una volta decompresso: in questa versione non si apre.",
         ErroreZip::TroppiElementi => "il documento ha più di 2 milioni di elementi: in questa versione non si apre.",
         ErroreZip::CompressioneIgnota => "il documento usa una compressione che questa versione non conosce.",
+        ErroreZip::Incoerente => "l'archivio del documento si legge in due modi diversi: per sicurezza non si apre.",
     }
 }
 
@@ -86,7 +87,7 @@ pub fn senza_font_incorporati(b: &[u8]) -> Result<Cow<'_, [u8]>, ErroreZip> {
     let mut nuove: Vec<(usize, Option<String>)> = Vec::new();
     let mut cambia = false;
     for i in 0..zip.len() {
-        let nome = zip.name_for_index(i).unwrap_or_default().to_string();
+        let nome = zip.name_for_index(i).and_then(Result::ok).unwrap_or_default().to_string();
         if relazioni(&nome) {
             nuove.push((i, None));
             cambia = true;
@@ -110,7 +111,7 @@ pub fn senza_font_incorporati(b: &[u8]) -> Result<Cow<'_, [u8]>, ErroreZip> {
         match nuove.iter().find(|(j, _)| *j == i) {
             Some((_, None)) => {}
             Some((_, Some(xml))) => {
-                let nome = zip.name_for_index(i).unwrap_or_default().to_string();
+                let nome = zip.name_for_index(i).and_then(Result::ok).unwrap_or_default().to_string();
                 let opzioni = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
                 out.start_file(nome, opzioni).map_err(no)?;
                 out.write_all(xml.as_bytes()).map_err(no)?;

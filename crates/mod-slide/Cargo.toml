@@ -19,8 +19,8 @@ deckcraft-model.workspace = true
 # Lo spostamento delle forme e dei paragrafi nelle animazioni (il Vec2 di kurbo che DeckCraft riesporta).
 deckcraft-geom.workspace = true
 # Riconoscere un pacchetto di PowerPoint anche senza il nome giusto (ppt/presentation.xml); è la
-# zip 3.0.0 fissata nel lock, con le feature che le dà già deckcraft-pptx.
-zip = { version = "3.0.0", default-features = false, features = ["deflate"] }
+# zip del workspace, la stessa di deckcraft-pptx.
+zip.workspace = true
 # Il lettore: le slide come texture di egui, con la stessa impaginazione delle pagine del lettore
 # PDF (pizzico, doppio tocco, la pagina che si legge: tascabile_pdf::geometria) e i colori, le
 # ombre e le icone del tema.

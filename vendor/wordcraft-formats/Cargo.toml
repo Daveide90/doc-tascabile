@@ -1,0 +1,28 @@
+# Copia di wordcraft-formats 0.10.0 di WordCraft al commit 9130181 (lo stesso del motore), per
+# passare alla zip dei controlli: vedi LEGGIMI.md. Le licenze sono quelle di WordCraft (MIT o
+# Apache 2.0, con il suo NOTICE).
+[package]
+name = "wordcraft-formats"
+version = "0.10.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+description = "WordCraft import/export: plain text, Markdown, HTML, RTF, OpenDocument Text and LaTeX"
+publish = false
+
+[dependencies]
+wordcraft-doc = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+wordcraft-geom = { git = "https://github.com/storytold/wordcraft", rev = "9130181a5fdaee2293e67756fd5458c601489f3c" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }
+quick-xml = "0.41"
+# Tascabile: la zip del controllo degli archivi (al motore originale: "3").
+zip = { version = "=9.2.3", default-features = false, features = ["deflate"] }
+cfb = "0.15"
+encoding_rs = "0.8"
+chardetng = "1"
+log = "0.4"
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+# The browser clock (`SystemTime::now()` panics on wasm32-unknown-unknown): ODT change dates.
+js-sys = "0.3"

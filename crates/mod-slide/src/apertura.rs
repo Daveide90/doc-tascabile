@@ -183,7 +183,8 @@ impl Presentazione {
         use tascabile_files::archivio::ErroreZip;
         match tascabile_files::archivio::controlla(byte, &TETTI) {
             Ok(()) | Err(ErroreZip::NonValido) => {}
-            Err(ErroreZip::CompressioneIgnota | ErroreZip::Rovinato) => return Err(Genere::Illeggibile.into()),
+            // Un archivio che si legge in due modi non va a DeckCraft (CVE-2026-115905).
+            Err(ErroreZip::CompressioneIgnota | ErroreZip::Rovinato | ErroreZip::Incoerente) => return Err(Genere::Illeggibile.into()),
             Err(ErroreZip::TroppeVoci | ErroreZip::VoceTroppoGrande | ErroreZip::TroppoGrande | ErroreZip::TroppiElementi) => {
                 return Err(Genere::Gonfiata.into());
             }
@@ -437,8 +438,9 @@ pub(crate) mod test {
             let mut f = a.by_index(i).unwrap();
             let mut byte = Vec::new();
             f.read_to_end(&mut byte).unwrap();
-            let byte = if f.name() == nome { nuova.to_vec() } else { byte };
-            parti.push((f.name().to_string(), byte));
+            let nome_voce = f.name().unwrap().into_owned();
+            let byte = if nome_voce == nome { nuova.to_vec() } else { byte };
+            parti.push((nome_voce, byte));
         }
         let parti: Vec<(&str, &[u8])> = parti.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
         zip_con(&parti)
@@ -469,7 +471,7 @@ pub(crate) mod test {
             let mut f = a.by_index(i).unwrap();
             let mut byte = Vec::new();
             f.read_to_end(&mut byte).unwrap();
-            let nome = f.name().to_string();
+            let nome = f.name().unwrap().into_owned();
             let testo = || String::from_utf8(byte.clone()).unwrap();
             let byte = match nome.as_str() {
                 "ppt/presentation.xml" => {

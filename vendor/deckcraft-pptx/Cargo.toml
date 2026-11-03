@@ -1,0 +1,21 @@
+# Copia di deckcraft-pptx 0.10.0 di DeckCraft al commit b47195f (lo stesso delle Slide), per
+# passare alla zip dei controlli: vedi LEGGIMI.md. Le licenze sono quelle di DeckCraft (MIT o
+# Apache 2.0, con il suo NOTICE).
+[package]
+name = "deckcraft-pptx"
+version = "0.10.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+description = "DeckCraft PPTX: Office Open XML (PresentationML/DrawingML) import and export, written from the public ECMA-376 standard"
+publish = false
+
+[dependencies]
+deckcraft-model = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-geom = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+deckcraft-color = { git = "https://github.com/storytold/deckcraft", rev = "b47195feec0f0fe4220d8943ad1c8add5dad8072" }
+quick-xml = "0.41"
+# Tascabile: la zip del controllo degli archivi (al motore originale: "3").
+zip = { version = "=9.2.3", default-features = false, features = ["deflate"] }
+thiserror = "2"
+log = "0.4"

@@ -20,9 +20,9 @@ log.workspace = true
 # Nomi liberi e nomi dal testo per salvare, copie e PDF.
 tascabile-files = { path = "../files" }
 # Il controllo degli archivi prima del motore e la tabella dei font senza i font incorporati: la
-# stessa zip del motore (3.0.0, fissata nel lock) con la stessa compressione, e la flate2 che c'è
-# già sotto.
-zip = { version = "=3.0.0", default-features = false, features = ["deflate"] }
+# stessa zip del motore (quella del workspace) con la stessa compressione, e la flate2 che c'è già
+# sotto.
+zip.workspace = true
 flate2 = "1.1"
 # L'ora locale per il nome di ripiego di un documento nuovo (localtime_r, anche su Android).
 libc = "0.2"

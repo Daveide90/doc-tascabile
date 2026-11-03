@@ -412,7 +412,8 @@ mod test {
         s.run("text.insert", &serde_json::json!({ "text": "!", "raw": true })).unwrap();
         let byte = wordcraft_engine::io::save_bytes("x.docx", &s.doc).unwrap();
         let mut z = zip::ZipArchive::new(std::io::Cursor::new(&byte)).unwrap();
-        let mut voci: Vec<String> = z.file_names().filter(|n| n.to_ascii_lowercase().contains("font")).map(str::to_string).collect();
+        let mut voci: Vec<String> =
+            z.file_names().map(Result::unwrap).filter(|n| n.to_ascii_lowercase().contains("font")).map(|n| n.into_owned()).collect();
         voci.sort();
         assert_eq!(voci, ["word/_rels/fontTable.xml.rels", "word/fontTable.xml", "word/fonts/font1.ttf"]);
         let mut tabella = String::new();
@@ -453,11 +454,30 @@ mod test {
         assert!(e.to_string().contains("32 MB"), "{e}");
         // Anche chiamato .txt: il motore lo aprirebbe per contenuto.
         assert_eq!(apri_byte("bomba.txt", &byte).err().unwrap().genere, "zip con una voce troppo grande");
-        // Con 70 KB in fondo la fine dell'archivio non è negli ultimi 64 KB, ma il lettore dei
-        // motori lo apre lo stesso: si controlla comunque (revisione del 31/10, punto 1).
+        // Con 70 KB in fondo la fine dell'archivio non è negli ultimi 64 KB: zip 3 lo apriva lo
+        // stesso e si controllava (revisione del 31/10, punto 1), zip 9 non lo apre più, né nel
+        // controllo né nei motori. In tutti e due i casi non si apre.
         let mut in_fondo = byte.clone();
         in_fondo.extend(vec![b'x'; 70_000]);
-        assert_eq!(apri_byte("bomba.docx", &in_fondo).err().unwrap().genere, "zip con una voce troppo grande");
+        let atteso = if zip::ZipArchive::new(std::io::Cursor::new(&in_fondo)).is_ok() { "zip con una voce troppo grande" } else { "zip non valido" };
+        assert_eq!(apri_byte("bomba.docx", &in_fondo).err().unwrap().genere, atteso);
+    }
+
+    /// CVE-2026-115905 («zip cloaking»): un .docx la cui intestazione locale del testo dice un altro
+    /// nome rispetto alla directory centrale. Il motore crede alla directory e lo aprirebbe; chi
+    /// legge in fila (un antivirus, l'app a cui lo si manda) vede un'altra parte. Non si apre.
+    #[test]
+    fn un_docx_con_le_intestazioni_che_non_coincidono_non_si_apre() {
+        let mut byte = crate::prova::docx("<w:p><w:r><w:t>Dose 10 mg</w:t></w:r></w:p>", "", &[]);
+        assert_eq!(crate::prova::testi(&apri_byte("buono.docx", &byte).unwrap()), ["Dose 10 mg"]);
+        let nome = b"word/document.xml";
+        let p = (0..byte.len() - 30 - nome.len())
+            .find(|&p| byte[p..p + 4] == [0x50, 0x4b, 0x03, 0x04] && &byte[p + 30..p + 30 + nome.len()] == nome)
+            .unwrap();
+        byte[p + 30..p + 30 + nome.len()].copy_from_slice(b"word/malevolo.xml");
+        let e = apri_byte("mascherato.docx", &byte).err().expect("il documento mascherato si è aperto");
+        assert_eq!(e.genere, "zip con intestazioni che non coincidono");
+        assert!(e.to_string().contains("due modi diversi"), "{e}");
     }
 
     #[test]
