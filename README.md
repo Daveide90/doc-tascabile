@@ -4,7 +4,7 @@
 
 Documents, PDFs, slides and spreadsheets on the phone, offline, made for the finger. · Documenti, PDF, slide e fogli di calcolo sul telefono, senza rete, fatti per il dito.
 
-Version 0.9.3 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
+Version 0.9.4 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
 
 <p align="center">
   <a href="https://github.com/Daveide90/doc-tascabile/releases/latest/download/DocTascabile.apk"><img src="docs/pulsante-download.svg" width="340" alt="Download APK · Scarica l'APK"></a>
@@ -99,6 +99,9 @@ Doc Tascabile's own code is released under the [PolyForm Noncommercial License 1
 | Italian Hunspell dictionary (LibreItalia), unmodified | GPL 3.0 |
 | Material Symbols icons | Apache 2.0 |
 | Fonts: Fraunces and Atkinson Hyperlegible Next for the interface; Carlito, Caladea, Inter, Liberation Sans and Serif for slides and spreadsheets | SIL Open Font License |
+| The other Rust libraries (479 crates) and the Android libraries (AndroidX, GameActivity, Kotlin) | MIT, Apache 2.0, BSD, ISC, Unicode, Zlib and others |
+
+The full list, with authors, licence texts and NOTICE files, is in the app (Impostazioni › Caratteri, icone e librerie) and in [app/licenze/](app/licenze/); `app/licenze/genera.py` rebuilds the Rust list from `Cargo.lock`.
 
 Microsoft Word, Excel and PowerPoint are trademarks of Microsoft; WhatsApp and Telegram belong to their owners. Doc Tascabile is not affiliated with any of them and names them only to say which files it opens.
 
@@ -181,6 +184,9 @@ Il codice di Doc Tascabile è distribuito con la [PolyForm Noncommercial License
 | Dizionario italiano Hunspell (LibreItalia), non modificato | GPL 3.0 |
 | Icone Material Symbols | Apache 2.0 |
 | Caratteri: Fraunces e Atkinson Hyperlegible Next per l'interfaccia; Carlito, Caladea, Inter, Liberation Sans e Serif per slide e fogli di calcolo | SIL Open Font License |
+| Le altre librerie Rust (479 crate) e le librerie Android (AndroidX, GameActivity, Kotlin) | MIT, Apache 2.0, BSD, ISC, Unicode, Zlib e altre |
+
+L'elenco completo, con autori, testi delle licenze e file NOTICE, è nell'app (Impostazioni › Caratteri, icone e librerie) e in [app/licenze/](app/licenze/); `app/licenze/genera.py` rifà l'elenco Rust da `Cargo.lock`.
 
 Microsoft Word, Excel e PowerPoint sono marchi di Microsoft; WhatsApp e Telegram appartengono ai loro titolari. Doc Tascabile non è collegato a nessuno di loro e li nomina solo per dire quali file apre.
 

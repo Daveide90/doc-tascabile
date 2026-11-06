@@ -1,0 +1,79 @@
+Le librerie Java dentro Doc Tascabile
+
+Il guscio Android dell'app (la finestra, la tastiera, i permessi) usa queste librerie, ognuna con la propria licenza. Il testo intero della Apache License 2.0 è in fondo.
+
+Android Jetpack (AndroidX): Activity, Annotation, AppCompat, Arch Core, Collection, Concurrent, Core, CursorAdapter, CustomView, DrawerLayout, Emoji2, Fragment, Interpolator, Lifecycle, Loader, ProfileInstaller, ResourceInspection, SavedState, Startup, Tracing, VectorDrawable, VersionedParcelable, ViewPager
+  Copyright The Android Open Source Project. Apache License 2.0.
+
+GameActivity (androidx.games:games-activity)
+  Copyright 2020-2022 The Android Open Source Project. Apache License 2.0.
+
+Kotlin Standard Library
+  Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language contributors. Apache License 2.0 (NOTICE below).
+  It contains code derived from: GWT, Copyright 2007-08 Google Inc. (Apache 2.0); Guava UnsignedLongs, Copyright 2011 The Guava Authors (Apache 2.0); ThreeTen-Backport, Copyright (c) 2007-present Stephen Colebourne & Michael Nascimento Santos (BSD 3-Clause, text below); Boost special math functions, Copyright Eric Ford & Hubert Holin 2001 (Boost Software License 1.0).
+
+kotlinx.coroutines
+  Copyright 2016-2025 JetBrains s.r.o. and contributors. Apache License 2.0 (NOTICE below).
+
+JetBrains Java Annotations
+  Copyright JetBrains s.r.o. Apache License 2.0.
+
+Guava ListenableFuture
+  Copyright The Guava Authors. Apache License 2.0.
+
+============================================================
+NOTICE: Kotlin
+
+=========================================================================
+   ==  NOTICE file corresponding to the section 4 d of                    ==
+   ==  the Apache License, Version 2.0,                                   ==
+   ==  in this case for the Kotlin Compiler distribution.                 ==
+   =========================================================================
+
+   Kotlin Compiler
+   Copyright 2010-2024 JetBrains s.r.o and respective authors and developers
+
+============================================================
+NOTICE: kotlinx.coroutines
+
+=========================================================================
+==  NOTICE file corresponding to the section 4 d of                    ==
+==  the Apache License, Version 2.0,                                   ==
+==  in this case for the kotlinx.coroutines library.                   ==
+=========================================================================
+
+kotlinx.coroutines library.
+Copyright 2016-2025 JetBrains s.r.o and contributors
+
+============================================================
+ThreeTen-Backport (in the Kotlin Standard Library): BSD 3-Clause licence
+
+Copyright (c) 2007-present, Stephen Colebourne & Michael Nascimento Santos.
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+* Neither the name of JSR-310 nor the names of its contributors
+  may be used to endorse or promote products derived from this software
+  without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

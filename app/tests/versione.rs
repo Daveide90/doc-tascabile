@@ -34,7 +34,7 @@ fn regole(testo: &str) -> String {
 fn version_name_di_gradle_e_quella_di_cargo() {
     let gradle = android("app/build.gradle.kts");
     assert_eq!(valore(&gradle, "versionName").as_deref(), Some(tascabile::VERSIONE));
-    assert_eq!(tascabile::VERSIONE, "0.9.3");
+    assert_eq!(tascabile::VERSIONE, "0.9.4");
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn version_code_della_0_7_0_e_8() {
     // La 0.0.1 aveva 1, la 0.1.0 2, la 0.2.0 3, la 0.3.0 4, la 0.4.0 5, la 0.5.0 6, la 0.6.0 7:
     // Android installa sopra solo con un numero più alto.
     let gradle = android("app/build.gradle.kts");
-    assert_eq!(valore(&gradle, "versionCode").as_deref(), Some("29"));
+    assert_eq!(valore(&gradle, "versionCode").as_deref(), Some("30"));
 }
 
 #[test]

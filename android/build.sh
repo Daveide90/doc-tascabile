@@ -62,6 +62,13 @@ except Exception:
     esac
 fi
 
+# 0c. Per il rilascio, gli avvisi delle librerie nell'app (Impostazioni › Tutte le librerie Rust)
+# devono corrispondere a Cargo.lock: MIT, BSD, ISC e Apache li chiedono anche nell'APK (6/11/2026).
+if [ "$MODO" = rilascio ]; then
+    python3 -I ../app/licenze/genera.py --controlla || { echo "ERRORE: elenco delle librerie vecchio: python3 -I app/licenze/genera.py"; exit 1; }
+    echo "Licenze: l'elenco delle librerie corrisponde a Cargo.lock."
+fi
+
 # La chiave di rilascio e le sue password stanno fuori da git (vedi app/build.gradle.kts).
 if [ "$MODO" = rilascio ]; then
     [ -f firma.properties ] || { echo "ERRORE: manca android/firma.properties (chiave di rilascio)"; exit 1; }

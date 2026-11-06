@@ -211,7 +211,7 @@ const MIT: &str = "Permission is hereby granted, free of charge, to any person o
 /// La licenza Apache 2.0 intera: è quella delle icone.
 const APACHE: &str = include_str!("../../crates/touch/fonts/LICENSE-MaterialSymbols.txt");
 
-const COMPONENTI: [Componente; 10] = [
+const COMPONENTI: [Componente; 13] = [
     Componente {
         nome: "Fraunces",
         icona: icone::TITLE,
@@ -296,17 +296,46 @@ const COMPONENTI: [Componente; 10] = [
         },
     },
     Componente {
-        nome: "Le altre librerie",
-        icona: icone::LIST,
-        sotto: "serde, zip, image, krilla, jni e altre · MIT o Apache 2.0",
+        nome: "PDFCraft e DeckCraft",
+        icona: icone::PICTURE_AS_PDF,
+        sotto: "I motori dei PDF e delle slide · MIT o Apache 2.0",
         testo: || {
             format!(
-                "Le altre librerie principali, ognuna di chi la scrive:\n\
-                 serde e serde_json, image e png, krilla, skrifa, ttf-parser, flate2, unicode-segmentation, log, libc, jni e \
-                 android-activity: MIT o Apache 2.0, a scelta.\n\
-                 zip (Copyright (c) 2014 Mathijs van de Nes), quick-xml, rustybuzz, fancy-regex e phf: MIT.\n\n{MIT}"
+                "PDFCraft\nCopyright (c) 2026 ArtCraft Team and the PdfCraft contributors.\n\
+                 DeckCraft\nCopyright (c) 2026 ArtCraft Team and the DeckCraft contributors.\n\
+                 Licenza MIT o Apache 2.0, a scelta; qui la MIT.\n\n\
+                 Il materiale di terzi che portano con sé (caratteri, icone Lucide con licenza ISC, dati) è nei loro file NOTICE, \
+                 riportati per intero in «Tutte le librerie Rust».\n\n{MIT}"
             )
         },
+    },
+    Componente {
+        nome: "Caratteri delle slide",
+        icona: icone::SLIDESHOW,
+        sotto: "Carlito, Caladea, Inter, Liberation · SIL Open Font License 1.1",
+        testo: || {
+            format!(
+                "Caratteri usati per mostrare slide e fogli di calcolo al posto di quelli di Office.\n\n\
+                 Carlito\n\n{}\n\nCaladea\n\n{}\n\nInter\n\n{}\n\nLiberation Sans\n\n{}\n\nLiberation Serif\n\n{}",
+                include_str!("../../crates/mod-slide/fonts/carlito/OFL.txt"),
+                include_str!("../../crates/mod-slide/fonts/caladea/OFL.txt"),
+                include_str!("../../crates/mod-slide/fonts/inter/OFL.txt"),
+                include_str!("../../crates/mod-slide/fonts/liberation-sans/OFL.txt"),
+                include_str!("../../crates/mod-slide/fonts/liberation-serif/OFL.txt")
+            )
+        },
+    },
+    Componente {
+        nome: "Tutte le librerie Rust",
+        icona: icone::LIST,
+        sotto: "L'elenco completo, con autori, licenze e NOTICE",
+        testo: || include_str!("../licenze/librerie-rust.txt").to_string(),
+    },
+    Componente {
+        nome: "Librerie Android",
+        icona: icone::PHONE_ANDROID,
+        sotto: "AndroidX, GameActivity, Kotlin · Apache 2.0",
+        testo: || format!("{}\n\n{APACHE}", include_str!("../licenze/librerie-android.txt")),
     },
 ];
 
@@ -492,7 +521,11 @@ impl Impostazioni {
         let c = &COMPONENTI[self.licenza];
         self.foglio.mostra(ui.ctx(), c.nome, |ui| {
             let ctx = ui.ctx().clone();
-            ui.label(RichText::new((c.testo)()).font(Carattere::Testo.font(&ctx, 13.0)).color(tema::INCHIOSTRO));
+            // Un'etichetta per paragrafo: l'elenco delle librerie è lungo, e così egui disegna
+            // solo i paragrafi che si vedono.
+            for paragrafo in (c.testo)().split("\n\n") {
+                ui.label(RichText::new(paragrafo).font(Carattere::Testo.font(&ctx, 13.0)).color(tema::INCHIOSTRO));
+            }
         });
         let c_e = !self.autore.is_empty();
         let campo = &self.campo_autore;
@@ -596,6 +629,30 @@ mod test {
         let dizionario = testo("Dizionario italiano");
         for atteso in ["LibreItalia", "Version 3, 29 June 2007", "it_IT.dic", "non modificati"] {
             assert!(dizionario.contains(atteso), "manca {atteso}");
+        }
+        // Gli avvisi che BSD, ISC, Unicode e Apache chiedono anche nell'APK (6/11/2026).
+        let craft = testo("PDFCraft e DeckCraft");
+        assert!(craft.contains("PdfCraft contributors") && craft.contains("DeckCraft contributors"));
+        let slide = testo("Caratteri delle slide");
+        for atteso in ["Carlito", "Caladea", "Inter", "Liberation Sans", "Liberation Serif"] {
+            assert!(slide.contains(atteso), "manca {atteso}");
+        }
+        assert_eq!(slide.matches("SIL OPEN FONT LICENSE").count(), 5, "una OFL per carattere");
+        let rust = testo("Tutte le librerie Rust");
+        for atteso in [
+            "aws-lc-sys",
+            "Redistribution and use in source and binary forms",
+            "UNICODE LICENSE V3",
+            "ISC",
+            "ArtCraft Team and the WordCraft contributors",
+            "UBUNTU FONT LICENCE",
+            "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION",
+        ] {
+            assert!(rust.contains(atteso), "manca {atteso}");
+        }
+        let android = testo("Librerie Android");
+        for atteso in ["Android Open Source Project", "GameActivity", "Stephen Colebourne", "kotlinx.coroutines", "Apache License"] {
+            assert!(android.contains(atteso), "manca {atteso}");
         }
     }
 }

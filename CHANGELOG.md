@@ -4,6 +4,10 @@
 
 ## English
 
+### 0.9.4 · 6 November 2026
+
+- **Third-party licences complete in the app.** Impostazioni › Caratteri, icone e librerie now also lists the PDFCraft and DeckCraft engines, the slide fonts (Carlito, Caladea, Inter, Liberation, with their OFL texts), every Rust library compiled into the app (479 crates, with copyright lines, licence texts and NOTICE files, BSD, ISC and Unicode included) and the Android libraries (AndroidX, GameActivity, Kotlin with its NOTICE and the ThreeTen BSD licence). The Rust list is generated from `Cargo.lock` by `app/licenze/genera.py`, and a release build stops if it is out of date.
+
 ### 0.9.3 · 3 November 2026
 
 - **App lock and private mode.** Turning on the app lock also turns on private mode, so screenshots, recordings and the preview in the recent apps are black. Private mode can still be turned off on its own.
@@ -91,6 +95,10 @@
 - **Beta.** Word, PDF and slides in one app. Fixes for Italian Word styles, scans, replaced photos, links on text, text recognition and export to Word of scans; slides reviewed; a quick guide in Settings.
 
 ## Italiano
+
+### 0.9.4 · 6 novembre 2026
+
+- **Licenze di terzi complete nell'app.** In Impostazioni › Caratteri, icone e librerie ci sono anche i motori PDFCraft e DeckCraft, i caratteri delle slide (Carlito, Caladea, Inter, Liberation, con i testi OFL), tutte le librerie Rust compilate nell'app (479 crate, con le righe di copyright, i testi delle licenze e i file NOTICE, comprese BSD, ISC e Unicode) e le librerie Android (AndroidX, GameActivity, Kotlin con il suo NOTICE e la licenza BSD di ThreeTen). L'elenco Rust lo genera `app/licenze/genera.py` da `Cargo.lock`, e la build di rilascio si ferma se non è aggiornato.
 
 ### 0.9.3 · 3 novembre 2026
 
