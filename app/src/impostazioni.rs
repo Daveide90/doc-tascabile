@@ -211,7 +211,13 @@ const MIT: &str = "Permission is hereby granted, free of charge, to any person o
 /// La licenza Apache 2.0 intera: è quella delle icone.
 const APACHE: &str = include_str!("../../crates/touch/fonts/LICENSE-MaterialSymbols.txt");
 
-const COMPONENTI: [Componente; 13] = [
+const COMPONENTI: [Componente; 14] = [
+    Componente {
+        nome: "Licenza di Doc Tascabile",
+        icona: icone::INFO,
+        sotto: "La licenza di questa app · PolyForm Noncommercial 1.0.0",
+        testo: || include_str!("../../LICENSE").to_string(),
+    },
     Componente {
         nome: "Fraunces",
         icona: icone::TITLE,
@@ -606,7 +612,7 @@ mod test {
 
     #[test]
     fn ogni_licenza_ha_il_suo_testo() {
-        let licenze = ["SIL OPEN FONT LICENSE Version 1.1", "Apache License", "Permission is hereby granted", "GNU GENERAL PUBLIC LICENSE"];
+        let licenze = ["SIL OPEN FONT LICENSE Version 1.1", "Apache License", "Permission is hereby granted", "GNU GENERAL PUBLIC LICENSE", "PolyForm Noncommercial License 1.0.0"];
         for c in &COMPONENTI {
             let testo = (c.testo)();
             assert!(testo.len() > 500, "{}: {} caratteri", c.nome, testo.len());
@@ -630,6 +636,10 @@ mod test {
         for atteso in ["LibreItalia", "Version 3, 29 June 2007", "it_IT.dic", "non modificati"] {
             assert!(dizionario.contains(atteso), "manca {atteso}");
         }
+        // La licenza dell'app stessa, con la riga «Required Notice» che la PolyForm chiede di
+        // passare a chi riceve il software (revisione del 6/11/2026, punto 8).
+        let propria = testo("Licenza di Doc Tascabile");
+        assert!(propria.contains("Required Notice: Copyright (c) 2026 Daveide90") && propria.contains("PolyForm Noncommercial"));
         // Gli avvisi che BSD, ISC, Unicode e Apache chiedono anche nell'APK (6/11/2026).
         let craft = testo("PDFCraft e DeckCraft");
         assert!(craft.contains("PdfCraft contributors") && craft.contains("DeckCraft contributors"));

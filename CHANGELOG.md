@@ -4,6 +4,10 @@
 
 ## English
 
+### 0.9.5 · 6 November 2026
+
+- **The app's own licence in the app.** Impostazioni › Caratteri, icone e librerie now opens with «Licenza di Doc Tascabile»: the PolyForm Noncommercial License 1.0.0 with its «Required Notice», which the licence asks to pass on with the software. Fix from an independent review of the publication.
+
 ### 0.9.4 · 6 November 2026
 
 - **Third-party licences complete in the app.** Impostazioni › Caratteri, icone e librerie now also lists the PDFCraft and DeckCraft engines, the slide fonts (Carlito, Caladea, Inter, Liberation, with their OFL texts), every Rust library compiled into the app (479 crates, with copyright lines, licence texts and NOTICE files, BSD, ISC and Unicode included) and the Android libraries (AndroidX, GameActivity, Kotlin with its NOTICE and the ThreeTen BSD licence). The Rust list is generated from `Cargo.lock` by `app/licenze/genera.py`, and a release build stops if it is out of date.
@@ -95,6 +99,10 @@
 - **Beta.** Word, PDF and slides in one app. Fixes for Italian Word styles, scans, replaced photos, links on text, text recognition and export to Word of scans; slides reviewed; a quick guide in Settings.
 
 ## Italiano
+
+### 0.9.5 · 6 novembre 2026
+
+- **La licenza dell'app dentro l'app.** Impostazioni › Caratteri, icone e librerie ora comincia con «Licenza di Doc Tascabile»: la PolyForm Noncommercial License 1.0.0 con la sua «Required Notice», che la licenza chiede di passare insieme al software. Correzione da una revisione indipendente della pubblicazione.
 
 ### 0.9.4 · 6 novembre 2026
 
