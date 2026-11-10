@@ -167,9 +167,9 @@ pub enum Come {
     SulFile,
     /// Un formato che si perde qualcosa: un .docx nuovo nella stessa cartella.
     ComeDocx,
-    /// Una copia in Documenti/Tascabile.
+    /// Una copia in Documents/Tascabile.
     Copia,
-    /// Un PDF in Documenti/Tascabile.
+    /// Un PDF in Documents/Tascabile.
     Pdf,
     /// Un file da condividere in `condivisi/` della cache.
     Condivisione,
@@ -289,7 +289,7 @@ pub fn scrivi_nuovo(cartella: &Path, base: &str, ext: &str, byte: &[u8]) -> io::
     Err(ultimo)
 }
 
-/// La cartella Documenti/Tascabile sotto `radice`, creata se manca.
+/// La cartella Documents/Tascabile sotto `radice`, creata se manca.
 fn documenti_tascabile(radice: &Path) -> Result<PathBuf, ErroreSalva> {
     let c = cartella_tascabile(radice);
     std::fs::create_dir_all(&c).map_err(da_io)?;
@@ -317,7 +317,7 @@ fn segna_salvato(s: &mut Session) {
 
 /// «Salva». Un file in un formato senza perdite si sostituisce (`save_path`, atomico); un formato
 /// che perde qualcosa (.doc, .txt, .md…) diventa un .docx nuovo nella stessa cartella; un
-/// documento arrivato con «Apri con» o nuovo diventa una copia in Documenti/Tascabile. Dopo il
+/// documento arrivato con «Apri con» o nuovo diventa una copia in Documents/Tascabile. Dopo il
 /// .docx nuovo e la copia l'origine è quel file. `radice` è la radice dei documenti, `ripiego` la
 /// base del nome se il testo non dice niente.
 pub fn salva(s: &mut Session, origine: &mut Origine, radice: &Path, ripiego: &str) -> Result<Salvato, ErroreSalva> {
@@ -350,7 +350,7 @@ pub fn salva(s: &mut Session, origine: &mut Origine, radice: &Path, ripiego: &st
     Ok(salvato(nuovo, byte.len(), "docx", Come::ComeDocx))
 }
 
-/// «Salva una copia» in Documenti/Tascabile (creata se manca), nello stesso formato se il motore
+/// «Salva una copia» in Documents/Tascabile (creata se manca), nello stesso formato se il motore
 /// lo scrive senza perdite, altrimenti in .docx; da lì l'origine è la copia.
 pub fn salva_copia(s: &mut Session, origine: &mut Origine, radice: &Path, ripiego: &str) -> Result<Salvato, ErroreSalva> {
     let ext = formato_della_copia(origine);
@@ -364,7 +364,7 @@ pub fn salva_copia(s: &mut Session, origine: &mut Origine, radice: &Path, ripieg
     Ok(salvato(copia, byte.len(), &ext, Come::Copia))
 }
 
-/// «Esporta PDF» in Documenti/Tascabile (creata se manca). Il documento resta com'è.
+/// «Esporta PDF» in Documents/Tascabile (creata se manca). Il documento resta com'è.
 pub fn esporta_pdf(s: &Session, origine: &Origine, radice: &Path, ripiego: &str) -> Result<Salvato, ErroreSalva> {
     let base = base_del_nome(origine, &s.doc, ripiego);
     let cartella = documenti_tascabile(radice)?;

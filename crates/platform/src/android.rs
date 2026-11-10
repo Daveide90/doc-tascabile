@@ -801,6 +801,14 @@ impl Piattaforma {
     /// dell'errore dice quale dei casi è stato, senza l'URI: permesso scaduto
     /// (SecurityException), file sparito (FileNotFoundException), errore di lettura, tetto.
     pub fn read_uri(&self, uri: &str) -> Result<Vec<u8>, ErroreLettura> {
+        // Tetto alla dimensione: un file enorme non deve finire tutto in memoria.
+        crate::leggi_con_tetto(self.apri_uri(uri)?, "URI")
+    }
+
+    /// Apre un URI content:// e ne dà il file, da leggere anche su un altro thread: qui solo la
+    /// richiesta ad Android (openFileDescriptor), la lettura dei byte la fa chi lo riceve. Così
+    /// un'app lenta a mandare i byte non ferma lo schermo (revisione del 3/11, B4).
+    pub fn apri_uri(&self, uri: &str) -> Result<std::fs::File, ErroreLettura> {
         use std::os::fd::FromRawFd;
         let uri = uri.to_owned();
         let fd = self
@@ -836,9 +844,7 @@ impl Piattaforma {
             return Err(ErroreLettura { genere: messaggio.clone(), messaggio });
         }
         // SAFETY: detachFd ci ha ceduto il descrittore, aperto; File lo chiude quando esce di scope.
-        let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
-        // Tetto alla dimensione: un file enorme non deve finire tutto in memoria.
-        crate::leggi_con_tetto(&mut file, "URI")
+        Ok(unsafe { std::fs::File::from_raw_fd(fd) })
     }
 
     /// Indietro alla radice: l'app va in secondo piano, l'Activity resta viva (winit 0.30 non

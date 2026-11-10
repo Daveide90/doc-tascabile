@@ -32,6 +32,11 @@ pub struct Recente {
     /// scritti prima della 0.3 non c'è.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pagine: Option<usize>,
+    /// L'impronta dei byte com'erano all'apertura: se un'altra app sposta il file, o il permesso
+    /// di un «Apri con» scade, lo stesso file si ritrova da qui (`cerca_per_impronta`). Nei
+    /// recenti scritti prima della 0.9.6 non c'è.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impronta: Option<crate::ImprontaFile>,
 }
 
 /// I recenti: al massimo `MASSIMO_RECENTI`, il più recente in cima, una voce sola per chiave.
@@ -62,10 +67,42 @@ impl Recenti {
     }
 
     /// Mette `r` in cima; un recente con la stessa chiave lascia il posto a questo.
-    pub fn aggiungi(&mut self, r: Recente) {
+    pub fn aggiungi(&mut self, mut r: Recente) {
+        // Senza un'impronta nuova resta quella di prima.
+        if r.impronta.is_none() {
+            r.impronta = self.voci.iter().find(|v| v.chiave == r.chiave).and_then(|v| v.impronta.clone());
+        }
         self.voci.retain(|v| v.chiave != r.chiave);
         self.voci.insert(0, r);
         self.voci.truncate(MASSIMO_RECENTI);
+    }
+
+    /// Il recente con la chiave `vecchia` passa a `nuova`, col nome `nome`, allo stesso posto: un
+    /// file rinominato dall'app. Una voce che aveva già la chiave nuova se ne va.
+    pub fn rinomina(&mut self, vecchia: &str, nuova: &str, nome: &str) {
+        if vecchia == nuova {
+            return;
+        }
+        if self.voci.iter().any(|v| v.chiave == vecchia) {
+            self.voci.retain(|v| v.chiave != nuova);
+        }
+        for v in self.voci.iter_mut().filter(|v| v.chiave == vecchia) {
+            v.chiave = nuova.to_string();
+            v.nome = nome.to_string();
+        }
+    }
+
+    /// Il recente con questa chiave prende l'impronta nuova, al suo posto: un salvataggio ha
+    /// cambiato i byte del file, e con l'impronta dell'apertura non si ritroverebbe più (10/11).
+    /// Vero se qualcosa è cambiato, cioè se i recenti sono da riscrivere.
+    pub fn segna_impronta(&mut self, chiave: &str, impronta: crate::ImprontaFile) -> bool {
+        match self.voci.iter_mut().find(|v| v.chiave == chiave) {
+            Some(v) if v.impronta.as_ref() != Some(&impronta) => {
+                v.impronta = Some(impronta);
+                true
+            }
+            _ => false,
+        }
     }
 
     pub fn togli(&mut self, chiave: &str) {
@@ -125,11 +162,42 @@ mod test {
     use serde_json::json;
 
     fn recente(chiave: &str, aperto_alle: u64) -> Recente {
-        Recente { chiave: chiave.into(), nome: format!("{chiave}.docx"), tipo: Tipo::Documento, aperto_alle, pagine: None }
+        Recente { chiave: chiave.into(), nome: format!("{chiave}.docx"), tipo: Tipo::Documento, aperto_alle, pagine: None, impronta: None }
+    }
+
+    #[test]
+    fn un_recente_rinominato_resta_al_suo_posto_con_la_sua_impronta() {
+        let mut r = Recenti::default();
+        r.aggiungi(recente("/x/b", 2));
+        r.aggiungi(Recente { impronta: Some(crate::ImprontaFile::di(b"x")), ..recente("/x/a", 1) });
+        r.rinomina("/x/a", "/x/a2", "A due.docx");
+        assert_eq!(r.voci()[0].chiave, "/x/a2");
+        assert_eq!(r.voci()[0].nome, "A due.docx");
+        assert!(r.voci()[0].impronta.is_some());
+        assert_eq!(r.voci()[1].chiave, "/x/b");
+        // Senza un'impronta nuova, aggiungere di nuovo la stessa chiave tiene quella di prima.
+        r.aggiungi(recente("/x/a2", 3));
+        assert!(r.voci()[0].impronta.is_some());
     }
 
     fn chiavi(r: &Recenti) -> Vec<&str> {
         r.voci().iter().map(|v| v.chiave.as_str()).collect()
+    }
+
+    /// Dopo un salvataggio i byte del file sono altri: il suo recente prende l'impronta nuova,
+    /// allo stesso posto (revisione del 10/11: prima teneva quella dell'apertura, e un file
+    /// salvato e poi spostato da un'altra app non si ritrovava più).
+    #[test]
+    fn l_impronta_di_un_recente_si_aggiorna_al_suo_posto() {
+        let mut r = Recenti::default();
+        r.aggiungi(Recente { impronta: Some(crate::ImprontaFile::di(b"prima")), ..recente("/x/a", 1) });
+        r.aggiungi(recente("/x/b", 2));
+        assert!(r.segna_impronta("/x/a", crate::ImprontaFile::di(b"dopo")));
+        assert_eq!(chiavi(&r), ["/x/b", "/x/a"]);
+        assert_eq!(r.voci()[1].impronta, Some(crate::ImprontaFile::di(b"dopo")));
+        // La stessa impronta, o una chiave che non c'è: niente da scrivere.
+        assert!(!r.segna_impronta("/x/a", crate::ImprontaFile::di(b"dopo")));
+        assert!(!r.segna_impronta("/x/manca", crate::ImprontaFile::di(b"dopo")));
     }
 
     /// I nomi dei file nella cartella.
@@ -199,6 +267,7 @@ mod test {
             tipo: Tipo::Documento,
             aperto_alle: 1_729_700_000,
             pagine: None,
+            impronta: None,
         });
         r.aggiungi(Recente {
             chiave: "content://com.whatsapp.provider.media/item/123".into(),
@@ -206,6 +275,7 @@ mod test {
             tipo: Tipo::Pdf,
             aperto_alle: 1_729_700_100,
             pagine: Some(3),
+            impronta: None,
         });
         r.salva(&file).unwrap();
         assert_eq!(Recenti::carica(&file), r);

@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use egui::{
     Align2, Area, Color32, Context, CornerRadius, Frame, Galley, Id, InnerResponse, Margin, Modal, Order, Pos2, Rect, Response, Sense, Shape, Ui,
-    UiBuilder, UiKind, Vec2, pos2, vec2,
+    UiBuilder, UiKind, Vec2, WidgetInfo, WidgetType, pos2, vec2,
 };
 
 use crate::disegno::{testo_a_capo, testo_tagliato};
@@ -253,8 +253,8 @@ impl<'a> Voce<'a> {
     }
 
     /// Lo spazio per il nome e la riga sotto in una voce larga `largo`: dopo il riquadro del
-    /// tipo, prima del menu o dell'interruttore.
-    fn spazio_del_testo(&self, largo: f32) -> f32 {
+    /// tipo, prima del menu o dell'interruttore. Un nome più largo finisce coi puntini.
+    pub fn spazio_del_testo(&self, largo: f32) -> f32 {
         let destra = if self.menu.is_some() {
             8.0 + tema::PULSANTE + 14.0
         } else if self.interruttore.is_some() {
@@ -369,13 +369,13 @@ pub enum SceltaMenu {
 
 #[derive(Debug, Clone)]
 enum VoceMenu<'a> {
-    Voce { icona: &'a str, etichetta: &'a str, primo: bool },
+    Voce { icona: &'a str, etichetta: &'a str, sotto: Option<&'a str>, primo: bool },
     Separatore,
 }
 
 /// Il menu (`.menu`): un foglio bianco largo 252 dp sopra tutto, con voci fatte di icona grigia
-/// ed etichetta; la prima voce può essere in grassetto con l'icona blu. Chi lo usa tiene se è
-/// aperto e lo chiude a ogni scelta.
+/// ed etichetta; la prima voce può essere in grassetto con l'icona blu, e una voce può avere
+/// sotto una riga grigia che la spiega. Chi lo usa tiene se è aperto e lo chiude a ogni scelta.
 #[derive(Debug, Clone)]
 pub struct Menu<'a> {
     id: Id,
@@ -398,12 +398,19 @@ impl<'a> Menu<'a> {
 
     /// La voce principale, in grassetto con l'icona blu.
     pub fn primo(mut self, icona: &'a str, etichetta: &'a str) -> Self {
-        self.voci.push(VoceMenu::Voce { icona, etichetta, primo: true });
+        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: true });
         self
     }
 
     pub fn voce(mut self, icona: &'a str, etichetta: &'a str) -> Self {
-        self.voci.push(VoceMenu::Voce { icona, etichetta, primo: false });
+        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: false });
+        self
+    }
+
+    /// Una voce con sotto una riga grigia più piccola che dice che cosa fa: per le voci che si
+    /// somigliano («Salva una copia», «Salva pulito», «Copia definitiva»).
+    pub fn voce_spiegata(mut self, icona: &'a str, etichetta: &'a str, sotto: &'a str) -> Self {
+        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: Some(sotto), primo: false });
         self
     }
 
@@ -431,8 +438,8 @@ impl<'a> Menu<'a> {
                 let mut n = 0;
                 for v in self.voci {
                     match v {
-                        VoceMenu::Voce { icona, etichetta, primo } => {
-                            if voce_del_menu(ui, icona, etichetta, primo).clicked() {
+                        VoceMenu::Voce { icona, etichetta, sotto, primo } => {
+                            if voce_del_menu(ui, icona, etichetta, sotto, primo).clicked() {
                                 scelta = Some(SceltaMenu::Voce(n));
                             }
                             n += 1;
@@ -453,12 +460,18 @@ impl<'a> Menu<'a> {
 }
 
 /// Una voce del menu (`.menu .m`): l'icona a 18 dp dal bordo, l'etichetta a 58; va a capo se è
-/// lunga, e due righe stanno ancora nei 48 dp (come nel bozzetto); tre o più la allungano.
-fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, primo: bool) -> Response {
+/// lunga, e due righe stanno ancora nei 48 dp (come nel bozzetto); tre o più la allungano. Con la
+/// spiegazione (`sotto`), una riga grigia di 13 dp sotto l'etichetta, nella stessa colonna, con 8
+/// dp d'aria sopra e sotto: la voce si allunga quanto serve.
+fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, sotto: Option<&str>, primo: bool) -> Response {
     let ctx = ui.ctx().clone();
+    let colonna = tema::MENU - 58.0 - 18.0;
     let font = if primo { Carattere::Grassetto } else { Carattere::Testo }.font(&ctx, 15.5);
-    let testo = ui.painter().layout(etichetta.to_owned(), font, tema::INCHIOSTRO, tema::MENU - 58.0 - 18.0);
-    let (rect, r) = ui.allocate_exact_size(vec2(tema::MENU, (testo.size().y + 8.0).max(tema::VOCE_MENU)), Sense::click());
+    let testo = ui.painter().layout(etichetta.to_owned(), font, tema::INCHIOSTRO, colonna);
+    let spiega = sotto.map(|s| ui.painter().layout(s.to_owned(), Carattere::Testo.font(&ctx, 13.0), tema::MATITA, colonna));
+    let testi = testo.size().y + spiega.as_ref().map_or(0.0, |g| FRA_ETICHETTA_E_SPIEGA + g.size().y);
+    let aria = if spiega.is_some() { 20.0 } else { 8.0 };
+    let (rect, r) = ui.allocate_exact_size(vec2(tema::MENU, (testi + aria).max(tema::VOCE_MENU)), Sense::click());
     info(&r, true, None, etichetta);
     let p = ui.painter();
     if r.is_pointer_button_down_on() {
@@ -472,9 +485,20 @@ fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, primo: bool) -> Resp
         Carattere::Icona.font(&ctx, tema::ICONA),
         colore,
     );
-    p.galley(pos2(rect.left() + 58.0, rect.center().y - testo.size().y / 2.0), testo, Color32::PLACEHOLDER);
+    let cima = rect.center().y - testi / 2.0;
+    let sotto_l_etichetta = cima + testo.size().y + FRA_ETICHETTA_E_SPIEGA;
+    p.galley(pos2(rect.left() + 58.0, cima), testo, Color32::PLACEHOLDER);
+    if let (Some(g), Some(s)) = (spiega, sotto) {
+        let posto = Rect::from_min_size(pos2(rect.left() + 58.0, sotto_l_etichetta), g.size());
+        p.galley(posto.min, g, Color32::PLACEHOLDER);
+        // Si legge anche da sola (lettore dello schermo); i tocchi restano della voce.
+        ui.interact(posto, r.id.with("spiega"), Sense::hover()).widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, s));
+    }
     r
 }
+
+/// Fra l'etichetta di una voce del menu e la riga che la spiega.
+const FRA_ETICHETTA_E_SPIEGA: f32 = 1.0;
 
 #[cfg(test)]
 mod test {
@@ -788,6 +812,47 @@ mod test {
             h.run_steps(2);
             assert_eq!(h.state(), &vec![SceltaMenu::Voce(1)]);
         }
+    }
+
+    /// Una voce spiegata (segnalazione dell'autore del 10/11: «Salva pulito» e «Copia definitiva»
+    /// non si capiva in che cosa fossero diverse): sotto l'etichetta una riga grigia più piccola,
+    /// nella stessa colonna; la voce si allunga e si tocca anche lì; le altre restano di 48 dp.
+    #[test]
+    fn una_voce_spiegata_ha_sotto_una_riga_grigia_e_si_tocca_anche_li() {
+        const SPIEGA: &str = "Questo file, senza le versioni di prima";
+        let mut h = banco(
+            |ui, scelte: &mut Vec<SceltaMenu>| {
+                let scelta = Menu::new("spiegato")
+                    .primo(icone::SAVE, "Salva")
+                    .voce_spiegata(icone::DELETE_SWEEP, "Salva pulito", SPIEGA)
+                    .voce(icone::SHARE, "Condividi")
+                    .mostra(ui.ctx(), ANGOLO);
+                scelte.extend(scelta);
+            },
+            Vec::new(),
+        );
+        h.run_steps(2);
+        let salva = h.get_by_label("Salva").rect();
+        let pulito = h.get_by_label("Salva pulito").rect();
+        let condividi = h.get_by_label("Condividi").rect();
+        assert_eq!(salva.height(), tema::VOCE_MENU);
+        assert_eq!(condividi.height(), tema::VOCE_MENU);
+        let etichetta = rettangolo_del_testo(&h, "Salva pulito").unwrap();
+        let spiega = rettangolo_del_testo(&h, SPIEGA).unwrap();
+        assert!(pulito.height() > tema::VOCE_MENU, "{pulito:?}");
+        assert!(pulito.contains_rect(etichetta) && pulito.contains_rect(spiega), "{pulito:?} {etichetta:?} {spiega:?}");
+        assert!(spiega.top() >= etichetta.bottom() - 4.0, "la spiegazione sta sotto l'etichetta: {etichetta:?} {spiega:?}");
+        assert!((spiega.left() - etichetta.left()).abs() < 1.5, "stessa colonna: {etichetta:?} {spiega:?}");
+        assert!(spiega.width() <= tema::MENU - 58.0 - 18.0, "{spiega:?}");
+        assert!(spiega.top() - pulito.top() >= 8.0 && pulito.bottom() - spiega.bottom() >= 8.0, "aria sopra e sotto: {pulito:?} {spiega:?}");
+        assert_eq!(colore_del_testo(&h, SPIEGA), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "Salva pulito"), Some(tema::INCHIOSTRO));
+        // La spiegazione si legge anche da sola (lettore dello schermo, prove), dentro la voce.
+        assert!(pulito.contains_rect(h.get_by_label(SPIEGA).rect()));
+        // Un tocco sulla spiegazione sceglie la voce.
+        tocco(&mut h, spiega.center());
+        h.run_steps(2);
+        assert_eq!(h.state(), &vec![SceltaMenu::Voce(1)]);
     }
 
     #[test]

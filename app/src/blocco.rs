@@ -32,8 +32,8 @@ pub(crate) const BLOCCO_DOPO: Duration = Duration::from_secs(2 * 60);
 /// Per che cosa si chiede l'impronta.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PerCosa {
-    /// Posare la firma salvata (le iniziali, se vero).
-    Firma(bool),
+    /// Posare la voce di «Le mie firme» con questo indice.
+    Firma(usize),
     Sblocca,
     AccendiBlocco,
     SpegniBlocco,
@@ -44,8 +44,7 @@ impl PerCosa {
     /// Per la diagnosi.
     fn nome(self) -> &'static str {
         match self {
-            PerCosa::Firma(false) => "la firma salvata",
-            PerCosa::Firma(true) => "le iniziali salvate",
+            PerCosa::Firma(_) => "la firma salvata",
             PerCosa::Sblocca => "sbloccare l'app",
             PerCosa::AccendiBlocco => "accendere il blocco dell'app",
             PerCosa::SpegniBlocco => "spegnere il blocco dell'app",
@@ -181,7 +180,7 @@ impl TascabileApp {
     /// L'impronta è riuscita (o ne era riuscita una da poco): si fa quello che aspettava.
     fn dopo_l_impronta(&mut self, per: PerCosa) {
         match per {
-            PerCosa::Firma(iniziali) => self.posa_la_firma_salvata(iniziali),
+            PerCosa::Firma(i) => self.posa_la_firma_salvata(i),
             PerCosa::Sblocca => {
                 self.blocco.bloccata = false;
                 self.blocco.messaggio = None;

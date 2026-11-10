@@ -4,6 +4,36 @@
 
 ## English
 
+### 0.9.9 · 10 November 2026
+
+Copies you can tell apart, share at once and find again.
+
+- **The three "copies" say what they are.** In the PDF menu, «Salva una copia», «Salva pulito» and «Copia definitiva» each have a line underneath: another file, the same as this one; this file, without the removed data; a file to send, with everything fixed in the page. The «Salva pulito» dialog says that the file stays this one, and points to «Copia definitiva» for a copy to send.
+- **Share right after making a copy.** When a definitive copy is ready, a dialog stays on the screen, says where the file is and has «Condividi». The messages after «Salva pulito», «Salva una copia», an extracted PDF and a document saved as a copy (Word and PDF) have «Condividi» too, and so does the dialog of the compressed copy.
+- **Files are where the app says, under the name every file manager shows.** The folder is `Documents/Tascabile` in the phone's storage. The app called it «Documenti/Tascabile», a name that no file manager shows; messages, the Home and the guide now use the real one. When you leave the app it tells Android about the new files in that folder, so that apps which look for documents through the phone's index find them too (on the author's phone 7 files out of 22 were missing from it).
+
+### 0.9.8 · 10 November 2026
+
+Fixes from a review of the whole app.
+
+- **A saved file is still found after another app moves it.** After "Salva" and "Salva una copia" (Word and PDF) the recent takes the fingerprint of the saved bytes. It kept the one from opening, so a file saved and then moved was not found, or an older copy opened in its place.
+- **The timestamp follows a renamed file.** Renaming a file also renames its `.ots` proof, never over another file, and the message says so. A new proof is written without ever replacing a file that is already there.
+- **"Open with" for more files.** The app is now offered for `.rtf` files, for Word and Excel templates and macro-enabled documents, and for documents another app sends without saying their type (only by file extension, never for any file). If the document cannot be handed to the app, a message says so.
+- **Small fixes.** On narrow phones the five filter chips of the Home fit the screen and the track-changes switch shows its whole name («Traccia le modifiche»). Renaming never replaces a file created at the same moment. A slide the engine cannot draw no longer stops the others. A new test opens about 13,000 damaged documents, spreadsheets, slides and PDFs: none stops the app.
+
+### 0.9.7 · 7 November 2026
+
+- **"Open with" from Telegram and WhatsApp no longer freezes on a white screen.** When the other app went through Android's chooser asking for a result, Android ignored the app's single window and opened a second one inside the other app, in the same process: it never drew and the app stayed stuck until removed from recents (found in the phone's system log). "Open with" now reaches a small activity without a screen that hands the document to the app's window and closes.
+- **A signature can go on top of another one.** With a signature waiting for "Tap where to put it", a tap on an existing signature, mark or field selected it and the new one was not placed; now the tap always places it. PDF Information also shows "Firme a mano" (hand signatures), counted apart from digital signatures.
+- **My signatures.** Up to 6 signatures and 6 sets of initials saved, all listed in the signature sheet. "Le mie firme", from the signature sheet and from Settings, shows them with "Delete" for each (with confirmation) and "Delete all". A new signature is added next to the saved ones after asking; the signature saved before this version stays the first.
+
+### 0.9.6 · 7 November 2026
+
+- **Word documents open without freezing the screen.** Reading, opening and the first layout run on a background thread, also for files sent with "Open with": the screen shows «Apro il documento» and Back cancels. The Italian dictionary starts loading at the same moment, so a document is laid out once instead of twice.
+- **Recents that moved are found again.** Each recent remembers a fingerprint of its bytes (SHA-256), kept only in the app's list of recents on the phone. If another app moved or renamed the file, the app looks for the same bytes in the phone's storage, reopens it and updates the recent. When a file cannot be found, the message says whether file access is off or the file is gone.
+- **Rename.** From the ⋮ menu of recents and of files in folders, and from the editor menu: same folder, same extension. A document received with "Open with" belongs to the other app and is not renamed; a copy can be saved instead.
+- **Smoother scrolling in long documents.** Each strip of the page now draws only what it shows: in a 6000-paragraph test document a strip went from about 1000 ms to 9 ms on a PC.
+
 ### 0.9.5 · 6 November 2026
 
 - **The app's own licence in the app.** Impostazioni › Caratteri, icone e librerie now opens with «Licenza di Doc Tascabile»: the PolyForm Noncommercial License 1.0.0 with its «Required Notice», which the licence asks to pass on with the software. Fix from an independent review of the publication.
@@ -99,6 +129,36 @@
 - **Beta.** Word, PDF and slides in one app. Fixes for Italian Word styles, scans, replaced photos, links on text, text recognition and export to Word of scans; slides reviewed; a quick guide in Settings.
 
 ## Italiano
+
+### 0.9.9 · 10 novembre 2026
+
+Copie che si distinguono, si condividono subito e si ritrovano.
+
+- **Le tre «copie» dicono che cosa sono.** Nel menu del PDF «Salva una copia», «Salva pulito» e «Copia definitiva» hanno sotto una riga: un altro file, uguale a questo; questo file, senza i dati tolti; un file da mandare, con tutto fissato nella pagina. Il dialogo di «Salva pulito» dice che il file resta questo, e rimanda a «Copia definitiva» per una copia da mandare.
+- **Condividi subito dopo una copia.** Quando la copia definitiva è pronta un dialogo resta sullo schermo, dice dov'è il file e ha «Condividi». Anche gli avvisi dopo «Salva pulito», «Salva una copia», un PDF estratto e un documento salvato in una copia (Word e PDF) hanno «Condividi», e così il dialogo della copia compressa.
+- **I file sono dove dice l'app, col nome che mostra ogni gestore di file.** La cartella è `Documents/Tascabile`, nella memoria del telefono. L'app la chiamava «Documenti/Tascabile», un nome che nessun gestore di file mostra; gli avvisi, la Home e la guida ora usano quello vero. Uscendo dall'app i file nuovi di quella cartella vengono detti ad Android, così li trovano anche le app che cercano i documenti passando dall'indice del telefono (sul telefono dell'autore ne mancavano 7 su 22).
+
+### 0.9.8 · 10 novembre 2026
+
+Correzioni da una revisione di tutta l'app.
+
+- **Un file salvato si ritrova anche se un'altra app lo sposta.** Dopo «Salva» e «Salva una copia» (Word e PDF) il recente prende l'impronta dei byte salvati. Teneva quella dell'apertura: un file salvato e poi spostato non si ritrovava, o al suo posto si apriva una copia più vecchia.
+- **Il timestamp segue il file rinominato.** Rinominando un file prende il nome nuovo anche la sua prova `.ots`, mai sopra un altro file, e il messaggio lo dice. Una prova nuova si scrive senza mai sostituire un file che c'è già.
+- **«Apri con» per più file.** L'app ora si offre per i file `.rtf`, per i modelli e i documenti con macro di Word e di Excel, e per i documenti che un'altra app manda senza dirne il tipo (solo in base all'estensione, mai per un file qualunque). Se il documento non riesce ad arrivare all'app, un messaggio lo dice.
+- **Piccole correzioni.** Sui telefoni stretti i cinque chip della Home stanno nello schermo e l'interruttore delle revisioni mostra il nome intero («Traccia le modifiche»). Il rinomina non sostituisce mai un file creato nello stesso momento. Una slide che il motore non riesce a disegnare non ferma più le altre. Una prova nuova apre circa 13.000 documenti, fogli, slide e PDF rovinati: nessuno ferma l'app.
+
+### 0.9.7 · 7 novembre 2026
+
+- **L'«Apri con» da Telegram e WhatsApp non si blocca più su schermo bianco.** Quando l'altra app passava dal selettore di Android chiedendo un risultato, Android ignorava la finestra unica dell'app e ne apriva una seconda dentro l'altra app, nello stesso processo: non disegnava mai e l'app restava ferma finché non la si toglieva dalle recenti (trovato nel registro di sistema del telefono). Ora l'«Apri con» arriva a una piccola attività senza schermo che passa il documento alla finestra dell'app e si chiude.
+- **Una firma si mette anche sopra un'altra.** Con una firma in attesa di «Tocca dove mettere la firma», il tocco su una firma, un segno o un campo già presenti li sceglieva e la nuova non si posava; ora il tocco la posa sempre. Nelle Informazioni del PDF c'è anche «Firme a mano», contate a parte dalle firme digitali.
+- **Le mie firme.** Fino a 6 firme e 6 iniziali salvate, tutte nel foglio della firma. «Le mie firme», dal foglio della firma e dalle Impostazioni, le mostra con «Elimina» per ognuna (con conferma) ed «Elimina tutte». Una firma nuova si aggiunge accanto a quelle salvate dopo una domanda; quella salvata prima di questa versione resta la prima.
+
+### 0.9.6 · 7 novembre 2026
+
+- **I documenti Word si aprono senza fermare lo schermo.** Lettura, apertura e prima impaginazione vanno su un thread a parte, anche per i file mandati con «Apri con»: lo schermo mostra «Apro il documento» e Indietro annulla. Il dizionario italiano parte nello stesso momento, così il documento si impagina una volta sola invece di due.
+- **I recenti spostati si ritrovano.** Ogni recente ricorda un'impronta dei suoi byte (SHA-256), tenuta solo nell'elenco dei recenti dell'app, sul telefono. Se un'altra app ha spostato o rinominato il file, l'app cerca gli stessi byte nella memoria del telefono, lo riapre e aggiorna il recente. Quando un file non si trova, il messaggio dice se è spento l'accesso ai file o se il file non c'è più.
+- **Rinomina.** Dal menu ⋮ dei recenti e dei file nelle cartelle, e dal menu dell'Editor: stessa cartella, stessa estensione. Un documento arrivato con «Apri con» è dell'altra app e non si rinomina; se ne può salvare una copia.
+- **Scorrimento più fluido nei documenti lunghi.** Ogni fascia della pagina ora disegna solo quello che mostra: in un documento di prova da 6000 paragrafi una fascia è passata da circa 1000 ms a 9 ms su PC.
 
 ### 0.9.5 · 6 novembre 2026
 

@@ -72,7 +72,7 @@ fn testo_delle_celle(doc: &Document, t: &Table, righe: (usize, usize), colonne: 
             .enumerate()
             .filter(|(c, cella)| {
                 let inizio = t.grid_col(r, *c);
-                let fine = inizio + (cella.span() as usize).max(1) - 1;
+                let fine = inizio + cella.span().max(1) - 1;
                 inizio <= colonne.1 && fine >= colonne.0
             })
             .map(|(_, cella)| testo_della_cella(doc, cella, 0))

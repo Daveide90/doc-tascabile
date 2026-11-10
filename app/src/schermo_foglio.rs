@@ -152,7 +152,7 @@ impl TascabileApp {
                 self.foglio = Some(FoglioAperto::nuovo(cartella, a.nome.clone(), a.chiave.clone()));
                 self.vai(Schermata::Foglio);
                 match a.chiave {
-                    Some(chiave) => self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Foglio, aperto_alle: adesso(), pagine: Some(schede) }),
+                    Some(chiave) => self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Foglio, aperto_alle: adesso(), pagine: Some(schede), impronta: None }),
                     None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
                 }
             }

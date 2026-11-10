@@ -42,6 +42,8 @@ pub const CERCA: &str = "Cerca nei documenti";
 /// La ricerca dentro una cartella aperta (richiesta dell'autore, 3/11: «metti un pulsante cerca»).
 pub const CERCA_IN_CARTELLA: &str = "Cerca in questa cartella";
 pub const CERCA_PULSANTE: &str = "Cerca";
+/// «Rinomina» nei menu dei recenti e dei file (7/11).
+pub const RINOMINA: &str = "Rinomina";
 /// Le due viste di una cartella (richiesta dell'autore, 3/11: «fai decidere se voler visualizzare le cartelle
 /// con sotto cartelle oppure tutte insieme»).
 pub const VISTA_CARTELLE: &str = "Con le cartelle";
@@ -60,6 +62,12 @@ pub const SOPRA_IL_NUOVO: f32 = tema::MARGINE_LARGO + tema::NUOVO;
 /// come lo mostra la Home.
 pub fn etichetta_menu(nome: &str) -> String {
     format!("Altre azioni: {nome}")
+}
+
+/// L'etichetta del menu di un file in una cartella, per l'accessibilità e le prove: diversa da
+/// quella dei recenti, dove lo stesso file può stare anche lui.
+pub fn etichetta_menu_file(nome: &str) -> String {
+    format!("Azioni del file: {nome}")
 }
 
 /// Il nome di un documento nella Home, come nel bozzetto: senza l'estensione, che il riquadro del
@@ -95,14 +103,14 @@ pub fn provenienza(uri: &str) -> Option<&'static str> {
 fn icona_della_scorciatoia(nome: &str) -> &'static str {
     match nome {
         "Download" => icone::DOWNLOAD,
-        "Documenti/Tascabile" => icone::FOLDER_OPEN,
+        "Documents/Tascabile" => icone::FOLDER_OPEN,
         "WhatsApp" => icone::CHAT,
         "Telegram" => icone::SEND,
         _ => icone::FOLDER,
     }
 }
 
-/// Il nome di una scorciatoia nella griglia: l'ultimo pezzo («Tascabile» per «Documenti/Tascabile»),
+/// Il nome di una scorciatoia nella griglia: l'ultimo pezzo («Tascabile» per «Documents/Tascabile»),
 /// che in una scheda larga metà schermo ci sta.
 fn nome_breve(nome: &str) -> &str {
     nome.rsplit('/').next().unwrap_or(nome)
@@ -174,6 +182,22 @@ impl Filtro {
     }
 }
 
+/// Lo spazio fra i chip di una fila e il margine dentro ciascuno (i due lati insieme), perché
+/// `quanti` chip coi testi larghi in tutto `testi` stiano in `largo`. Se ci stanno, le misure di
+/// sempre; se no si stringono, mai sotto i 6 dp fra un chip e l'altro e i 10 per lato dentro:
+/// sotto, la fila scorre.
+fn misure_dei_chip(largo: f32, testi: f32, quanti: usize) -> (f32, f32) {
+    const SPAZIO_STRETTO: f32 = 6.0;
+    const MARGINE_STRETTO: f32 = 20.0;
+    let n = quanti as f32;
+    let fra = (n - 1.0).max(0.0);
+    if quanti == 0 || testi + n * Chip::MARGINE + fra * tema::SPAZIO <= largo {
+        return (tema::SPAZIO, Chip::MARGINE);
+    }
+    let margine = ((largo - testi - fra * SPAZIO_STRETTO) / n).floor().clamp(MARGINE_STRETTO, Chip::MARGINE);
+    (SPAZIO_STRETTO, margine)
+}
+
 /// Un file passa la ricerca: il tipo va col filtro e il nome ha le parole cercate.
 pub fn passa(nome: &str, tipo: Tipo, cercato: &str, filtro: Filtro) -> bool {
     filtro.lascia(tipo) && nome_contiene(nome, cercato)
@@ -198,6 +222,12 @@ pub enum Azione {
     },
     ApriRecente(Recente),
     CondividiRecente(Recente),
+    /// «Rinomina» nel menu di un recente o di un file: la chiave (un percorso, o l'URI di un
+    /// documento arrivato da un'altra app, che non si rinomina) e il nome (7/11).
+    Rinomina {
+        chiave: String,
+        nome: String,
+    },
     ConcediAccesso,
     Impostazioni,
     /// Il campo della ricerca toccato: prende la tastiera.
@@ -255,8 +285,13 @@ pub struct Home {
     file_vista: PathBuf,
     /// «Vedi tutti» toccato: tutti i recenti invece dei primi quattro.
     tutti_i_recenti: bool,
+    /// L'impronta dei byte appena letti di un documento che si sta aprendo (`apertura`): va nel
+    /// suo recente quando il documento si apre (`ricorda`).
+    impronte_lette: std::collections::HashMap<String, tascabile_files::ImprontaFile>,
     /// Il menu aperto di un recente: la sua chiave e dove sta l'angolo in alto a destra.
     menu: Option<(String, egui::Pos2)>,
+    /// Il menu di un file di una cartella: il percorso, il nome e l'angolo (7/11).
+    menu_file: Option<(PathBuf, String, egui::Pos2)>,
     foglio_nuovo: FoglioDalFondo,
 }
 
@@ -280,7 +315,9 @@ impl Home {
             cerca_in_cartella: false,
             file_vista: cartella_app.join(FILE_VISTA),
             tutti_i_recenti: false,
+            impronte_lette: std::collections::HashMap::new(),
             menu: None,
+            menu_file: None,
             foglio_nuovo: FoglioDalFondo::new(egui::Id::new("foglio_nuovo")),
         };
         home.aggiorna();
@@ -337,9 +374,32 @@ impl Home {
     }
 
     /// Mette `r` in cima ai recenti e li scrive su disco.
-    pub fn ricorda(&mut self, r: Recente) {
+    pub fn ricorda(&mut self, mut r: Recente) {
+        if r.impronta.is_none() {
+            r.impronta = self.impronte_lette.remove(&r.chiave);
+        }
         self.recenti.aggiungi(r);
         self.salva_recenti();
+    }
+
+    /// L'impronta del documento con questa chiave, appena letto: il suo recente la prende quando
+    /// il documento si apre.
+    pub(crate) fn segna_impronta(&mut self, chiave: &str, impronta: tascabile_files::ImprontaFile) {
+        // Poche voci: solo le aperture in corso.
+        if self.impronte_lette.len() > 8 {
+            self.impronte_lette.clear();
+        }
+        self.impronte_lette.insert(chiave.to_string(), impronta);
+    }
+
+    /// Dopo un salvataggio: il recente con questa chiave prende l'impronta dei byte salvati
+    /// (revisione del 10/11). Con quella dell'apertura, un file salvato e poi spostato da un'altra
+    /// app non si ritrovava più, o al suo posto si apriva una copia più vecchia coi byte di prima.
+    pub(crate) fn impronta_salvata(&mut self, chiave: &str, impronta: tascabile_files::ImprontaFile) {
+        if self.recenti.segna_impronta(chiave, impronta) {
+            diagnosi("recenti: impronta aggiornata dopo il salvataggio");
+            self.salva_recenti();
+        }
     }
 
     /// Toglie dai recenti la voce con questa chiave e li scrive su disco.
@@ -356,7 +416,7 @@ impl Home {
     }
 
     /// Dove sta un recente, per la riga sotto il nome: la cartella, oppure l'app da cui è arrivato.
-    /// Anche per la barra alta dell'Editor («Salvato · Documenti»).
+    /// Anche per la barra alta dell'Editor («Salvato · Documents»).
     pub fn dove(&self, chiave: &str) -> String {
         self.luogo(chiave).1
     }
@@ -385,7 +445,7 @@ impl Home {
     }
 
     /// Il nome di una cartella come lo mostra la Home: dalla scorciatoia più vicina
-    /// («Documenti/Lavoro»), oppure dalla radice («Lavoro»; la radice stessa è «Memoria del
+    /// («Documents/Lavoro»), oppure dalla radice («Lavoro»; la radice stessa è «Memoria del
     /// telefono»); fuori dalla radice, il percorso com'è.
     fn nome_cartella(&self, cartella: &Path) -> String {
         let unisci = |testa: &str, resto: &Path| {
@@ -495,7 +555,7 @@ impl Home {
     /// Indietro di Android sopra tutto: chiude il menu di un recente o il foglio di «Nuovo».
     /// Vero se ha chiuso qualcosa.
     pub fn chiudi_sopra(&mut self) -> bool {
-        self.menu.take().is_some() || self.foglio_nuovo.indietro()
+        self.menu.take().is_some() || self.menu_file.take().is_some() || self.foglio_nuovo.indietro()
     }
 
     /// Indietro di Android, dopo la tastiera: la cartella di prima (o la Home), poi via il filtro.
@@ -535,7 +595,25 @@ impl Home {
         if let Some(a) = self.mostra_menu(ui.ctx()) {
             azione = Some(a);
         }
+        if let Some(a) = self.mostra_menu_file(ui.ctx()) {
+            azione = Some(a);
+        }
         azione
+    }
+
+    /// Un file rinominato dall'app (7/11): il suo recente passa al nome nuovo, allo stesso posto,
+    /// e la cartella aperta si rilegge.
+    pub fn rinominato(&mut self, vecchio: &str, nuovo: &Path) {
+        let nome = nuovo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        if let Some(chiave) = nuovo.to_str() {
+            self.recenti.rinomina(vecchio, chiave, &nome);
+            self.salva_recenti();
+        }
+        if let Some(c) = &self.cartella {
+            let percorso = c.percorso.clone();
+            self.leggi(percorso);
+        }
+        self.aggiorna();
     }
 
     fn mostra_principale(&mut self, ui: &mut Ui, c: &Contesto, azione: &mut Option<Azione>) {
@@ -563,13 +641,17 @@ impl Home {
             con_margini(ui, tema::MARGINE_LARGO, |ui| {
                 // La fila alta quanto i chip, non quanto un bersaglio da 48 dp.
                 ui.spacing_mut().interact_size.y = tema::CHIP;
-                // Cinque chip non stanno in 372 dp: la fila scorre col dito, invece di allargare
-                // tutta la Home oltre lo schermo (0.9.0, segnalazione dell'autore del 3/11).
+                // Cinque chip larghi come sempre non stanno in 372 dp, e l'ultimo usciva a metà dal
+                // bordo: si stringono quel poco che serve (revisione del 10/11). Su uno schermo
+                // più stretto ancora la fila scorre col dito, invece di allargare tutta la Home
+                // oltre lo schermo (0.9.0, segnalazione dell'autore del 3/11).
+                let testi: f32 = Filtro::CHIP.iter().map(|(_, nome)| Chip::new(nome).larghezza_del_testo(ui)).sum();
+                let (spazio, margine) = misure_dei_chip(ui.available_width(), testi, Filtro::CHIP.len());
                 ScrollArea::horizontal().id_salt("chip_della_home").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = tema::SPAZIO;
+                        ui.spacing_mut().item_spacing.x = spazio;
                         for (f, nome) in Filtro::CHIP {
-                            if ui.add(Chip::new(nome).acceso(self.filtro == f)).clicked() {
+                            if ui.add(Chip::new(nome).margine(margine).acceso(self.filtro == f)).clicked() {
                                 self.filtro = f;
                             }
                         }
@@ -703,6 +785,7 @@ impl Home {
         }
         if !file.is_empty() {
             titoletto(ui, "Nelle cartelle", None);
+            let mut menu_file = None;
             con_margini(ui, tema::MARGINE, |ui| {
                 Scheda::new().show(ui, |ui| {
                     for (k, (v, i)) in file.iter().enumerate() {
@@ -710,16 +793,25 @@ impl Home {
                         let data = v.modificato.map(|t| quando::quando(&Locale::da_utc(secondi(t)), oggi)).unwrap_or_default();
                         let dove = if data.is_empty() { s.nome.clone() } else { format!("{} · {data}", s.nome) };
                         let spenta = !si_apre(v.tipo);
-                        let voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), nome_da_mostrare(&v.nome, v.tipo))
+                        let etichetta = etichetta_menu_file(&v.nome);
+                        let mut voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), nome_da_mostrare(&v.nome, v.tipo))
                             .dove(icona_della_scorciatoia(&s.nome), &dove)
                             .spenta(spenta)
                             .ultima(k + 1 == file.len());
-                        if mostra_se_visibile(ui, voce) {
-                            *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() });
+                        if !spenta {
+                            voce = voce.menu(&etichetta);
+                        }
+                        match voce_file_se_visibile(ui, voce) {
+                            Some(ToccoRecente::Apri) => *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() }),
+                            Some(ToccoRecente::Menu(r)) => menu_file = Some((v.percorso.clone(), v.nome.clone(), r.right_top())),
+                            None => {}
                         }
                     }
                 });
             });
+            if menu_file.is_some() {
+                self.menu_file = menu_file;
+            }
             if altri > 0 {
                 ui.add_space(8.0);
                 let testo = format!("E altri {altri}: scrivi qualche lettera in più per trovarli.");
@@ -777,6 +869,7 @@ impl Home {
         let sopra = cartella.percorso.parent().map(|p| self.nome_cartella(p)).unwrap_or_default();
         let si_risale = self.si_risale();
         let (mut indietro, mut su, mut vai, mut vista, mut cerca) = (false, false, None, None, false);
+        let mut menu_file = None;
         ui.spacing_mut().item_spacing = Vec2::ZERO;
         let barra = BarraAlta::new(&titolo).indietro("Indietro").sottotitolo(&sotto).azione(PulsanteIcona::new(icone::SEARCH, CERCA_PULSANTE)).mostra(ui);
         indietro |= barra.indietro;
@@ -825,9 +918,12 @@ impl Home {
                         }
                         for (i, v) in trovati.iter().enumerate() {
                             let dove = dove_nella_cartella(&cartella.percorso, v, &oggi);
-                            let voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), &v.nome).dove(icone::SCHEDULE, &dove).ultima(i + 1 == trovati.len());
-                            if mostra_se_visibile(ui, voce) {
-                                *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() });
+                            let etichetta = etichetta_menu_file(&v.nome);
+                            let voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), &v.nome).dove(icone::SCHEDULE, &dove).menu(&etichetta).ultima(i + 1 == trovati.len());
+                            match voce_file_se_visibile(ui, voce) {
+                                Some(ToccoRecente::Apri) => *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() }),
+                                Some(ToccoRecente::Menu(r)) => menu_file = Some((v.percorso.clone(), v.nome.clone(), r.right_top())),
+                                None => {}
                             }
                         }
                         return;
@@ -856,9 +952,12 @@ impl Home {
                                     continue;
                                 }
                                 let dove = dove_del_file(v, &oggi);
-                                let voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), &v.nome).dove(icone::SCHEDULE, &dove).ultima(ultima);
-                                if mostra_se_visibile(ui, voce) {
-                                    *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() });
+                                let etichetta = etichetta_menu_file(&v.nome);
+                                let voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), &v.nome).dove(icone::SCHEDULE, &dove).menu(&etichetta).ultima(ultima);
+                                match voce_file_se_visibile(ui, voce) {
+                                    Some(ToccoRecente::Apri) => *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() }),
+                                    Some(ToccoRecente::Menu(r)) => menu_file = Some((v.percorso.clone(), v.nome.clone(), r.right_top())),
+                                    None => {}
                                 }
                             }
                         }
@@ -867,6 +966,9 @@ impl Home {
             });
             ui.add_space(24.0);
         });
+        if menu_file.is_some() {
+            self.menu_file = menu_file;
+        }
         if let Some(t) = vista {
             self.scegli_vista(t);
         }
@@ -921,12 +1023,28 @@ impl Home {
         Some(azione)
     }
 
-    /// Il menu di un recente, se è aperto: Apri, Condividi, Togli dai recenti.
+    /// Il menu di un file di una cartella, se è aperto: Apri, Rinomina.
+    fn mostra_menu_file(&mut self, ctx: &egui::Context) -> Option<Azione> {
+        let (percorso, nome, angolo) = self.menu_file.clone()?;
+        let scelta = Menu::new(egui::Id::new("menu_file"))
+            .primo(icone::FILE_OPEN, "Apri")
+            .voce(icone::DRIVE_FILE_RENAME_OUTLINE, RINOMINA)
+            .mostra(ctx, angolo)?;
+        self.menu_file = None;
+        match scelta {
+            SceltaMenu::Voce(0) => Some(Azione::ApriFile { percorso, nome }),
+            SceltaMenu::Voce(1) => Some(Azione::Rinomina { chiave: percorso.to_string_lossy().into_owned(), nome }),
+            _ => None,
+        }
+    }
+
+    /// Il menu di un recente, se è aperto: Apri, Condividi, Rinomina, Togli dai recenti.
     fn mostra_menu(&mut self, ctx: &egui::Context) -> Option<Azione> {
         let (chiave, angolo) = self.menu.clone()?;
         let scelta = Menu::new(egui::Id::new("menu_recente"))
             .primo(icone::FILE_OPEN, "Apri")
             .voce(icone::SHARE, "Condividi")
+            .voce(icone::DRIVE_FILE_RENAME_OUTLINE, RINOMINA)
             .voce(icone::CLOSE, "Togli dai recenti")
             .mostra(ctx, angolo)?;
         self.menu = None;
@@ -934,7 +1052,8 @@ impl Home {
         match scelta {
             SceltaMenu::Voce(0) => Some(Azione::ApriRecente(r)),
             SceltaMenu::Voce(1) => Some(Azione::CondividiRecente(r)),
-            SceltaMenu::Voce(2) => {
+            SceltaMenu::Voce(2) => Some(Azione::Rinomina { chiave: r.chiave, nome: r.nome }),
+            SceltaMenu::Voce(3) => {
                 diagnosi("recenti: tolto dal menu");
                 self.dimentica(&r.chiave);
                 None
@@ -948,6 +1067,21 @@ impl Home {
 fn con_margini<R>(ui: &mut Ui, margine: f32, contenuto: impl FnOnce(&mut Ui) -> R) -> R {
     let m = margine as i8;
     Frame::NONE.inner_margin(Margin { left: m, right: m, top: 0, bottom: 0 }).show(ui, contenuto).inner
+}
+
+/// Una riga di un file col menu ⋮ (Apri, Rinomina), se si vede; altrimenti solo il suo posto:
+/// che cosa si è toccato.
+fn voce_file_se_visibile(ui: &mut Ui, voce: tascabile_touch::Voce<'_>) -> Option<ToccoRecente> {
+    let posto = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), tema::VOCE));
+    if !ui.is_rect_visible(posto) {
+        ui.allocate_space(posto.size());
+        return None;
+    }
+    let risposta = voce.mostra(ui);
+    if risposta.menu_toccato() {
+        return risposta.menu.map(|m| ToccoRecente::Menu(m.rect));
+    }
+    risposta.aperta().then_some(ToccoRecente::Apri)
 }
 
 /// Una voce di elenco, se si vede; altrimenti solo il suo posto (una cartella con mille file non
@@ -1088,8 +1222,27 @@ mod test {
     use crate::prova::cartella_di_prova;
     use tascabile_files::Tipo;
 
+    #[test]
+    fn i_chip_si_stringono_solo_quanto_serve() {
+        // Cinque chip coi testi larghi 193 dp in tutto, come quelli della Home.
+        // 412 dp (376 fra i margini): ci stanno, misure di sempre.
+        assert_eq!(misure_dei_chip(376.0, 193.0, 5), (tema::SPAZIO, Chip::MARGINE));
+        // 372 dp (336): si stringono e stanno dentro.
+        let (spazio, margine) = misure_dei_chip(336.0, 193.0, 5);
+        assert_eq!((spazio, margine), (6.0, 23.0));
+        assert!(193.0 + 5.0 * margine + 4.0 * spazio <= 336.0);
+        // 360 dp (324): ancora dentro.
+        let (spazio, margine) = misure_dei_chip(324.0, 193.0, 5);
+        assert!(margine >= 20.0 && 193.0 + 5.0 * margine + 4.0 * spazio <= 324.0);
+        // Più stretto ancora: il minimo, e la fila scorre.
+        assert_eq!(misure_dei_chip(280.0, 193.0, 5), (6.0, 20.0));
+        // Giusto giusto: non si stringe.
+        assert_eq!(misure_dei_chip(193.0 + 5.0 * 28.0 + 4.0 * 8.0, 193.0, 5), (tema::SPAZIO, Chip::MARGINE));
+        assert_eq!(misure_dei_chip(100.0, 0.0, 0), (tema::SPAZIO, Chip::MARGINE));
+    }
+
     fn recente(chiave: &str, nome: &str) -> Recente {
-        Recente { chiave: chiave.into(), nome: nome.into(), tipo: Tipo::Documento, aperto_alle: 1_792_738_800, pagine: None }
+        Recente { chiave: chiave.into(), nome: nome.into(), tipo: Tipo::Documento, aperto_alle: 1_792_738_800, pagine: None, impronta: None }
     }
 
     #[test]
@@ -1156,8 +1309,8 @@ mod test {
         assert_eq!(home.dove("content://org.telegram.messenger.provider/media/x.docx"), "da Telegram");
         assert_eq!(home.dove("content://com.google.android.gm.sapi/x/message_attachment/1"), "da un'altra app");
         assert_eq!(dove(&radice.join("Download/Verbale.docx")), "Download");
-        assert_eq!(dove(&radice.join("Documents/Tascabile/Verbale.docx")), "Documenti/Tascabile");
-        assert_eq!(dove(&radice.join("Documents/Lavoro/Ottobre/Verbale.docx")), "Documenti/Lavoro/Ottobre");
+        assert_eq!(dove(&radice.join("Documents/Tascabile/Verbale.docx")), "Documents/Tascabile");
+        assert_eq!(dove(&radice.join("Documents/Lavoro/Ottobre/Verbale.docx")), "Documents/Lavoro/Ottobre");
         assert_eq!(dove(&radice.join("Lavoro/Verbale.docx")), "Lavoro");
         assert_eq!(dove(&radice.join("Verbale.docx")), "Memoria del telefono");
         // Fuori dalla radice (sul PC, un file passato a mano): la cartella com'è.
@@ -1178,10 +1331,10 @@ mod test {
         assert_eq!(icona(&percorso("Documents/Tascabile/Verbale.docx")), icone::FOLDER_OPEN);
         assert_eq!(icona(&percorso("Verbale.docx")), icone::PHONE_ANDROID);
         // Ogni scorciatoia ha la sua icona, e il nome breve per la griglia.
-        for (nome, attesa) in [("Download", icone::DOWNLOAD), ("Documenti", icone::FOLDER), ("WhatsApp", icone::CHAT), ("Telegram", icone::SEND)] {
+        for (nome, attesa) in [("Download", icone::DOWNLOAD), ("Documents", icone::FOLDER), ("WhatsApp", icone::CHAT), ("Telegram", icone::SEND)] {
             assert_eq!(icona_della_scorciatoia(nome), attesa, "{nome}");
         }
-        assert_eq!(nome_breve("Documenti/Tascabile"), "Tascabile");
+        assert_eq!(nome_breve("Documents/Tascabile"), "Tascabile");
         assert_eq!(nome_breve("Download"), "Download");
     }
 
@@ -1205,7 +1358,7 @@ mod test {
         home.aggiorna();
         assert!(home.accesso());
         let nomi: Vec<&str> = home.scorciatoie.iter().map(|s| s.nome.as_str()).collect();
-        assert_eq!(nomi, ["Download", "Documenti", "Documenti/Tascabile"]);
+        assert_eq!(nomi, ["Download", "Documents", "Documents/Tascabile"]);
     }
 
     #[test]
@@ -1217,7 +1370,7 @@ mod test {
         std::fs::create_dir_all(radice.join("Download/Lavoro")).unwrap();
         std::fs::write(radice.join("Download/Lavoro/d.docx"), b"x").unwrap();
         let home = Home::nuova(radice, &app, true);
-        // Download: due file (la sottocartella e il nascosto no); Documenti: niente al primo livello.
+        // Download: due file (la sottocartella e il nascosto no); Documents: niente al primo livello.
         assert_eq!(home.numeri(), [Some(2), Some(0), Some(1)]);
         assert_eq!(numero_di_file(Some(2)), "2 file");
         assert_eq!(numero_di_file(Some(1)), "1 file");

@@ -6342,7 +6342,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "android_logger",
  "eframe",
@@ -6364,21 +6364,23 @@ dependencies = [
  "tascabile-word",
  "winit",
  "wordcraft-engine",
+ "zip",
 ]
 
 [[package]]
 name = "tascabile-files"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "unicode-segmentation",
  "zip",
 ]
 
 [[package]]
 name = "tascabile-foglio"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "deckcraft-fonts",
  "gridcraft-core",
@@ -6391,7 +6393,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile-ocr"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "image",
  "ocrs",
@@ -6403,7 +6405,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile-pdf"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "bytemuck",
  "deckcraft-fonts",
@@ -6423,7 +6425,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile-platform"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "egui",
  "jni",
@@ -6434,7 +6436,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile-prova-data"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "ripemd",
  "sha1 0.11.0",
@@ -6443,7 +6445,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile-slide"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "deckcraft-anim",
  "deckcraft-fonts",
@@ -6462,7 +6464,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile-touch"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "egui",
  "egui_kittest",
@@ -6470,7 +6472,7 @@ dependencies = [
 
 [[package]]
 name = "tascabile-word"
-version = "0.9.5"
+version = "0.9.9"
 dependencies = [
  "egui",
  "flate2",

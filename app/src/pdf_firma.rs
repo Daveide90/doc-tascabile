@@ -33,6 +33,8 @@ pub(crate) const FIRMA: &str = "Firma";
 pub(crate) const METTI_LA_FIRMA: &str = "Metti la firma";
 pub(crate) const METTI_LE_INIZIALI: &str = "Metti le iniziali";
 pub(crate) const FIRMA_COL_DITO: &str = "Firma col dito";
+/// Il foglio delle firme salvate, e la riga che lo apre.
+pub(crate) const LE_MIE_FIRME: &str = "Le mie firme";
 pub(crate) const INIZIALI_COL_DITO: &str = "Iniziali col dito";
 pub(crate) const FOTO_DELLA_FIRMA: &str = "Foto della firma su carta";
 pub(crate) const FIRMA_DA_IMMAGINE: &str = "Firma da un'immagine";
@@ -48,14 +50,15 @@ pub(crate) const TOCCA_DOVE: &str = "Tocca dove mettere la firma";
 pub(crate) const FIRMA_DALLA_FOTO: &str = "La firma dalla foto";
 /// La domanda prima di sostituire la firma salvata, e le sue risposte (revisione del 31/10, punto 3).
 pub(crate) const SALVARE_LA_NUOVA: &str = "Salvare la firma nuova?";
-pub(crate) const TIENI_QUELLA_DI_PRIMA: &str = "Tieni quella di prima";
-pub(crate) const SALVA_LA_NUOVA: &str = "Salva la nuova";
-const SPIEGA_SALVARE: &str = "In Tascabile c'è già una firma salvata. La nuova è sul documento: vuoi che prenda anche il posto di \
-     quella salvata, per le volte dopo?";
-const SPIEGA_SALVARE_INIZIALI: &str = "In Tascabile ci sono già delle iniziali salvate. Le nuove sono sul documento: vuoi che \
-     prendano anche il posto di quelle salvate, per le volte dopo?";
-/// Detto la prima volta che una firma si salva.
-pub(crate) const FIRMA_SALVATA: &str = "La firma resta salvata in Tascabile per la prossima volta: la togli nelle Impostazioni.";
+/// La firma nuova resta solo sul documento.
+pub(crate) const SOLO_QUI: &str = "Solo qui";
+/// La firma nuova va anche fra «Le mie firme».
+pub(crate) const SALVALA: &str = "Salvala";
+const SPIEGA_SALVARE: &str = "La firma nuova è sul documento. Vuoi tenerla anche fra «Le mie firme», accanto a quelle che ci sono già?";
+const SPIEGA_SALVARE_INIZIALI: &str = "Le iniziali nuove sono sul documento. Vuoi tenerle anche fra «Le mie firme», accanto a quelle che ci sono già?";
+pub(crate) const FIRMA_SALVATA: &str = "La firma resta salvata in Tascabile per la prossima volta: la trovi, e la togli, in «Le mie firme».";
+/// Già [`MASSIMO_SALVATE`] firme (o iniziali): la nuova va sul documento e basta.
+const FIRME_AL_COMPLETO: &str = "Hai già 6 firme salvate di questo tipo: la nuova è sul documento ma non fra «Le mie firme». Per tenerla, eliminane prima una.";
 const SI_PULISCE: &str = "Tolgo carta, ombre e tavolo…";
 const FIRMA_QUI: &str = "Firma qui col dito";
 
@@ -70,18 +73,42 @@ const FILA_DEL_TRATTO: f32 = 52.0;
 /// Il fondo del riquadro «Tocca per firmare»: bianco con un velo di rosso, come `.firma-box`.
 const FONDO_FIRMA: Color32 = Color32::from_rgb(0xFC, 0xF3, 0xF1);
 
-/// Le firme salvate nella memoria privata dell'app: una firma e le iniziali, lette la prima volta
-/// che servono.
+/// Quante firme, e quante iniziali, si salvano al più («Le mie firme», 7/11/2026).
+pub(crate) const MASSIMO_SALVATE: usize = 6;
+
+/// Una firma (o delle iniziali) salvata: il numero del suo file (1 è `firma.txt` o
+/// `iniziali.txt`, come prima della 0.9.7; poi `firma-2.txt`...) e l'immagine da mostrare, fatta
+/// quando serve.
+pub(crate) struct Salvata {
+    pub(crate) iniziali: bool,
+    numero: usize,
+    pub(crate) firma: Firma,
+    texture: Option<egui::TextureHandle>,
+}
+
+impl Salvata {
+    /// Il nome per lo schermo: «Firma», «Firma 2», «Iniziali 3».
+    pub(crate) fn nome(&self, posto: usize) -> String {
+        let genere = if self.iniziali { "Iniziali" } else { "Firma" };
+        if posto == 1 { genere.to_string() } else { format!("{genere} {posto}") }
+    }
+}
+
+/// Le firme e le iniziali salvate nella memoria privata dell'app (fino a [`MASSIMO_SALVATE`] per
+/// genere), lette la prima volta che servono. Prima le firme, poi le iniziali, ognuna in ordine.
 #[derive(Default)]
 pub(crate) struct FirmeSalvate {
     lette: bool,
-    firma: Option<Firma>,
-    iniziali: Option<Firma>,
-    /// Le immagini da mostrare delle due, fatte quando servono.
-    texture: [Option<egui::TextureHandle>; 2],
+    voci: Vec<Salvata>,
 }
 
-/// Il nome del file di una firma salvata, senza estensione.
+/// Il nome del file di una firma salvata, senza estensione: il primo è quello di sempre.
+fn nome_del_file(iniziali: bool, numero: usize) -> String {
+    let base = nome(iniziali);
+    if numero == 1 { base.to_string() } else { format!("{base}-{numero}") }
+}
+
+/// «firma» o «iniziali», per la diagnosi e per i file.
 fn nome(iniziali: bool) -> &'static str {
     if iniziali { "iniziali" } else { "firma" }
 }
@@ -89,44 +116,91 @@ fn nome(iniziali: bool) -> &'static str {
 impl FirmeSalvate {
     /// Le firme della cartella `cartella` (`firme/` dei dati dell'app).
     pub(crate) fn leggi(cartella: &Path) -> FirmeSalvate {
-        let leggi = |iniziali: bool| {
+        let leggi = |stem: &str| {
             ["txt", "png"].iter().find_map(|est| {
-                let p = cartella.join(format!("{}.{est}", nome(iniziali)));
+                let p = cartella.join(format!("{stem}.{est}"));
                 let corto = std::fs::metadata(&p).is_ok_and(|m| m.len() <= 8 << 20);
                 corto.then(|| std::fs::read(&p).ok()).flatten().and_then(|b| Firma::da_byte(&b))
             })
         };
-        let s = FirmeSalvate { lette: true, firma: leggi(false), iniziali: leggi(true), texture: [None, None] };
-        diagnosi(format!("firma: salvate lette, firma {}, iniziali {}", s.firma.is_some(), s.iniziali.is_some()));
+        let mut voci = Vec::new();
+        for iniziali in [false, true] {
+            for numero in 1..=MASSIMO_SALVATE {
+                if let Some(firma) = leggi(&nome_del_file(iniziali, numero)) {
+                    voci.push(Salvata { iniziali, numero, firma, texture: None });
+                }
+            }
+        }
+        let s = FirmeSalvate { lette: true, voci };
+        diagnosi(format!("firma: salvate lette, {} firme, {} iniziali", s.quante(false), s.quante(true)));
         s
     }
 
+    /// La prima firma (o le prime iniziali) salvata.
     pub(crate) fn di(&self, iniziali: bool) -> Option<&Firma> {
-        if iniziali { self.iniziali.as_ref() } else { self.firma.as_ref() }
+        self.voci.iter().find(|v| v.iniziali == iniziali).map(|v| &v.firma)
+    }
+
+    pub(crate) fn voci(&self) -> &[Salvata] {
+        &self.voci
+    }
+
+    /// Quante firme (o iniziali) salvate.
+    pub(crate) fn quante(&self, iniziali: bool) -> usize {
+        self.voci.iter().filter(|v| v.iniziali == iniziali).count()
     }
 
     pub(crate) fn qualcuna(&self) -> bool {
-        self.firma.is_some() || self.iniziali.is_some()
+        !self.voci.is_empty()
     }
 
-    /// Salva `firma` come firma o come iniziali, al posto di quella di prima.
+    /// Il posto della voce `i` fra quelle del suo genere, da 1: «Firma 2» è la seconda firma.
+    pub(crate) fn posto(&self, i: usize) -> usize {
+        let Some(v) = self.voci.get(i) else { return 0 };
+        self.voci[..=i].iter().filter(|w| w.iniziali == v.iniziali).count()
+    }
+
+    /// Salva `firma` come firma o come iniziali in più, nel primo file libero; un errore se ce ne
+    /// sono già [`MASSIMO_SALVATE`].
     pub(crate) fn salva(&mut self, cartella: &Path, iniziali: bool, firma: Firma) -> std::io::Result<()> {
+        let Some(numero) = (1..=MASSIMO_SALVATE).find(|n| !self.voci.iter().any(|v| v.iniziali == iniziali && v.numero == *n)) else {
+            return Err(std::io::Error::other("firme salvate al completo"));
+        };
         std::fs::create_dir_all(cartella)?;
-        let p = cartella.join(format!("{}.{}", nome(iniziali), firma.estensione()));
-        tascabile_word::salva::scrivi_atomico(&p, &firma.in_byte())?;
+        let stem = nome_del_file(iniziali, numero);
+        tascabile_word::salva::scrivi_atomico(&cartella.join(format!("{stem}.{}", firma.estensione())), &firma.in_byte())?;
         let altra = if firma.estensione() == "txt" { "png" } else { "txt" };
-        let _ = std::fs::remove_file(cartella.join(format!("{}.{altra}", nome(iniziali))));
-        self.texture[usize::from(iniziali)] = None;
-        if iniziali {
-            self.iniziali = Some(firma);
-        } else {
-            self.firma = Some(firma);
-        }
+        let _ = std::fs::remove_file(cartella.join(format!("{stem}.{altra}")));
+        self.voci.push(Salvata { iniziali, numero, firma, texture: None });
+        self.voci.sort_by_key(|v| (v.iniziali, v.numero));
         Ok(())
     }
 
-    /// Toglie la firma e le iniziali salvate: tutta la cartella, anche un temporaneo rimasto da un
-    /// salvataggio a metà (revisione del 31/10, punto 12).
+    /// Toglie la voce `i`: il suo file, in tutte e due le estensioni.
+    pub(crate) fn elimina(&mut self, cartella: &Path, i: usize) -> std::io::Result<()> {
+        let Some(v) = self.voci.get(i) else { return Ok(()) };
+        let stem = nome_del_file(v.iniziali, v.numero);
+        for est in ["txt", "png"] {
+            match std::fs::remove_file(cartella.join(format!("{stem}.{est}"))) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+                _ => {}
+            }
+        }
+        self.voci.remove(i);
+        Ok(())
+    }
+
+    /// L'immagine da mostrare della voce `i`, fatta la prima volta (solo per le firme da foto).
+    pub(crate) fn texture(&mut self, ctx: &egui::Context, i: usize) -> Option<egui::TextureHandle> {
+        let v = self.voci.get_mut(i)?;
+        if v.texture.is_none() {
+            v.texture = texture_di(ctx, &v.firma, &format!("firma_salvata_{}_{}", nome(v.iniziali), v.numero));
+        }
+        v.texture.clone()
+    }
+
+    /// Toglie tutte le firme e le iniziali salvate: tutta la cartella, anche un temporaneo rimasto
+    /// da un salvataggio a metà (revisione del 31/10, punto 12).
     pub(crate) fn cancella(&mut self, cartella: &Path) {
         let _ = std::fs::remove_dir_all(cartella);
         *self = FirmeSalvate { lette: true, ..Default::default() };
@@ -182,7 +256,7 @@ pub(crate) struct FirmaPdf {
 
 /// La firma disegnata nel riquadro `r`, centrata e con le sue proporzioni: i contorni pieni dei
 /// tratti, col loro tratto e colore (y verso l'alto), o l'immagine `texture`.
-fn disegna_firma(painter: &egui::Painter, r: Rect, firma: &Firma, texture: Option<&egui::TextureHandle>) {
+pub(crate) fn disegna_firma(painter: &egui::Painter, r: Rect, firma: &Firma, texture: Option<&egui::TextureHandle>) {
     match firma {
         Firma::Tratti(d) => {
             let Some([x0, y0, x1, y1]) = d.inchiostro() else { return };
@@ -307,11 +381,20 @@ pub(crate) fn riga(
     r
 }
 
+/// La riga per mettere la firma salvata al `posto` del suo genere: «Metti la firma», «Metti la
+/// firma 2», «Metti le iniziali 3».
+pub(crate) fn metti_detto(iniziali: bool, posto: usize) -> String {
+    let base = if iniziali { METTI_LE_INIZIALI } else { METTI_LA_FIRMA };
+    if posto <= 1 { base.to_string() } else { format!("{base} {posto}") }
+}
+
 /// Quello che si è scelto nel foglio della firma.
 enum Scelta {
-    Metti(bool),
+    /// La voce di «Le mie firme» da mettere.
+    Metti(usize),
     Dito(bool),
     Foto(FonteFoto),
+    LeMieFirme,
 }
 
 /// Il riquadro «Tocca per firmare» del bozzetto 7 (`.firma-box`) sopra un campo firma: bordo
@@ -343,12 +426,28 @@ impl TascabileApp {
         &mut self.firme
     }
 
-    /// «Cancella firma salvata» delle Impostazioni.
+    /// «Elimina tutte» di «Le mie firme».
     pub(crate) fn cancella_firma_salvata(&mut self) {
         let cartella = self.cartella_firme();
         self.firme.cancella(&cartella);
         diagnosi("firma: firma e iniziali salvate cancellate");
-        self.avviso_breve.avvisa("Firma salvata cancellata");
+        self.avviso_breve.avvisa("Firme salvate eliminate");
+    }
+
+    /// Toglie la voce `i` di «Le mie firme».
+    pub(crate) fn elimina_firma_salvata(&mut self, i: usize) {
+        let cartella = self.cartella_firme();
+        match self.firme().elimina(&cartella, i) {
+            Ok(()) => {
+                let restano = self.firme.voci().len();
+                diagnosi(format!("firma: una salvata eliminata, ne restano {restano}"));
+                self.avviso_breve.avvisa("Firma eliminata");
+            }
+            Err(e) => {
+                diagnosi(format!("firma: salvata non eliminata ({:?})", e.kind()));
+                self.avviso_breve.avvisa("Non riesco a eliminare la firma: riprova.");
+            }
+        }
     }
 
     /// Apre il foglio della firma per mettere la firma `dove`.
@@ -367,23 +466,23 @@ impl TascabileApp {
         self.fogli_pdf.firma.apri();
     }
 
-    /// La firma (o le iniziali) salvata va dove si è scelto; dal foglio Strumenti si tocca dopo.
-    fn metti_firma_pdf(&mut self, iniziali: bool) {
-        if self.firme().di(iniziali).is_none() {
+    /// La voce `i` di «Le mie firme» va dove si è scelto; dal foglio Strumenti si tocca dopo.
+    fn metti_firma_pdf(&mut self, i: usize) {
+        if self.firme().voci().get(i).is_none() {
             return;
         }
         // Prima l'impronta o il PIN (roadmap della sicurezza, Fase 1): un collega col telefono
         // sbloccato in mano non mette la tua firma. Per qualche minuto non si richiede (`blocco`).
         if self.impostazioni.impronta_firma {
-            self.con_l_impronta(crate::blocco::PerCosa::Firma(iniziali));
+            self.con_l_impronta(crate::blocco::PerCosa::Firma(i));
         } else {
-            self.posa_la_firma_salvata(iniziali);
+            self.posa_la_firma_salvata(i);
         }
     }
 
     /// La firma (o le iniziali) salvata va dove si è scelto, dopo l'impronta se serve.
-    pub(crate) fn posa_la_firma_salvata(&mut self, iniziali: bool) {
-        let Some(firma) = self.firme().di(iniziali).cloned() else { return };
+    pub(crate) fn posa_la_firma_salvata(&mut self, i: usize) {
+        let Some((iniziali, firma)) = self.firme().voci().get(i).map(|v| (v.iniziali, v.firma.clone())) else { return };
         self.posa_firma_pdf(iniziali, firma);
     }
 
@@ -429,12 +528,17 @@ impl TascabileApp {
         true
     }
 
-    /// Una firma nuova è pronta: va dove si è scelto e si salva per le volte dopo. Se ce n'è già
-    /// una salvata, prima di sostituirla si chiede (revisione del 31/10, punto 3: un collega col
-    /// telefono in mano metteva la sua al posto di quella di chi usa l'app, senza domande).
+    /// Una firma nuova è pronta: va dove si è scelto. La prima del suo genere si salva per le volte
+    /// dopo; se ce n'è già una salvata, prima di aggiungerla si chiede (revisione del 31/10, punto
+    /// 3: un collega col telefono in mano non deve finire fra le tue firme senza domande). Con
+    /// «Le mie firme» al completo resta solo sul documento.
     fn firma_nuova_pdf(&mut self, iniziali: bool, firma: Firma) {
-        if self.firme().di(iniziali).is_some() {
-            diagnosi(format!("firma: {} nuova, si chiede se sostituire la salvata", nome(iniziali)));
+        let quante = self.firme().quante(iniziali);
+        if quante >= MASSIMO_SALVATE {
+            diagnosi(format!("firma: {} nuova, salvate al completo", nome(iniziali)));
+            self.avviso_breve.avvisa(FIRME_AL_COMPLETO);
+        } else if quante > 0 {
+            diagnosi(format!("firma: {} nuova, si chiede se aggiungerla alle salvate", nome(iniziali)));
             if let Some(p) = self.pdf.as_mut() {
                 p.compila.firma.da_salvare = Some((iniziali, firma.clone()));
             }
@@ -461,21 +565,21 @@ impl TascabileApp {
         }
     }
 
-    /// La domanda prima di sostituire la firma salvata: «Tieni quella di prima» (o un tocco fuori, o
-    /// Indietro) la lascia; «Salva la nuova» la sostituisce. La firma nuova è già sul documento.
+    /// La domanda prima di aggiungere la firma nuova a «Le mie firme»: «Solo qui» (o un tocco fuori,
+    /// o Indietro) la lascia solo sul documento, dove è già; «Salvala» la aggiunge.
     pub(crate) fn mostra_salva_firma_pdf(&mut self, ctx: &egui::Context) {
         let Some((iniziali, _)) = self.pdf.as_ref().and_then(|p| p.compila.firma.da_salvare.as_ref()) else { return };
         let risposta = Dialogo::new(egui::Id::new("salva_firma_pdf"), SALVARE_LA_NUOVA)
             .testo(if *iniziali { SPIEGA_SALVARE_INIZIALI } else { SPIEGA_SALVARE })
-            .pulsante(TIENI_QUELLA_DI_PRIMA, Peso::Testo)
-            .pulsante(SALVA_LA_NUOVA, Peso::Principale)
+            .pulsante(SOLO_QUI, Peso::Testo)
+            .pulsante(SALVALA, Peso::Principale)
             .mostra(ctx);
         let Some(risposta) = risposta else { return };
         let Some((iniziali, firma)) = self.pdf.as_mut().and_then(|p| p.compila.firma.da_salvare.take()) else { return };
         if risposta == RispostaDialogo::Pulsante(1) {
             self.salva_firma(iniziali, firma);
         } else {
-            diagnosi(format!("firma: {} salvata lasciata com'era", nome(iniziali)));
+            diagnosi(format!("firma: {} nuova solo sul documento", nome(iniziali)));
         }
     }
 
@@ -590,33 +694,32 @@ impl TascabileApp {
     /// Il foglio della firma, l'anteprima della foto e il foglio a tutto schermo per firmare col
     /// dito; da mostrare a ogni frame.
     pub(crate) fn mostra_fogli_firma(&mut self, ctx: &egui::Context) {
-        let (firma, iniziali_salvate) = {
-            let f = self.firme();
-            (f.firma.clone(), f.iniziali.clone())
+        // Le firme salvate, con la loro immagine se sono da una foto, e il nome della riga.
+        let salvate: Vec<(Firma, Option<egui::TextureHandle>, String)> = if self.fogli_pdf.firma.aperto() {
+            let n = self.firme().voci().len();
+            (0..n)
+                .map(|i| {
+                    let t = self.firme.texture(ctx, i);
+                    let v = &self.firme.voci()[i];
+                    (v.firma.clone(), t, metti_detto(v.iniziali, self.firme.posto(i)))
+                })
+                .collect()
+        } else {
+            Vec::new()
         };
-        for (i, f) in [&firma, &iniziali_salvate].into_iter().enumerate() {
-            if let Some(f) = f
-                && self.firme.texture[i].is_none()
-            {
-                self.firme.texture[i] = texture_di(ctx, f, if i == 0 { "firma_salvata" } else { "iniziali_salvate" });
-            }
-        }
-        let texture = self.firme.texture.clone();
         let scelta = self
             .fogli_pdf
             .firma
             .mostra(ctx, FIRMA, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 let mut scelta = None;
-                if let Some(f) = &firma
-                    && riga(ui, icone::SIGNATURE, METTI_LA_FIRMA, Some((f, texture[0].as_ref())), false).clicked()
-                {
-                    scelta = Some(Scelta::Metti(false));
+                for (i, (f, t, detto)) in salvate.iter().enumerate() {
+                    if riga(ui, icone::SIGNATURE, detto, Some((f, t.as_ref())), false).clicked() {
+                        scelta = Some(Scelta::Metti(i));
+                    }
                 }
-                if let Some(f) = &iniziali_salvate
-                    && riga(ui, icone::SIGNATURE, METTI_LE_INIZIALI, Some((f, texture[1].as_ref())), false).clicked()
-                {
-                    scelta = Some(Scelta::Metti(true));
+                if !salvate.is_empty() && riga(ui, icone::EDIT, LE_MIE_FIRME, None, false).clicked() {
+                    scelta = Some(Scelta::LeMieFirme);
                 }
                 if riga(ui, icone::GESTURE, FIRMA_COL_DITO, None, false).clicked() {
                     scelta = Some(Scelta::Dito(false));
@@ -634,13 +737,17 @@ impl TascabileApp {
             })
             .flatten();
         match scelta {
-            Some(Scelta::Metti(iniziali)) => {
+            Some(Scelta::Metti(i)) => {
                 self.fogli_pdf.firma.chiudi();
-                self.metti_firma_pdf(iniziali);
+                self.metti_firma_pdf(i);
+            }
+            Some(Scelta::LeMieFirme) => {
+                self.fogli_pdf.firma.chiudi();
+                self.apri_le_mie_firme();
             }
             Some(Scelta::Dito(iniziali)) => {
                 self.fogli_pdf.firma.chiudi();
-                let (questa, altra) = if iniziali { (&iniziali_salvate, &firma) } else { (&firma, &iniziali_salvate) };
+                let (questa, altra) = (self.firme().di(iniziali).cloned(), self.firme().di(!iniziali).cloned());
                 let (stile, colore) = tratto_di_partenza(questa.as_ref(), altra.as_ref());
                 diagnosi(format!("pdf: {} col dito, {} {}", if iniziali { "iniziali" } else { "firma" }, stile.chiave(), colore.chiave()));
                 if let Some(p) = self.pdf.as_mut() {

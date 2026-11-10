@@ -4,9 +4,9 @@
 //! tocco sceglie o toglie una pagina, la pressione lunga la prende e il dito la porta dove deve
 //! andare; in fondo la barra con Ruota a sinistra, Ruota a destra, Elimina, Duplica, Estrai in un
 //! PDF nuovo, Pagina bianca (prima o dopo, grande come la pagina vicina) e Unisci. «Unisci»: un
-//! altro PDF (dai recenti, da Documenti/Tascabile o dalla scelta dei file di Android, l'Intent
+//! altro PDF (dai recenti, da Documents/Tascabile o dalla scelta dei file di Android, l'Intent
 //! della foto della firma) in fondo o dopo una pagina. «Dividi»: per intervalli o ogni N pagine,
-//! i file nuovi in Documenti/Tascabile. «Comprimi»: tre livelli su una copia, con la misura prima
+//! i file nuovi in Documents/Tascabile. «Comprimi»: tre livelli su una copia, con la misura prima
 //! e dopo. «Proteggi» con la password (AES-256) e «Togli la protezione»; «Salva pulito» nel menu
 //! riscrive tutto il file senza le revisioni di prima.
 //!
@@ -103,6 +103,8 @@ pub(crate) struct StatoPagine {
     pulito: bool,
     /// La copia compressa da dire: dove, i byte di prima e di dopo.
     compresso: Option<(PathBuf, usize, usize)>,
+    /// La copia definitiva appena fatta, da dire col suo dialogo: dov'è, e «Condividi».
+    pub(crate) definitiva: Option<PathBuf>,
 }
 
 /// Un lavoro di «Pagine e file» sul suo thread.
@@ -138,7 +140,7 @@ impl Quale {
 
 /// Quello che un lavoro ha fatto.
 enum FileFatti {
-    /// I file nuovi scritti in Documenti/Tascabile.
+    /// I file nuovi scritti in Documents/Tascabile.
     Scritti(Vec<PathBuf>),
     /// La copia compressa e quanti byte.
     Compresso(PathBuf, usize),
@@ -430,7 +432,7 @@ impl TascabileApp {
 
     // ---- Estrai e Dividi ----
 
-    /// «Estrai in un PDF nuovo»: le pagine scelte, nel loro ordine, in Documenti/Tascabile.
+    /// «Estrai in un PDF nuovo»: le pagine scelte, nel loro ordine, in Documents/Tascabile.
     fn estrai_pdf(&mut self, scelte: Vec<usize>, ctx: &egui::Context) {
         let Some((byte, password)) = self.byte_di_adesso() else { return };
         let cartella = cartella_tascabile(&self.piattaforma.radice_archivio());
@@ -487,7 +489,7 @@ impl TascabileApp {
             let (testo, colore) = match (sbagliato, ogni) {
                 (true, false) => (format!("Scrivi gli intervalli come 1-3, 4-8 (9- vuol dire fino in fondo), da 1 a {n}."), tema::ROSSO),
                 (true, true) => (format!("Scrivi quante pagine in ogni file, da 1 a {n}."), tema::ROSSO),
-                (false, _) => (format!("Il PDF ha {}. I file nuovi vanno in Documenti/Tascabile: questo resta com'è.", pagine(n)), tema::MATITA),
+                (false, _) => (format!("Il PDF ha {}. I file nuovi vanno in Documents/Tascabile: questo resta com'è.", pagine(n)), tema::MATITA),
             };
             ui.label(RichText::new(testo).font(Carattere::Testo.font(ctx, 15.0)).color(colore));
             ui.add_space(6.0);
@@ -512,7 +514,7 @@ impl TascabileApp {
         }
     }
 
-    /// «Dividi» (o Invio nel campo): le parti scritte, ciascuna un file in Documenti/Tascabile.
+    /// «Dividi» (o Invio nel campo): le parti scritte, ciascuna un file in Documents/Tascabile.
     pub(crate) fn dividi_pdf(&mut self, ctx: &egui::Context) {
         let Some(p) = self.pdf.as_mut() else { return };
         let n = p.lettore.pagine();
@@ -582,7 +584,7 @@ impl TascabileApp {
         self.scegli_pagine([posto]);
     }
 
-    /// «Unisci»: il foglio coi PDF da proporre (i recenti e quelli in Documenti/Tascabile, letti
+    /// «Unisci»: il foglio coi PDF da proporre (i recenti e quelli in Documents/Tascabile, letti
     /// adesso) e la scelta dei file di Android; il PDF va in fondo o dopo la pagina `dopo`.
     pub(crate) fn apri_unisci_pdf(&mut self, dopo: Option<usize>) {
         let cartella = cartella_tascabile(&self.piattaforma.radice_archivio());
@@ -747,7 +749,7 @@ impl TascabileApp {
             .mostra(ctx, COMPRIMI, |ui| {
                 ui.label(
                     RichText::new(format!(
-                        "Adesso il PDF pesa {}. La copia compressa va in Documenti/Tascabile: questo resta com'è.",
+                        "Adesso il PDF pesa {}. La copia compressa va in Documents/Tascabile: questo resta com'è.",
                         home::misura(prima as u64)
                     ))
                     .font(Carattere::Testo.font(ui.ctx(), 15.0))
@@ -899,10 +901,7 @@ impl TascabileApp {
             return;
         }
         if p.pagine.pulito {
-            let testo = crate::pdf_lavoro::con_la_copia(
-                "Riscrivo tutto il file com'è adesso, senza le versioni di prima: le pagine e i dati tolti non restano nascosti nel PDF.",
-                p,
-            );
+            let testo = crate::pdf_lavoro::spiega_salva_pulito(p);
             let r = Dialogo::new(Id::new("salva_pulito"), SALVA_PULITO)
                 .testo(&testo)
                 .pulsante(ANNULLA, Peso::Testo)
@@ -918,25 +917,54 @@ impl TascabileApp {
             }
             return;
         }
+        if let Some(percorso) = p.pagine.definitiva.clone() {
+            // La copia definitiva è fatta: dov'è, col nome vero della cartella, e «Condividi»
+            // subito. Resta finché non si risponde.
+            let nome = percorso.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let firme = if p.motore.stato().protezione.firmato() { " Nella copia le firme digitali non valgono più." } else { "" };
+            let testo = format!("«{nome}» è nella memoria del telefono, in Documents/Tascabile. Il tuo PDF è rimasto com'è.{firme}");
+            let r = Dialogo::new(Id::new("pdf_definitiva_pronta"), crate::schermo_pdf::COPIA_PRONTA)
+                .testo(&testo)
+                .pulsante(crate::schermo_pdf::CHIUDI, Peso::Testo)
+                .pulsante(crate::CONDIVIDI_SUBITO, Peso::Principale)
+                .mostra(ctx);
+            if let Some(r) = r {
+                if let Some(p) = self.pdf.as_mut() {
+                    p.pagine.definitiva = None;
+                }
+                if r == RispostaDialogo::Pulsante(1) {
+                    diagnosi("pdf: copia definitiva pronta, condivisa");
+                    self.condividi_il_file(&percorso);
+                } else {
+                    diagnosi("pdf: copia definitiva pronta, chiusa");
+                }
+            }
+            return;
+        }
         if let Some((percorso, prima, dopo)) = p.pagine.compresso.clone() {
             // La copia si apre solo se questo PDF non ha modifiche da salvare: aprirla lo chiude.
             let apri = !p.motore.stato().modificato && !p.copia.recuperato;
             let nome = percorso.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let meno = 100 - (dopo * 100).div_ceil(prima.max(1)).min(100);
             let testo = format!(
-                "Da {} a {}: il {meno}% in meno. La copia è in Documenti/Tascabile: «{nome}». Questo PDF resta com'è.",
+                "Da {} a {}: il {meno}% in meno. La copia è in Documents/Tascabile: «{nome}». Questo PDF resta com'è.",
                 home::misura(prima as u64),
                 home::misura(dopo as u64)
             );
+            // «Condividi» per ultimo, il principale: una copia più leggera si fa per mandarla.
             let mut d = Dialogo::new(Id::new("pdf_compresso"), PDF_COMPRESSO).testo(&testo).pulsante(HO_CAPITO, Peso::Testo);
             if apri {
-                d = d.pulsante(APRI_LA_COPIA, Peso::Principale);
+                d = d.pulsante(APRI_LA_COPIA, Peso::Testo);
             }
-            if let Some(r) = d.mostra(ctx) {
+            let condividi = if apri { 2 } else { 1 };
+            if let Some(r) = d.pulsante(crate::CONDIVIDI_SUBITO, Peso::Principale).mostra(ctx) {
                 if let Some(p) = self.pdf.as_mut() {
                     p.pagine.compresso = None;
                 }
-                if apri && r == RispostaDialogo::Pulsante(1) {
+                if r == RispostaDialogo::Pulsante(condividi) {
+                    diagnosi("pdf: copia compressa condivisa");
+                    self.condividi_il_file(&percorso);
+                } else if apri && r == RispostaDialogo::Pulsante(1) {
                     diagnosi("pdf: si apre la copia compressa");
                     self.chiudi_organizza_pdf();
                     self.apri_file(&percorso, &nome);
@@ -961,10 +989,10 @@ impl TascabileApp {
                 diagnosi(format!("pdf: {} fatto, {} file in {secondi:.1} s", quale.nome(), file.len()));
                 match file.as_slice() {
                     [] => self.avviso_breve.avvisa("Nessun file scritto."),
-                    [f] => self.avviso_breve.avvisa(format!("Salvato in Documenti/Tascabile: {}", nome(f))),
+                    [f] => self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {}", nome(f)), f),
                     [f, ..] => {
                         let fermo = if fermato { " (fermato prima della fine)" } else { "" };
-                        self.avviso_breve.avvisa(format!("{} file in Documenti/Tascabile{fermo}: «{}» e gli altri.", file.len(), nome(f)))
+                        self.avviso_breve.avvisa(format!("{} file in Documents/Tascabile{fermo}: «{}» e gli altri.", file.len(), nome(f)))
                     }
                 }
             }
@@ -1082,7 +1110,10 @@ impl TascabileApp {
             return true;
         }
         if let Some(p) = self.pdf.as_mut()
-            && (std::mem::take(&mut p.pagine.togli) | std::mem::take(&mut p.pagine.pulito) | p.pagine.compresso.take().is_some())
+            && (std::mem::take(&mut p.pagine.togli)
+                | std::mem::take(&mut p.pagine.pulito)
+                | p.pagine.compresso.take().is_some()
+                | p.pagine.definitiva.take().is_some())
         {
             diagnosi("indietro: dialogo delle pagine chiuso");
             return true;
@@ -1111,6 +1142,12 @@ impl TascabileApp {
     #[doc(hidden)]
     pub fn pagine_scelte(&self) -> Option<Vec<usize>> {
         self.pdf.as_ref()?.pagine.organizza.as_ref().map(|o| o.scelte.iter().copied().collect())
+    }
+
+    /// Per le prove a schermo: la copia definitiva è fatta e il suo dialogo è da mostrare.
+    #[doc(hidden)]
+    pub fn copia_definitiva_pronta(&self) -> bool {
+        self.pdf.as_ref().is_some_and(|p| p.pagine.definitiva.is_some())
     }
 
     /// Per le prove: un lavoro di «Pagine e file» è in corso.

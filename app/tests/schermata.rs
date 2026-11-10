@@ -203,6 +203,19 @@ fn passi(h: &mut Harness<'_, TascabileApp>, n: usize) {
     for _ in 0..n {
         h.step();
     }
+    // Un documento che si apre sul suo thread (dalla 0.9.6): si aspetta che arrivi, e poi i passi
+    // di prima.
+    if h.state().documento_in_apertura() {
+        let fine = Instant::now() + std::time::Duration::from_secs(20);
+        while h.state().documento_in_apertura() {
+            assert!(Instant::now() < fine, "il documento non si è aperto in 20 s");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            h.step();
+        }
+        for _ in 0..n {
+            h.step();
+        }
+    }
 }
 
 /// Un evento del dito (tocco) insieme a quelli del puntatore che Android manda col primo dito.
@@ -281,8 +294,13 @@ fn schermata_telefono() {
     passi(&mut harness, 3);
     harness.get_by_label("Togli dai recenti");
     salva(&mut harness, "home-menu");
+    // «Rinomina» (7/11): il foglio col nome di adesso e la tastiera; Indietro lo chiude.
+    harness.get_by_label("Rinomina").click();
+    passi(&mut harness, 12);
+    harness.get_by_label("Fatto");
+    salva(&mut harness, "rinomina");
     harness.key_press(egui::Key::BrowserBack);
-    passi(&mut harness, 3);
+    passi(&mut harness, 12);
 
     // Una cartella: la barra alta col percorso e le voci.
     harness.get_by_label("Download").click();
@@ -345,7 +363,7 @@ fn schermata_telefono() {
     // tocco lì (la tastiera si apre) e Indietro (si chiude): bozzetto 2.
     harness.get_by_label("Relazione turno notte").click();
     passi(&mut harness, 8);
-    harness.get_by_label("Salvato · Documenti");
+    harness.get_by_label("Salvato · Documents");
     let (x, cima, fondo) = bordo_nella_relazione(nel_paragrafo("prescrizione", false));
     tocca_in(&mut harness, egui::pos2(x + 1.0, (cima + fondo) / 2.0));
     harness.key_press(egui::Key::BrowserBack);
@@ -505,7 +523,7 @@ fn schermata_telefono() {
     passi(&mut harness, 8);
     // L'avviso breve di «Esporta in PDF», con l'azione per condividerlo.
     menu(&mut harness, "Esporta in PDF");
-    harness.get_by_label("PDF pronto in Documenti/Tascabile: Relazione turno notte.pdf");
+    harness.get_by_label("PDF pronto in Documents/Tascabile: Relazione turno notte.pdf");
     salva(&mut harness, "avviso");
     // L'app perde il fuoco con le modifiche: la sua copia privata. Poi si chiude senza salvare.
     harness.input_mut().focused = false;
@@ -557,7 +575,9 @@ fn schermata_telefono() {
 /// Il «Timestamp con blockchain» (piano 2026-10-28-fissa-la-data, F4) su un PDF, coi server
 /// simulati: il foglio che spiega (data-spiegazione.png) e l'esito con la prova accanto al file
 /// (data-fissata.png). Poi, dallo stesso menu, il foglio della copia definitiva
-/// (copia-definitiva.png).
+/// (copia-definitiva.png), il dialogo che dice dov'è la copia fatta, con «Condividi»
+/// (copia-definitiva-pronta.png), il dialogo di «Salva pulito» (pdf-salva-pulito.png) e il suo
+/// avviso con «Condividi» (pdf-salvato-pulito.png).
 fn schermate_della_data(prova: &Path) {
     use tascabile_platform::RispostaRete;
     let file = prova.join("radice/Download/Contratto da datare.pdf");
@@ -596,6 +616,29 @@ fn schermate_della_data(prova: &Path) {
     passi(&mut h, 16);
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Crea la copia definitiva");
     salva(&mut h, "copia-definitiva");
+    // La copia fatta (segnalazione del 10/11): un dialogo che resta, dice dov'è e la condivide.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Crea la copia definitiva").click();
+    finche(&mut h, 30, "copia definitiva pronta", |a| a.copia_definitiva_pronta());
+    passi(&mut h, 16);
+    h.get_by_label("Copia definitiva pronta");
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Condividi");
+    salva(&mut h, "copia-definitiva-pronta");
+    assert!(prova.join("radice/Documents/Tascabile/Contratto da datare definitivo.pdf").is_file());
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Chiudi").click();
+    passi(&mut h, 12);
+    // «Salva pulito»: il dialogo dice che resta questo file, poi l'avviso con «Condividi».
+    h.get_by_label("Menu").click();
+    passi(&mut h, 4);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Salva pulito").click();
+    passi(&mut h, 12);
+    h.get_by_label_contains("Non è una copia: resta questo file");
+    salva(&mut h, "pdf-salva-pulito");
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Salva pulito").click();
+    finche(&mut h, 30, "salvato pulito", |a| a.c_e_da_condividere());
+    passi(&mut h, 6);
+    h.get_by_label("Salvato pulito");
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Condividi");
+    salva(&mut h, "pdf-salvato-pulito");
 }
 
 /// Le Slide (tappa G): la lezione di prova arrivata con «Apri con», col nome di uno dei recenti
@@ -892,6 +935,25 @@ fn schermate_della_firma(prova: &Path) {
     h.get_by_label("Usa questa firma").click();
     passi(&mut h, 4);
     h.state_mut().aspetta_il_motore_pdf();
+    // C'è già la firma col dito: quella dalla foto si aggiunge a «Le mie firme» (0.9.7).
+    h.get_by_label("Salvala").click();
+    passi(&mut h, 6);
+    // pdf-firma-elenco.png: il foglio della firma con le due salvate e «Le mie firme»;
+    // le-mie-firme.png: il foglio per guardarle ed eliminarle.
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Strumenti").click();
+    passi(&mut h, 15);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Firma").scroll_to_me();
+    passi(&mut h, 6);
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Firma").click();
+    passi(&mut h, 15);
+    h.get_by_label("Metti la firma 2");
+    salva(&mut h, "pdf-firma-elenco");
+    h.get_by_label("Le mie firme").click();
+    passi(&mut h, 15);
+    h.get_by_label("Elimina Firma 2");
+    salva(&mut h, "le-mie-firme");
+    h.key_press(egui::Key::BrowserBack);
+    passi(&mut h, 6);
     // Via senza salvare.
     for _ in 0..3 {
         h.key_press(egui::Key::BrowserBack);
@@ -1715,7 +1777,7 @@ fn schermate_dell_ocr(prova: &Path) {
         .filter_map(|e| e.ok())
         .filter(|e| e.file_name().to_string_lossy().starts_with("Scansione "))
         .collect();
-    assert_eq!(fatti.len(), 1, "il PDF della scansione non è in Documenti/Tascabile");
+    assert_eq!(fatti.len(), 1, "il PDF della scansione non è in Documents/Tascabile");
     // Nella diagnosi conti e tempi, mai testo riconosciuto.
     let diagnosi = tascabile_platform::diagnosi_testo();
     for riga in diagnosi.lines().filter(|r| r.contains("ocr") || r.contains("scansione")) {
@@ -2039,7 +2101,7 @@ fn schermate_di_word() {
     h.run_steps(4);
     h.get_by_label("Relazione turno notte").click();
     passi(&mut h, 30);
-    h.get_by_label("Salvato · Documenti");
+    h.get_by_label("Salvato · Documents");
     // Il tocco dopo «prescrizione»: il cursore e, sotto, la goccia.
     let (x, cima, fondo) = bordo_nella_relazione(nel_paragrafo("prescrizione", false));
     tocca_in(&mut h, egui::pos2(x + 1.0, (cima + fondo) / 2.0));
@@ -2465,7 +2527,7 @@ fn premi_a_lungo(h: &mut Harness<'_, TascabileApp>, pos: egui::Pos2) {
 }
 
 /// Commenti e revisioni (piano «Word completo», W4), sulla relazione dei bozzetti con l'autore
-/// «Anna Bianchi» nelle Impostazioni: dal menu il foglio «Revisioni» e «Tieni traccia delle
+/// «Anna Bianchi» nelle Impostazioni: dal menu il foglio «Revisioni» e «Traccia le
 /// modifiche»; dopo «prescrizione» si scrive « del medico» (un'aggiunta), «regolare» scelto col
 /// la pressione lunga e cancellato (una cancellazione), «Mobilizzazione» commentata dalla barra della
 /// selezione; il testo coi colori del motore (word-revisioni-testo.png) e il foglio con le due
@@ -2489,7 +2551,7 @@ fn schermate_delle_revisioni() {
     passi(&mut h, 6);
     h.get_by_label("Revisioni").click();
     passi(&mut h, 12);
-    h.get_by_label("Tieni traccia delle modifiche").click();
+    h.get_by_label("Traccia le modifiche").click();
     passi(&mut h, 6);
     h.key_press(egui::Key::BrowserBack);
     passi(&mut h, 20);

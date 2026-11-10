@@ -11,7 +11,7 @@ use tascabile_touch::{BarraAlta, CampoTesto, FoglioDalFondo, Peso, Pulsante, Sch
 use crate::VERSIONE;
 
 /// La riga delle Impostazioni che toglie la firma salvata.
-pub(crate) const CANCELLA_FIRMA: &str = "Cancella firma salvata";
+pub(crate) const LE_MIE_FIRME: &str = crate::pdf_firma::LE_MIE_FIRME;
 /// La riga e il foglio dell'autore dei commenti, nei PDF e nei documenti Word.
 pub(crate) const AUTORE: &str = "Autore dei commenti";
 pub(crate) const VUOTO_AUTORE: &str = "Nome da mettere nei commenti";
@@ -167,7 +167,7 @@ pub enum Scelta {
     Checklist,
     Lungo,
     /// Toglie la firma e le iniziali salvate nella memoria dell'app.
-    CancellaFirma,
+    LeMieFirme,
     /// L'autore dei commenti: il foglio si apre, il campo si tocca, «Fatto», «Togli il nome».
     Autore,
     CampoAutore,
@@ -459,8 +459,8 @@ impl Impostazioni {
                     if voce.interruttore(self.impronta_firma).mostra(ui).aperta() {
                         scelta = Some(Scelta::ImprontaFirma);
                     }
-                    if self.firma_salvata && riga(ui, icone::SIGNATURE, CANCELLA_FIRMA, "La firma e le iniziali salvate in Tascabile per i PDF", true) {
-                        scelta = Some(Scelta::CancellaFirma);
+                    if self.firma_salvata && riga(ui, icone::SIGNATURE, LE_MIE_FIRME, "Le firme e le iniziali salvate per i PDF: guardale ed eliminale", true) {
+                        scelta = Some(Scelta::LeMieFirme);
                     }
                 });
                 for (titolo, righe) in [("Diagnosi", &DIAGNOSI), ("Prove per chi sviluppa", &PROVE)] {

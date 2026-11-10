@@ -105,10 +105,12 @@ pub fn prepara(byte: &[u8]) -> Result<ImmaginePronta, ErroreImmagine> {
     let orientamento = decoder.orientation().unwrap_or(Orientation::NoTransforms);
     // Già dritta e piccola: i suoi byte, ma senza EXIF, XMP e testi (la posizione GPS non deve
     // finire nel documento); se non si leggono fino ai dati, si riscrive.
-    if orientamento == Orientation::NoTransforms && w.max(h) <= LATO_MASSIMO && byte.len() <= BYTE_DA_TENERE {
-        if let Some(pulita) = tascabile_files::senza_metadati(byte) {
-            return Ok(ImmaginePronta { byte: pulita, pixel: (w, h) });
-        }
+    if orientamento == Orientation::NoTransforms
+        && w.max(h) <= LATO_MASSIMO
+        && byte.len() <= BYTE_DA_TENERE
+        && let Some(pulita) = tascabile_files::senza_metadati(byte)
+    {
+        return Ok(ImmaginePronta { byte: pulita, pixel: (w, h) });
     }
     let mut foto = DynamicImage::from_decoder(decoder).map_err(errore)?;
     foto.apply_orientation(orientamento);

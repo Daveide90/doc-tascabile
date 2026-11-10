@@ -57,10 +57,20 @@ pub(crate) const SPIEGA_DEFINITIVA: [&str; 3] = [
     "Una copia da mandare: moduli compilati, note, evidenziazioni, disegni e firme diventano parte della pagina.",
     "Chi la riceve la vede uguale su ogni telefono e computer: i campi non si compilano più e le note non si tolgono con un \
      tocco. Non è un sigillo: chi ha un programma che modifica i PDF può ancora cambiarla.",
-    "Il tuo PDF resta com'è e si può ancora modificare. La copia va in Documenti/Tascabile.",
+    "È un file in più: il tuo PDF resta com'è e si può ancora modificare. La copia va nella memoria del telefono, in \
+     Documents/Tascabile, e appena è pronta la puoi condividere.",
 ];
 /// Sotto la spiegazione, se il PDF ha firme digitali.
 const FIRME_NELLA_DEFINITIVA: &str = "Questo PDF ha firme digitali: nella copia non valgono più.";
+/// Le righe grigie sotto le tre voci del menu che si somigliano (segnalazione dell'autore del
+/// 10/11: «le copie pulite o il file definitivo non si capisce la differenza»): quale file ne
+/// esce, questo o un altro, e a che cosa serve. Ognuna sta su una riga sola.
+pub(crate) const SPIEGA_SALVA_COPIA: &str = "Un altro file, uguale a questo";
+pub(crate) const SPIEGA_SALVA_PULITO: &str = "Questo file, senza i dati tolti";
+pub(crate) const SPIEGA_COPIA_DEFINITIVA: &str = "Da mandare, con tutto fissato";
+/// Il dialogo dopo la copia definitiva: dov'è, e «Condividi» subito.
+pub(crate) const COPIA_PRONTA: &str = "Copia definitiva pronta";
+pub(crate) const CHIUDI: &str = "Chiudi";
 pub(crate) const CERCA: &str = "Cerca";
 /// Il testo grigio del campo della ricerca vuoto, e la X che la chiude.
 pub(crate) const VUOTO_CERCA: &str = "Cerca nel PDF";
@@ -384,7 +394,7 @@ impl TascabileApp {
     }
 
     /// Riapre i byte di una copia di recupero: senza file (Salva scrive una copia in
-    /// Documenti/Tascabile) e con le modifiche da salvare.
+    /// Documents/Tascabile) e con le modifiche da salvare.
     pub(crate) fn avvia_pdf_recuperato(&mut self, byte: Vec<u8>, nome: String, copia: CopiaPdf) {
         self.avvia_pdf(Da::Recupero, Arc::new(byte), nome, None, Instant::now(), None, None, Some(copia));
     }
@@ -531,7 +541,7 @@ impl TascabileApp {
                 self.vai(Schermata::Pdf);
                 self.controlla_i_calcoli_pdf();
                 match a.chiave {
-                    Some(chiave) => self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Pdf, aperto_alle: adesso(), pagine: Some(pagine) }),
+                    Some(chiave) => self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Pdf, aperto_alle: adesso(), pagine: Some(pagine), impronta: None }),
                     // Una copia di recupero non è un file dell'utente: niente recenti.
                     None if a.da == Da::Recupero => {}
                     None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
@@ -1060,15 +1070,16 @@ impl TascabileApp {
         if ripeti {
             menu = menu.voce(icone::REDO, RIPETI_MODIFICA).separatore();
         }
-        let mut menu = menu.primo(icone::SAVE, SALVA).voce(icone::FILE_COPY, SALVA_COPIA);
+        // Le tre voci che si somigliano hanno sotto la riga che dice quale file ne esce.
+        let mut menu = menu.primo(icone::SAVE, SALVA).voce_spiegata(icone::FILE_COPY, SALVA_COPIA, SPIEGA_SALVA_COPIA);
         if pulito {
-            menu = menu.voce(icone::DELETE_SWEEP, crate::pdf_pagine::SALVA_PULITO);
+            menu = menu.voce_spiegata(icone::DELETE_SWEEP, crate::pdf_pagine::SALVA_PULITO, SPIEGA_SALVA_PULITO);
         }
         let data = self.voce_della_data();
         let scelta = menu
             .voce(icone::SHARE, CONDIVIDI)
             .voce(icone::DESCRIPTION, crate::pdf_ocr::ESPORTA_WORD)
-            .voce(icone::PICTURE_AS_PDF, COPIA_DEFINITIVA)
+            .voce_spiegata(icone::PICTURE_AS_PDF, COPIA_DEFINITIVA, SPIEGA_COPIA_DEFINITIVA)
             .voce(icone::SCHEDULE, data)
             .separatore()
             .voce(icone::GRID_VIEW, MINIATURE)
@@ -1167,7 +1178,8 @@ impl TascabileApp {
 
     /// Il foglio «Informazioni»: una riga per cosa, titolo e autore solo se il PDF li dice.
     fn mostra_foglio_info_pdf(&mut self, ctx: &egui::Context) {
-        let righe = righe_informazioni(self.pdf.as_ref().and_then(|p| p.informazioni.as_ref()));
+        let a_mano = self.pdf.as_ref().map_or(0, |p| p.motore.stato().segni.iter().filter(|s| s.genere == tascabile_pdf::GenereSegno::Firma).count());
+        let righe = righe_informazioni(self.pdf.as_ref().and_then(|p| p.informazioni.as_ref()), a_mano);
         self.fogli_pdf.info.mostra(ctx, TITOLO_INFORMAZIONI, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for (i, (etichetta, valore)) in righe.iter().enumerate() {
@@ -1553,13 +1565,21 @@ fn scrivi_esito_del_lettore(esito: &Esito, inizio: Instant) {
 }
 
 /// Le righe di «Informazioni»: pagine, misura del file, titolo e autore se ci sono, firme
-/// digitali e cartella.
-fn righe_informazioni(info: Option<&(Informazioni, String)>) -> Vec<(&'static str, String)> {
+/// digitali, firme e iniziali messe col dito o da una foto (`a_mano`, se ce ne sono) e cartella.
+/// Le due righe delle firme stanno separate: «Firme digitali» contava solo quelle col certificato,
+/// e due firme a mano sembravano non contare (segnalazione dell'autore del 7/11).
+/// La riga delle firme messe con Fill & Sign, nelle Informazioni.
+pub(crate) const FIRME_A_MANO: &str = "Firme a mano";
+
+fn righe_informazioni(info: Option<&(Informazioni, String)>, a_mano: usize) -> Vec<(&'static str, String)> {
     let Some((i, cartella)) = info else { return Vec::new() };
     let mut righe = vec![("Pagine", crate::schermo_editor::numero(i.pagine)), ("Misura", home::misura(i.byte as u64))];
     righe.extend(i.titolo.clone().map(|t| ("Titolo", t)));
     righe.extend(i.autore.clone().map(|a| ("Autore", a)));
     righe.push(("Firme digitali", i.firme.descrizione()));
+    if a_mano > 0 {
+        righe.push((FIRME_A_MANO, if a_mano == 1 { "1 firma".to_string() } else { format!("{a_mano} firme") }));
+    }
     righe.push(("Cartella", cartella.clone()));
     righe
 }

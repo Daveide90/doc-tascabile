@@ -6,7 +6,7 @@
 //! poco dopo l'ultima modifica e quando l'app perde il fuoco: su Android dopo onPause non gira più
 //! nessun frame, ma il thread del motore sì. Il file dell'utente non si tocca. All'avvio la Home la
 //! propone come le copie di Word; riaperta, il PDF ha le modifiche e va salvato (in una copia in
-//! Documenti/Tascabile, come un documento recuperato di Word). La copia se ne va dopo Salva, dopo
+//! Documents/Tascabile, come un documento recuperato di Word). La copia se ne va dopo Salva, dopo
 //! «Non salvare», o quando annullando il PDF torna com'era salvato.
 //!
 //! Una copia che il thread del motore sta scrivendo mentre il PDF si chiude non deve restare: la

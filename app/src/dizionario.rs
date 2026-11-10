@@ -4,6 +4,7 @@
 //! dizionario personale (le parole aggiunte) sta nella cartella privata dell'app e si legge
 //! all'avvio. Nella diagnosi solo tempi e conti, mai una parola.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, TryRecvError, channel};
 use std::time::Instant;
 
@@ -14,6 +15,12 @@ use tascabile_platform::diagnosi;
 use tascabile_word::ortografia::{self, ASSET_AFF, ASSET_DIC};
 
 use crate::TascabileApp;
+
+/// Il dizionario è già nel motore: lo mette il suo thread appena finito, senza aspettare il passo
+/// dell'app. Il thread di apertura di un documento lo aspetta prima di impaginare (`apertura`):
+/// così l'impaginazione ha già le sottolineature e non si rifà quando il dizionario arriva
+/// (7/11: sul telefono era un secondo blocco di qualche secondo dopo l'apertura).
+pub(crate) static INSTALLATO: AtomicBool = AtomicBool::new(false);
 
 /// Il dizionario italiano: se ne sta occupando il thread, è pronto o non c'è.
 #[derive(Debug, Default)]
@@ -45,6 +52,9 @@ impl TascabileApp {
         let risveglio = self.risveglio.clone();
         let avviato = std::thread::Builder::new().name("word-dizionario".into()).spawn(move || {
             let esito = ortografia::installa_italiano(&aff, &dic).map_err(|e| e.genere());
+            if esito.is_ok() {
+                INSTALLATO.store(true, Ordering::SeqCst);
+            }
             let _ = manda.send(esito);
             risveglio();
         });
@@ -71,7 +81,9 @@ impl TascabileApp {
             Ok(radici) => {
                 diagnosi(format!("ortografia: dizionario pronto, {radici} radici in {ms:.0} ms"));
                 self.dizionario = Dizionario::Pronto;
-                if let Some(e) = self.editor_mut() {
+                // Un documento impaginato già col dizionario (`apertura`) non si rifà.
+                let gia = std::mem::take(&mut self.impaginato_col_dizionario);
+                if !gia && let Some(e) = self.editor_mut() {
                     e.s.relayout();
                 }
             }
@@ -80,6 +92,11 @@ impl TascabileApp {
                 self.dizionario = Dizionario::Mancante;
             }
         }
+    }
+
+    /// Il dizionario si sta caricando: chi apre un documento di testo lo aspetta.
+    pub(crate) fn dizionario_in_carico(&self) -> bool {
+        matches!(self.dizionario, Dizionario::InCarico(..))
     }
 
     /// Per le prove: il dizionario è pronto.

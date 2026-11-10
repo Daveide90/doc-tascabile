@@ -197,7 +197,7 @@ pub struct Scorciatoia {
 }
 
 /// Le scorciatoie che esistono sotto `radice` (la memoria condivisa del telefono), in
-/// quest'ordine: Download, Documenti, Documenti/Tascabile, allegati di WhatsApp, Telegram.
+/// quest'ordine: Download, Documents, Documents/Tascabile, allegati di WhatsApp, Telegram.
 /// Legge il disco: va chiamata quando si apre la Home, non a ogni frame.
 pub fn scorciatoie(radice: &Path) -> Vec<Scorciatoia> {
     // La cartella di WhatsApp senza le sue due dentro, solo se il WhatsApp del telefono non le ha.
@@ -214,13 +214,16 @@ pub fn scorciatoie(radice: &Path) -> Vec<Scorciatoia> {
 const WHATSAPP: &str = "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents";
 
 /// Nome da mostrare e percorso dalla radice. Sul telefono le cartelle comuni hanno il nome
-/// inglese (`Environment.DIRECTORY_DOCUMENTS` è «Documents», `DIRECTORY_DOWNLOADS` «Download»).
+/// inglese (`Environment.DIRECTORY_DOCUMENTS` è «Documents», `DIRECTORY_DOWNLOADS` «Download»),
+/// e l'app le chiama così: è il nome che mostra qualsiasi gestore di file. Un tempo diceva
+/// «Documenti», e chi cercava i suoi file con un altro gestore cercava una cartella che non c'è
+/// (segnalazione dell'autore del 10/11).
 /// WhatsApp oggi tiene i documenti ricevuti in «Private» e quelli mandati in «Sent», e nella
 /// cartella sopra niente: la Home diceva «WhatsApp · Nessun file» (segnalazione dell'autore del 3/11).
 const SCORCIATOIE: &[(&str, &str)] = &[
     ("Download", "Download"),
-    ("Documenti", "Documents"),
-    ("Documenti/Tascabile", "Documents/Tascabile"),
+    ("Documents", "Documents"),
+    ("Documents/Tascabile", "Documents/Tascabile"),
     ("WhatsApp ricevuti", "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents/Private"),
     ("WhatsApp mandati", "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents/Sent"),
     ("WhatsApp", WHATSAPP),
@@ -275,8 +278,8 @@ pub fn lo_stesso_file(radice: &Path, nome: &str, byte: &[u8], da: Option<&str>) 
     None
 }
 
-/// Dove vanno i documenti nuovi e le copie: Documenti/Tascabile, cioè «Documents/Tascabile» sul
-/// disco. Non la crea: la crea chi ci salva per primo.
+/// Dove vanno i documenti nuovi e le copie: «Documents/Tascabile» nella memoria condivisa del
+/// telefono. Non la crea: la crea chi ci salva per primo.
 pub fn cartella_tascabile(radice: &Path) -> PathBuf {
     radice.join("Documents").join("Tascabile")
 }
@@ -432,8 +435,8 @@ mod test {
             scorciatoie(&r),
             [
                 scorciatoia("Download", "Download"),
-                scorciatoia("Documenti", "Documents"),
-                scorciatoia("Documenti/Tascabile", "Documents/Tascabile"),
+                scorciatoia("Documents", "Documents"),
+                scorciatoia("Documents/Tascabile", "Documents/Tascabile"),
                 scorciatoia("WhatsApp", whatsapp),
             ]
         );
@@ -446,7 +449,7 @@ mod test {
         fs::create_dir(r.join(whatsapp).join("Private")).unwrap();
         fs::create_dir(r.join(whatsapp).join("Sent")).unwrap();
         let nomi: Vec<String> = scorciatoie(&r).into_iter().map(|s| s.nome).collect();
-        assert_eq!(nomi, ["Download", "Documenti", "Documenti/Tascabile", "WhatsApp ricevuti", "WhatsApp mandati", "Telegram"]);
+        assert_eq!(nomi, ["Download", "Documents", "Documents/Tascabile", "WhatsApp ricevuti", "WhatsApp mandati", "Telegram"]);
         assert_eq!(scorciatoie(&r)[3].percorso, r.join(whatsapp).join("Private"));
     }
 
@@ -531,7 +534,7 @@ mod test {
 
     #[test]
     fn tascabile_sta_in_documents() {
-        // Sul telefono le cartelle comuni hanno il nome inglese: «Documenti» è Documents.
+        // Sul telefono le cartelle comuni hanno il nome inglese.
         assert_eq!(cartella_tascabile(Path::new("/storage/emulated/0")), Path::new("/storage/emulated/0/Documents/Tascabile"));
     }
 }

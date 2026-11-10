@@ -381,6 +381,11 @@ impl TascabileApp {
             _ => None,
         };
         let mut azione = None;
+        // Una firma da posare dove si tocca: campi e segni non prendono il tocco, che va alla
+        // pagina e posa la firma anche sopra un'altra firma o un campo (segnalazione dell'autore
+        // del 7/11: «se sovrapposta la firma risulta 1 e non 2»).
+        let posa = p.compila.firma.da_toccare.is_some();
+        let tocco_o_niente = |senso: Sense| if posa { Sense::hover() } else { senso };
         let posti: Vec<Rect> = campi
             .iter()
             .filter(|c| c.compilabile())
@@ -404,7 +409,7 @@ impl TascabileApp {
                     };
                     evidenzia(&painter, r, pieno);
                 }
-                let risposta = ui.interact(presa_fra(r, &posti).intersect(pagine), Id::new(("campo_pdf", i, j)), Sense::click());
+                let risposta = ui.interact(presa_fra(r, &posti).intersect(pagine), Id::new(("campo_pdf", i, j)), tocco_o_niente(Sense::click()));
                 let nome = etichetta(c, j, i);
                 risposta.widget_info(|| match c.genere {
                     GenereCampo::Casella => WidgetInfo::selected(WidgetType::Checkbox, true, posto.acceso, &nome),
@@ -434,7 +439,7 @@ impl TascabileApp {
                     continue;
                 }
                 crate::pdf_firma::tocca_per_firmare(&painter, &ctx, r);
-                let risposta = ui.interact(r.intersect(pagine), Id::new(("firma_pdf", j, &c.nome)), Sense::click());
+                let risposta = ui.interact(r.intersect(pagine), Id::new(("firma_pdf", j, &c.nome)), tocco_o_niente(Sense::click()));
                 let nome = c.suggerimento.clone().unwrap_or_else(|| crate::pdf_firma::TOCCA_PER_FIRMARE.to_string());
                 risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &nome));
                 if risposta.clicked() {
@@ -453,7 +458,7 @@ impl TascabileApp {
             let chiave = (s.pagina, s.indice);
             // Si trascina solo il segno già scelto: con tutti trascinabili, scorrere la pagina col
             // dito vicino a una spunta la spostava (analisi del 27/10, compila 9).
-            let senso = if p.compila.segno == Some(chiave) { Sense::click_and_drag() } else { Sense::click() };
+            let senso = tocco_o_niente(if p.compila.segno == Some(chiave) { Sense::click_and_drag() } else { Sense::click() });
             let risposta = ui.interact(presa_fra(r, &posti_dei_segni).intersect(pagine), Id::new(("segno_pdf", s.pagina, s.indice)), senso);
             risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, nome_del_segno(s)));
             // Il movimento si conta da dove il dito si è appoggiato: egui comincia il trascinamento
@@ -499,7 +504,7 @@ impl TascabileApp {
                     let m = ui.interact(
                         Rect::from_center_size(centro, Vec2::splat(PRESA_MANIGLIA)),
                         Id::new(("maniglia_segno", s.pagina, s.indice)),
-                        Sense::drag(),
+                        tocco_o_niente(Sense::drag()),
                     );
                     m.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, "Ingrandisci"));
                     if m.drag_started() {
@@ -550,8 +555,8 @@ impl TascabileApp {
             && let Some((pagina, pt)) = tocco
         {
             azione = Some(match campo_sotto(&campi, pagina, pt, BORDO_CAMPO / k_di(pagina)) {
-                Some((nome, j)) => Azione::Campo(nome, j),
-                None => Azione::Vuoto(pagina, pt),
+                Some((nome, j)) if !posa => Azione::Campo(nome, j),
+                _ => Azione::Vuoto(pagina, pt),
             });
         }
         match azione {

@@ -87,8 +87,11 @@ pub(crate) const PARTI: [(&str, &str); 11] = [
     ),
     (
         "Dove vanno i file",
-        "Le copie, i PDF esportati, i file Word fatti dai PDF e le scansioni vanno in Documenti/Tascabile. Se l'app si chiude \
-         all'improvviso, alla riapertura il lavoro non salvato si può recuperare.",
+        "Le copie, i PDF esportati, i file Word fatti dai PDF e le scansioni vanno nella memoria del telefono, nella cartella \
+         Documents/Tascabile: è il nome che vedi con qualsiasi gestore di file (Memoria interna, poi Documents, poi \
+         Tascabile). Nella Home è la cartella «Tascabile». Un documento che salvi sul suo file resta dov'era. Dopo una copia \
+         l'app dice dove l'ha messa e ha «Condividi» per mandarla subito. Se l'app si chiude all'improvviso, alla riapertura \
+         il lavoro non salvato si può recuperare.",
     ),
     (
         "I limiti di questa versione",
@@ -120,4 +123,21 @@ pub(crate) fn mostra(ui: &mut egui::Ui) {
         ui.label(RichText::new(*testo).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::INCHIOSTRO));
     }
     ui.add_space(8.0);
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    /// Segnalazione dell'autore del 10/11: «non si capisce bene dove finiscono le cose create o
+    /// salvate dall'app, deve essere trovabile se uno usa un file manager di terze parti». La
+    /// guida dice la cartella col nome vero, come si arriva lì da un altro gestore di file e
+    /// dalla Home, e che un file salvato sul suo file resta dov'era.
+    #[test]
+    fn la_guida_dice_dove_vanno_i_file_col_nome_vero_della_cartella() {
+        let (_, testo) = PARTI.iter().find(|(titolo, _)| *titolo == "Dove vanno i file").expect("manca «Dove vanno i file»");
+        for pezzo in ["Documents/Tascabile", "memoria del telefono", "gestore di file", "«Tascabile»", "resta dov'era", "«Condividi»"] {
+            assert!(testo.contains(pezzo), "manca «{pezzo}» in: {testo}");
+        }
+    }
 }

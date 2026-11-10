@@ -414,9 +414,9 @@ mod test {
         );
         tema::installa(&h.ctx);
         h.run_steps(2);
-        h.state_mut().0.avvisa_con_azione("PDF pronto in Documenti/Tascabile", "Condividi");
+        h.state_mut().0.avvisa_con_azione("PDF pronto in Documents/Tascabile", "Condividi");
         h.run_steps(2);
-        let testo = h.get_by_label("PDF pronto in Documenti/Tascabile").rect();
+        let testo = h.get_by_label("PDF pronto in Documents/Tascabile").rect();
         let azione = h.get_by_role_and_label(Role::Button, "Condividi").rect();
         let pillola = riempiti(&h, tema::SCURO);
         assert_eq!(pillola.len(), 1, "{pillola:?}");
@@ -425,11 +425,11 @@ mod test {
         assert_eq!(colore_del_testo(&h, "Condividi"), Some(tema::BLU_TENUE));
         // Resta più di un avviso semplice, per dare il tempo di toccare.
         h.run_steps((DURATA_AVVISO / 0.25) as usize + 2);
-        h.get_by_label("PDF pronto in Documenti/Tascabile");
+        h.get_by_label("PDF pronto in Documents/Tascabile");
         h.get_by_role_and_label(Role::Button, "Condividi").click();
         h.run_steps(2);
         assert_eq!(h.state().1, 1);
-        assert!(h.query_by_label("PDF pronto in Documenti/Tascabile").is_none(), "toccata l'azione, l'avviso se ne va");
+        assert!(h.query_by_label("PDF pronto in Documents/Tascabile").is_none(), "toccata l'azione, l'avviso se ne va");
         // Senza tocchi se ne va da solo.
         h.state_mut().0.avvisa_con_azione("Di nuovo", "Condividi");
         h.run_steps((DURATA_CON_AZIONE / 0.25) as usize + 2);

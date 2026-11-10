@@ -23,6 +23,80 @@ const VIETATI: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 /// i separatori di Unicode.
 const FINE_RIGA: [char; 8] = ['\n', '\r', '\u{000B}', '\u{000C}', '\u{000E}', '\u{0085}', '\u{2028}', '\u{2029}'];
 
+/// Perché un file non si rinomina.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErroreRinomina {
+    /// Dal nome scritto non resta niente (solo spazi, punti, caratteri vietati).
+    Vuoto,
+    /// Nella cartella c'è già un file, o una cartella, con quel nome.
+    Esiste,
+    /// Il nome è quello di prima.
+    Uguale,
+    /// Il disco ha detto di no (il tipo dell'errore, senza il percorso).
+    Disco(io::ErrorKind),
+}
+
+/// Rinomina `percorso` in `nome`, nella stessa cartella (7/11/2026, segnalazione dell'autore:
+/// «non c'è la possibilità di cambiare nome ai file»). L'estensione resta quella di prima: se il
+/// nome scritto la ripete, non si raddoppia. Il nome passa dalla pulizia dei nomi salvati
+/// (`ripulita`): niente cartelle dentro il nome, niente caratteri vietati, mai un file nascosto,
+/// mai oltre i 255 byte. Un nome già preso non si sovrascrive; cambiare solo le maiuscole sì,
+/// anche dove la memoria non le distingue. Il nome nuovo si prenota creandolo vuoto in esclusiva
+/// e lo spostamento va sopra quel file vuoto, che è nostro (come `scrivi_nuovo` dei salvataggi):
+/// fra il controllo e lo spostamento nessun altro può prendere il nome, e un file che qualcuno
+/// crea in quel momento non si sostituisce (10/11; prima c'era un controllo e poi lo spostamento).
+/// Il percorso nuovo.
+pub fn rinomina(percorso: &Path, nome: &str) -> Result<PathBuf, ErroreRinomina> {
+    let cartella = percorso.parent().ok_or(ErroreRinomina::Disco(io::ErrorKind::NotFound))?;
+    let estensione = percorso.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let pulito = ripulita(nome);
+    let mut base = pulito.trim_start_matches(['.', ' ']).trim_end_matches(['.', ' ']);
+    if !estensione.is_empty()
+        && let Some((senza, coda)) = base.rsplit_once('.')
+        && coda.eq_ignore_ascii_case(estensione)
+    {
+        base = senza.trim_end_matches(['.', ' ']);
+    }
+    let coda = if estensione.is_empty() { String::new() } else { format!(".{estensione}") };
+    let base = accorcia_a_byte(base, MASSIMO_BYTE_NOME.saturating_sub(coda.len()));
+    if base.is_empty() {
+        return Err(ErroreRinomina::Vuoto);
+    }
+    let nuovo = cartella.join(format!("{base}{coda}"));
+    if nuovo == percorso {
+        return Err(ErroreRinomina::Uguale);
+    }
+    match sposta_senza_sostituire(percorso, &nuovo) {
+        Ok(()) => Ok(nuovo),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Err(ErroreRinomina::Esiste),
+        Err(e) => Err(ErroreRinomina::Disco(e.kind())),
+    }
+}
+
+/// Sposta `da` in `a` senza mai sostituire un altro file: il nome nuovo si prenota creandolo
+/// vuoto in esclusiva (se c'è già, `AlreadyExists`), poi lo spostamento va sopra quel file vuoto,
+/// che è nostro. Se lo spostamento non riesce il file vuoto si toglie. Lo stesso file con le
+/// maiuscole cambiate, dove la memoria non le distingue, si può: `a` c'è già, ma è `da`.
+/// Serve al rinomina e al timestamp che segue il file rinominato.
+pub fn sposta_senza_sostituire(da: &Path, a: &Path) -> io::Result<()> {
+    match fs::OpenOptions::new().write(true).create_new(true).open(a) {
+        Ok(_) => fs::rename(da, a).inspect_err(|_| {
+            let _ = fs::remove_file(a);
+        }),
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists && stesso_file(da, a) => fs::rename(da, a),
+        Err(e) => Err(e),
+    }
+}
+
+/// `a` e `b` sono lo stesso file (stesso disco, stesso numero), senza seguire i collegamenti.
+fn stesso_file(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::symlink_metadata(a), fs::symlink_metadata(b)) {
+        (Ok(a), Ok(b)) => a.ino() == b.ino() && a.dev() == b.dev(),
+        _ => false,
+    }
+}
+
 /// Un file che in `cartella` non c'è ancora: «Verbale.docx», poi «Verbale (2).docx», «Verbale
 /// (3).docx»... `estensione` va bene col punto o senza. `base` passa dalla pulizia di
 /// `nome_pulito`, senza il taglio a 40 caratteri: niente cartelle dentro il nome, niente
@@ -183,6 +257,42 @@ fn fine_di_grafema(testo: &str, fine: usize) -> usize {
 mod test {
     use super::*;
     use crate::prova::cartella_di_prova;
+
+    #[test]
+    fn un_file_si_rinomina_nella_sua_cartella() {
+        let d = cartella_di_prova("rinomina");
+        let f = d.join("Verbale.docx");
+        fs::write(&f, b"x").unwrap();
+        fs::write(d.join("Altro.docx"), b"y").unwrap();
+        // L'estensione resta, anche se il nome la ripete; i caratteri vietati se ne vanno.
+        let nuovo = rinomina(&f, "Verbale: 7 novembre.docx").unwrap();
+        assert_eq!(nuovo, d.join("Verbale 7 novembre.docx"));
+        assert!(nuovo.exists() && !f.exists());
+        assert_eq!(fs::read(&nuovo).unwrap(), b"x");
+        // Mai una cartella dentro il nome, mai un file nascosto.
+        let nuovo = rinomina(&nuovo, "../fuori").unwrap();
+        assert_eq!(nuovo, d.join("fuori.docx"));
+        let nuovo = rinomina(&nuovo, ".nascosto").unwrap();
+        assert_eq!(nuovo, d.join("nascosto.docx"));
+        // Gli errori: vuoto, già preso, uguale.
+        assert_eq!(rinomina(&nuovo, "  ...  "), Err(ErroreRinomina::Vuoto));
+        assert_eq!(rinomina(&nuovo, "Altro"), Err(ErroreRinomina::Esiste));
+        assert_eq!(rinomina(&nuovo, "nascosto"), Err(ErroreRinomina::Uguale));
+        assert_eq!(fs::read(d.join("Altro.docx")).unwrap(), b"y", "il file già presente non si tocca");
+        // Solo le maiuscole cambiate.
+        assert_eq!(rinomina(&nuovo, "Nascosto").unwrap(), d.join("Nascosto.docx"));
+        // Un file che non c'è più: e al posto del nome nuovo non resta niente.
+        assert_eq!(rinomina(&d.join("Mai.docx"), "Nuovo"), Err(ErroreRinomina::Disco(io::ErrorKind::NotFound)));
+        assert!(!d.join("Nuovo.docx").exists(), "è rimasto un file vuoto col nome nuovo");
+        // Anche una cartella con quel nome lo occupa.
+        fs::create_dir(d.join("Cartella.docx")).unwrap();
+        assert_eq!(rinomina(&d.join("Nascosto.docx"), "Cartella"), Err(ErroreRinomina::Esiste));
+        assert_eq!(fs::read(d.join("Nascosto.docx")).unwrap(), b"x");
+        // Dopo tutto questo nella cartella ci sono solo i due file e la cartella: nessun temporaneo.
+        let mut voci: Vec<String> = fs::read_dir(&d).unwrap().flatten().map(|v| v.file_name().to_string_lossy().into_owned()).collect();
+        voci.sort();
+        assert_eq!(voci, ["Altro.docx", "Cartella.docx", "Nascosto.docx"]);
+    }
 
     #[test]
     fn il_primo_nome_libero() {
@@ -395,6 +505,25 @@ mod test {
         assert_eq!(nome_pulito(&format!("{}\nNome e cognome", "_".repeat(60))), "Nome e cognome");
         assert_eq!(nome_pulito("🎄🎄🎄\nAuguri"), "Auguri");
         assert_eq!(nome_pulito("2026\nBilancio"), "2026");
+    }
+
+    #[test]
+    fn spostare_non_sostituisce_mai_un_altro_file() {
+        let d = cartella_di_prova("sposta-senza-sostituire");
+        let (da, a) = (d.join("Verbale.docx.ots"), d.join("Firmato.docx.ots"));
+        fs::write(&da, b"la prova").unwrap();
+        sposta_senza_sostituire(&da, &a).unwrap();
+        assert!(!da.exists());
+        assert_eq!(fs::read(&a).unwrap(), b"la prova");
+        // Il nome preso: non si tocca niente, né di qua né di là.
+        fs::write(&da, b"un'altra").unwrap();
+        assert_eq!(sposta_senza_sostituire(&da, &a).unwrap_err().kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&da).unwrap(), b"un'altra");
+        assert_eq!(fs::read(&a).unwrap(), b"la prova");
+        // Il file che non c'è: il nome prenotato non resta in giro.
+        let libero = d.join("Libero.ots");
+        assert_eq!(sposta_senza_sostituire(&d.join("Mai.ots"), &libero).unwrap_err().kind(), io::ErrorKind::NotFound);
+        assert!(!libero.exists());
     }
 
     #[test]

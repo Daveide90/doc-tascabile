@@ -55,6 +55,13 @@ pub(crate) const BARRA: [(&str, &str, &str); 5] = [
 
 /// La pagina dai bordi dello schermo (`.foglio { left: 10px; right: 10px }`).
 const MARGINE_PAGINA: f32 = 10.0;
+
+/// La larghezza del foglio della vista Scrittura in una zona larga `zona` dp: quella a cui
+/// l'Editor impagina. Anche il thread di apertura impagina lì (`apertura`), e l'Editor trova
+/// l'impaginazione pronta.
+pub(crate) fn larghezza_del_foglio(zona: f32) -> f32 {
+    zona - 2.0 * MARGINE_PAGINA
+}
 /// Con la tastiera aperta la pagina finisce sotto la barra di formato, per tanti dp (bozzetto 3).
 const SOTTO_LA_BARRA: f32 = 4.0;
 /// L'angolo del menu: 8 dp dal bordo destro, 44 sotto la cima della barra alta (`.menu`).
@@ -65,6 +72,8 @@ const MENU_SOTTO: f32 = 44.0;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VoceMenu {
     File(Comando),
+    /// «Rinomina» il file del documento (7/11).
+    Rinomina,
     /// «Timestamp con blockchain» o «Controlla il timestamp».
     Data,
     Trova,
@@ -75,9 +84,10 @@ enum VoceMenu {
     Informazioni,
 }
 
-const VOCI_MENU: [VoceMenu; 11] = [
+const VOCI_MENU: [VoceMenu; 12] = [
     VoceMenu::File(Comando::Salva),
     VoceMenu::File(Comando::SalvaCopia),
+    VoceMenu::Rinomina,
     VoceMenu::File(Comando::EsportaPdf),
     VoceMenu::File(Comando::Condividi),
     VoceMenu::Data,
@@ -475,6 +485,7 @@ impl TascabileApp {
         let scelta = Menu::new(egui::Id::new("menu_editor"))
             .primo(icone::SAVE, "Salva")
             .voce(icone::FILE_COPY, "Salva una copia")
+            .voce(icone::DRIVE_FILE_RENAME_OUTLINE, crate::rinomina::RINOMINA)
             .voce(icone::PICTURE_AS_PDF, "Esporta in PDF")
             .voce(icone::SHARE, "Condividi")
             .voce(icone::SCHEDULE, data)
@@ -494,6 +505,7 @@ impl TascabileApp {
             Some(VoceMenu::File(c)) => {
                 self.esegui(*c);
             }
+            Some(VoceMenu::Rinomina) => self.rinomina_documento_aperto(),
             Some(VoceMenu::Data) => self.data_dal_menu(ctx),
             Some(VoceMenu::Trova) => self.apri_trova(),
             Some(VoceMenu::Indice) => self.apri_indice(),

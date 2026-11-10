@@ -1,5 +1,5 @@
 //! Commenti e revisioni nell'Editor (piano «Word completo», W4). Nel menu del documento la voce
-//! «Revisioni» apre il foglio con l'interruttore «Tieni traccia delle modifiche», le modifiche da
+//! «Revisioni» apre il foglio con l'interruttore «Traccia le modifiche», le modifiche da
 //! accettare o rifiutare (una alla volta o tutte) e i commenti con le risposte (Rispondi, Risolvi,
 //! Elimina); un tocco sul testo di una modifica o di un commento porta il cursore lì. «Commenta»
 //! nella barra della selezione, e Rispondi, aprono il foglio «Commento» col suo campo. Nel testo
@@ -17,7 +17,9 @@ use crate::{QualeCampo, Schermata, TascabileApp};
 
 /// Il titolo del foglio e la voce del menu.
 pub(crate) const REVISIONI: &str = "Revisioni";
-pub(crate) const TRACCIA: &str = "Tieni traccia delle modifiche";
+/// L'interruttore. «Tieni traccia delle modifiche» a 372 dp finiva coi puntini (revisione del
+/// 10/11): il nome sta nella voce su ogni telefono.
+pub(crate) const TRACCIA: &str = "Traccia le modifiche";
 const SPIEGA_TRACCIA: &str = "Le modifiche restano da accettare";
 pub(crate) const ACCETTA: &str = "Accetta";
 pub(crate) const RIFIUTA: &str = "Rifiuta";

@@ -5,6 +5,7 @@
 //! che tiene il suo.
 
 use std::collections::VecDeque;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
@@ -43,6 +44,9 @@ pub struct Disegnata {
     pub richiesta: Richiesta,
     pub immagine: Immagine,
     pub ms: u32,
+    /// Il motore è andato in panico su questa slide: l'immagine è il foglio bianco, della misura
+    /// chiesta.
+    pub non_disegnata: bool,
 }
 
 /// Le richieste che aspettano, e se il lettore se n'è andato.
@@ -62,15 +66,33 @@ impl Disegnatore {
     /// Il thread `slide-disegno` sulla presentazione `doc`; `sveglia` si chiama a ogni slide
     /// disegnata (il lettore chiede un frame).
     pub fn avvia(doc: Arc<Presentation>, sveglia: impl Fn() + Send + 'static) -> std::io::Result<Self> {
+        Self::avvia_con(doc, sveglia, disegna)
+    }
+
+    /// Come `avvia`, con chi disegna una slide: le prove ne mettono uno che va in panico.
+    ///
+    /// Un panico del motore su una slide non si porta via il thread (revisione del 10/11: moriva,
+    /// nessuna slide arrivava più e il lettore restava ad aspettare). Quella slide torna come
+    /// foglio bianco, segnata `non_disegnata`, così il lettore non la richiede a ogni frame; le
+    /// altre si disegnano. Il panico resta nella diagnosi, col thread e il punto del codice
+    /// (`installa_gancio_dei_panici`), mai col suo messaggio.
+    fn avvia_con(
+        doc: Arc<Presentation>,
+        sveglia: impl Fn() + Send + 'static,
+        disegna: impl Fn(&Presentation, Richiesta) -> Immagine + Send + 'static,
+    ) -> std::io::Result<Self> {
         let coda: Arc<(Mutex<Coda>, Condvar)> = Arc::default();
         let (manda, arrivate) = channel();
         let sua = coda.clone();
         std::thread::Builder::new().name("slide-disegno".into()).spawn(move || {
             while let Some(richiesta) = prossima(&sua) {
                 let inizio = Instant::now();
-                let immagine = disegna(&doc, richiesta);
+                let (immagine, non_disegnata) = match catch_unwind(AssertUnwindSafe(|| disegna(&doc, richiesta))) {
+                    Ok(immagine) => (immagine, false),
+                    Err(_) => (foglio_bianco(&doc, richiesta), true),
+                };
                 let ms = inizio.elapsed().as_millis().min(u128::from(u32::MAX)) as u32;
-                if manda.send(Disegnata { richiesta, immagine, ms }).is_err() {
+                if manda.send(Disegnata { richiesta, immagine, ms, non_disegnata }).is_err() {
                     break;
                 }
                 sveglia();
@@ -126,12 +148,26 @@ fn prossima(coda: &(Mutex<Coda>, Condvar)) -> Option<Richiesta> {
     }
 }
 
-/// La slide della richiesta, larga proprio `larghezza` pixel e alta in proporzione.
-fn disegna(doc: &Presentation, r: Richiesta) -> Immagine {
+/// La misura in pixel della slide della richiesta, larga proprio `larghezza` pixel e alta in
+/// proporzione, e la scala dai punti ai pixel.
+fn misura(doc: &Presentation, r: Richiesta) -> (u32, u32, f64) {
     let (w, h) = (doc.slide_size.width, doc.slide_size.height);
     let larghezza = r.larghezza.clamp(1, deckcraft_render::MAX_SIDE);
     let scala = if w > 0.0 { f64::from(larghezza) / w } else { 1.0 };
     let altezza = ((h * scala).round() as u32).clamp(1, deckcraft_render::MAX_SIDE);
+    (larghezza, altezza, scala)
+}
+
+/// Il foglio bianco, opaco, della misura della slide della richiesta: per una slide che il motore
+/// non è riuscito a disegnare.
+fn foglio_bianco(doc: &Presentation, r: Richiesta) -> Immagine {
+    let (larghezza, altezza, _) = misura(doc, r);
+    Immagine { larghezza, altezza, pixel: vec![255; larghezza as usize * altezza as usize * 4] }
+}
+
+/// La slide della richiesta, larga proprio `larghezza` pixel e alta in proporzione.
+fn disegna(doc: &Presentation, r: Richiesta) -> Immagine {
+    let (larghezza, altezza, scala) = misura(doc, r);
     let mut opzioni = deckcraft_render::RenderOpts { scale: scala, size: Some((larghezza, altezza)), ..Default::default() };
     let img = match r.passo {
         Some(passo) => {
@@ -214,6 +250,34 @@ mod test {
                 None => std::thread::sleep(Duration::from_millis(2)),
             }
         }
+    }
+
+    /// Revisione del 10/11: se il motore va in panico su una slide, il thread di disegno resta
+    /// vivo. Prima moriva: nessuna slide arrivava più e il lettore restava ad aspettare. Quella
+    /// slide torna bianca, della misura chiesta e segnata come non disegnata; le altre si
+    /// disegnano, anche dopo.
+    #[test]
+    fn una_slide_che_manda_in_panico_il_motore_non_ferma_le_altre() {
+        let p = Presentazione::apri(crate::prova::LEZIONE).unwrap();
+        let d = Disegnatore::avvia_con(p.documento().clone(), || {}, |doc, r| {
+            if r.indice == 1 {
+                panic!("il testo della slide: Zanzibar");
+            }
+            disegna(doc, r)
+        })
+        .unwrap();
+        let richiesta = |indice| Richiesta { indice, larghezza: 480, uso: Uso::Vista, passo: None };
+        d.chiedi([richiesta(0), richiesta(1), richiesta(2)]);
+        let arrivate = fino_a(&d, richiesta(2));
+        assert_eq!(arrivate.iter().map(|a| (a.richiesta.indice, a.non_disegnata)).collect::<Vec<_>>(), [(0, false), (1, true), (2, false)]);
+        let bianca = &arrivate[1].immagine;
+        assert_eq!((bianca.larghezza, bianca.altezza), (480, 270));
+        assert_eq!(bianca.pixel.len(), 480 * 270 * 4);
+        assert!(bianca.pixel.iter().all(|b| *b == 255), "il foglio bianco, opaco");
+        assert!(arrivate[0].immagine.pixel.iter().any(|b| *b != 255), "la slide prima è disegnata davvero");
+        // Il thread è vivo: una richiesta dopo arriva, disegnata.
+        d.chiedi([richiesta(3)]);
+        assert!(!fino_a(&d, richiesta(3)).pop().unwrap().non_disegnata);
     }
 
     #[test]

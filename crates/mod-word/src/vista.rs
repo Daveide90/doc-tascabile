@@ -118,7 +118,28 @@ pub fn rendi_fascia_larga(
         return None;
     }
     let h = fascia_pt.min(pagina.h - y);
-    Some(render_items(&s.doc, lista, 0.0, y, larghezza_pt, h, px_per_pt, &RenderOptions::default()))
+    let nella_fascia = nella_fascia(lista, y, y + h);
+    Some(render_items(&s.doc, &nella_fascia, 0.0, y, larghezza_pt, h, px_per_pt, &RenderOptions::default()))
+}
+
+/// Le voci della lista di disegno che toccano la fascia fra `y0` e `y1` (punti della pagina),
+/// con gli stessi margini che il disegnatore usa per il testo: 40 punti sopra e sotto, e per il
+/// testo la linea di base fino a 240 punti sotto. Il disegnatore salta le lettere fuori dalla
+/// fascia, ma non le linee: in un documento lungo le sottolineature a onda dell'ortografia sono
+/// decine di migliaia, e ogni fascia le ridisegnava tutte (7/11: un secondo a fascia sul PC con
+/// 6.000 paragrafi, 5 ms con la lista ridotta). Le voci di altro genere, poche, restano tutte.
+fn nella_fascia(lista: &[Draw], y0: f32, y1: f32) -> Vec<Draw> {
+    let (sopra, sotto) = (y0 - 40.0, y1 + 40.0);
+    lista
+        .iter()
+        .filter(|d| match d {
+            Draw::Glyphs { glyphs, .. } => glyphs.iter().any(|g| g.2.is_nan() || (g.2 >= sopra && g.2 <= sotto + 200.0)),
+            Draw::Fill { rect, .. } => rect.bottom() >= sopra && rect.y <= sotto,
+            Draw::Line { y0: a, y1: b, width, .. } => a.max(*b) + width >= sopra && a.min(*b) - width <= sotto,
+            _ => true,
+        })
+        .cloned()
+        .collect()
 }
 
 /// Quanto è larga, in punti, la pagina unica della vista Scrittura con quello che ci sta: la
@@ -1274,6 +1295,87 @@ fn barra_selezione(ctx: &egui::Context, id: egui::Id, selezione: egui::Rect, zon
 #[cfg(test)]
 mod test {
     use super::*;
+
+    /// La lista ridotta alla fascia disegna la stessa fascia, pixel per pixel, anche con le
+    /// sottolineature dell'ortografia e una riga a cavallo fra due fasce (7/11).
+    #[test]
+    fn la_fascia_con_la_lista_ridotta_e_uguale() {
+        let testo: Vec<String> = (0..80).map(|i| format!("Riga {i} con parole sbagliatte e qualche errorre da sottolineare.")).collect();
+        let mut s = crate::documento::apri_byte("prova.txt", testo.join("\n").as_bytes()).unwrap();
+        let l = layout_scrittura(&mut s, 372.0, 1.0);
+        let pagina = l.pages.first().unwrap();
+        let lista = page_display(&s.doc, pagina, &RenderOptions::default().display);
+        assert!(lista.iter().any(|d| matches!(d, Draw::Line { .. })), "la prova vuole le sottolineature");
+        for indice in [0, 1, 2, 5] {
+            let y = indice as f32 * 100.0;
+            if y >= pagina.h {
+                continue;
+            }
+            let h = 100.0f32.min(pagina.h - y);
+            let intera = render_items(&s.doc, &lista, 0.0, y, pagina.w, h, 2.0, &RenderOptions::default());
+            let ridotta = rendi_fascia_da(&s, pagina, &lista, indice, 100.0, 2.0).unwrap();
+            assert!(intera.pixels == ridotta.pixels, "fascia {indice} diversa");
+            assert!(nella_fascia(&lista, y, y + h).len() < lista.len());
+        }
+    }
+
+    /// Misura, non prova (7/11, «se apro docx alcuni lagga»): quanto costano apertura,
+    /// impaginazione allo zoom nuovo, lista di disegno e una fascia per un documento di circa 200
+    /// pagine. Si lancia a mano, compilata come per il telefono:
+    /// `cargo test --release -p tascabile-word -- --ignored misura_un_documento_lungo --nocapture`.
+    #[test]
+    #[ignore]
+    fn misura_un_documento_lungo() {
+        let testo: Vec<String> = (0..6000).map(|i| format!("Paragrafo {i}: l'operatore socio-sanitario svolge attività di assistenza diretta alla persona, in collaborazione con gli altri operatori.")).collect();
+        let s = crate::documento::apri_byte("prova.txt", testo.join("\n").as_bytes()).unwrap();
+        let byte = wordcraft_engine::io::save_bytes("prova.docx", &s.doc).unwrap();
+        let t = Instant::now();
+        let mut s = crate::documento::apri_byte("prova.docx", &byte).unwrap();
+        let apertura = ms(t);
+        let t = Instant::now();
+        let l1 = layout_scrittura(&mut s, 372.0, 1.0);
+        let layout_1 = ms(t);
+        let t = Instant::now();
+        let l2 = layout_scrittura(&mut s, 372.0, 1.3);
+        let layout_zoom = ms(t);
+        let pagina = l2.pages.first().unwrap();
+        let t = Instant::now();
+        let lista = page_display(&s.doc, pagina, &RenderOptions::default().display);
+        let lista_ms = ms(t);
+        let t = Instant::now();
+        let _ = rendi_fascia_da(&s, pagina, &lista, 3, 300.0, 3.0);
+        let fascia = ms(t);
+        let t = Instant::now();
+        let _ = rendi_fascia_da(&s, pagina, &lista, 400, 300.0, 3.0);
+        let fascia_dopo = ms(t);
+        let t = Instant::now();
+        let _ = layout_scrittura(&mut s, 372.0, 1.3);
+        let layout_di_nuovo = ms(t);
+        eprintln!("MISURA seconda fascia {fascia_dopo:.0} ms, stesso layout di nuovo {layout_di_nuovo:.0} ms");
+        // La riduzione della lista da sola, e la fascia con la lista già ridotta.
+        let (y0, y1) = (400.0 * 300.0, 401.0 * 300.0);
+        let t = Instant::now();
+        let ridotta = nella_fascia(&lista, y0, y1);
+        let filtro = ms(t);
+        let t = Instant::now();
+        let _ = rendi_fascia_da(&s, pagina, &ridotta, 400, 300.0, 3.0);
+        let fascia_ridotta = ms(t);
+        let conta = |f: fn(&Draw) -> bool| lista.iter().filter(|d| f(d)).count();
+        eprintln!(
+            "MISURA lista {} voci (testo {}, riempimenti {}, linee {}), ridotta {} voci in {filtro:.0} ms: fascia {fascia_ridotta:.0} ms",
+            lista.len(),
+            conta(|d| matches!(d, Draw::Glyphs { .. })),
+            conta(|d| matches!(d, Draw::Fill { .. })),
+            conta(|d| matches!(d, Draw::Line { .. })),
+            ridotta.len()
+        );
+        eprintln!(
+            "MISURA {} byte, {} paragrafi, alta {:.0} pt: apertura {apertura:.0} ms, layout {layout_1:.0} ms, layout allo zoom nuovo {layout_zoom:.0} ms, lista {lista_ms:.0} ms, una fascia {fascia:.0} ms",
+            byte.len(),
+            s.doc.paragraph_count(),
+            l1.pages.first().map_or(0.0, |p| p.h)
+        );
+    }
     use crate::prova::documento;
     use serde_json::json;
     use tascabile_touch::{Bordo, tema};

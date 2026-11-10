@@ -247,7 +247,7 @@ impl TascabileApp {
                 self.vai(Schermata::Slide);
                 match a.chiave {
                     Some(chiave) => {
-                        self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Presentazione, aperto_alle: adesso(), pagine: Some(slide) })
+                        self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Presentazione, aperto_alle: adesso(), pagine: Some(slide), impronta: None })
                     }
                     None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
                 }
@@ -470,7 +470,7 @@ impl TascabileApp {
         let Some(s) = self.slide.as_ref() else { return };
         match s.chiave.clone() {
             Some(chiave) => {
-                let r = Recente { chiave, nome: s.nome.clone(), tipo: Tipo::Presentazione, aperto_alle: 0, pagine: None };
+                let r = Recente { chiave, nome: s.nome.clone(), tipo: Tipo::Presentazione, aperto_alle: 0, pagine: None, impronta: None };
                 self.condividi_recente(&r);
             }
             None => {
@@ -481,7 +481,7 @@ impl TascabileApp {
     }
 
     /// «Esporta in PDF» e «PDF con le note»: il PDF si prepara sul thread `slide-pdf`; quando è
-    /// pronto va in Documenti/Tascabile (`passo_pdf_slide`).
+    /// pronto va in Documents/Tascabile (`passo_pdf_slide`).
     fn esporta_pdf_slide(&mut self, con_note: bool) {
         let Some(s) = self.slide.as_mut() else { return };
         if s.esportazione.is_some() {
@@ -500,7 +500,7 @@ impl TascabileApp {
         }
     }
 
-    /// A ogni passo: il PDF delle slide pronto va in Documenti/Tascabile, col nome della
+    /// A ogni passo: il PDF delle slide pronto va in Documents/Tascabile, col nome della
     /// presentazione («… - note» quello con le note), e l'avviso lo dice con Condividi.
     pub(crate) fn passo_pdf_slide(&mut self) {
         let Some(s) = self.slide.as_mut() else { return };
@@ -529,12 +529,11 @@ impl TascabileApp {
                 let ms = e.inizio.elapsed().as_millis();
                 diagnosi(format!("slide: {cosa} esportato, {} byte, in {ms} ms", byte.len()));
                 let file = percorso.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-                self.avviso_breve.avvisa_con_azione(format!("PDF pronto in Documenti/Tascabile: {file}"), crate::CONDIVIDI_PDF);
-                self.pdf_pronto = Some(percorso);
+                self.avvisa_col_condividi(format!("PDF pronto in Documents/Tascabile: {file}"), &percorso);
             }
             Err(errore) => {
                 diagnosi(format!("slide: {cosa} non scritto ({:?})", errore.kind()));
-                let testo = "Non riesco a salvare il PDF in Documenti/Tascabile.".to_string();
+                let testo = "Non riesco a salvare il PDF in Documents/Tascabile.".to_string();
                 self.errore = Some(Errore { titolo: crate::NON_SALVATO, testo });
             }
         }

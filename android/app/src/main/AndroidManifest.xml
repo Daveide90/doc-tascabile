@@ -42,9 +42,25 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
 
-            <!-- «Apri con» da WhatsApp, file manager, posta: i documenti di testo e, dalla tappa D,
-                 i PDF da leggere. -->
+        <!-- «Apri con» da WhatsApp, Telegram, file manager, posta: i documenti di testo e, dalla
+             tappa D, i PDF da leggere. Arriva qui e non a MainActivity (7/11/2026): quando
+             l'altra app passa dal selettore di Android chiedendo un risultato, Android ignora
+             singleTask e crea una seconda MainActivity nel suo task, nello stesso processo, che
+             non disegna mai e blocca l'app su bianco. Questa attività gira il file a MainActivity
+             con NEW_TASK e si chiude: la finestra dell'app resta una. È visibile (il colore carta
+             dell'avvio) e a finestra unica in un task suo, come MainActivity: invisibile
+             (NoDisplay) e nel task dell'altra app, il telefono la creava senza mai avviare il
+             processo, e ad app chiusa l'«Apri con» non partiva (prova del 7/11 sera). -->
+        <activity
+            android:name=".ApriConActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="it.tascabile.app.apricon"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -53,6 +69,13 @@
                 <data android:mimeType="application/msword" />
                 <data android:mimeType="application/vnd.oasis.opendocument.text" />
                 <data android:mimeType="application/rtf" />
+                <!-- Revisione del 10/11: Android dichiara i .rtf come text/rtf, e l'app non si
+                     offriva; lo stesso per i modelli e i documenti con macro di Word, che apre. -->
+                <data android:mimeType="text/rtf" />
+                <data android:mimeType="application/x-rtf" />
+                <data android:mimeType="application/vnd.ms-word.document.macroenabled.12" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.template" />
+                <data android:mimeType="application/vnd.ms-word.template.macroenabled.12" />
                 <data android:mimeType="application/pdf" />
                 <!-- Le presentazioni che si aprono (tappa G): .pptx, .ppsx, .potx. Non .ppt né .odp:
                      l'app comparirebbe in «Apri con» per poi dire che non li legge. -->
@@ -64,9 +87,234 @@
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
                 <data android:mimeType="application/vnd.ms-excel" />
                 <data android:mimeType="application/vnd.ms-excel.sheet.macroenabled.12" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.template" />
+                <data android:mimeType="application/vnd.ms-excel.template.macroenabled.12" />
+                <data android:mimeType="application/vnd.ms-excel.sheet.binary.macroenabled.12" />
                 <data android:mimeType="application/vnd.oasis.opendocument.spreadsheet" />
                 <data android:mimeType="text/csv" />
                 <data android:mimeType="text/comma-separated-values" />
+            </intent-filter>
+            <!-- I documenti che un'altra app manda senza dirne il tipo (application/octet-stream:
+                 succede con Telegram e con alcuni gestori di file). Revisione del 10/11: l'app non
+                 si offriva, e per aprirli bisognava passare da «Apri» dentro l'app. Qui conta
+                 l'estensione nel percorso dell'URI, così l'app non si offre mai per un file
+                 qualunque; che cosa c'è dentro lo decide poi l'app dai byte, non dal nome.
+                 Il filtro è a parte: nello stesso filtro i percorsi varrebbero per tutti i tipi, e
+                 un PDF con un URI senza nome non si aprirebbe più. android:host="*" serve perché
+                 senza un host Android ignora i percorsi, e il filtro prenderebbe ogni file.
+                 Il motivo di Android (pathPattern) si ferma al primo punto che trova e non torna
+                 indietro: serve una riga per ogni numero di punti nel percorso, da uno a sei, e
+                 una per le maiuscole. Le righe sono generate: 17 estensioni × 2 × 6. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\..*\\.docx" />
+                <data android:pathPattern=".*\\..*\\..*\\.docx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.docx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.docx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
+                <data android:pathPattern=".*\\..*\\.DOCX" />
+                <data android:pathPattern=".*\\..*\\..*\\.DOCX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.DOCX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.DOCX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.DOCX" />
+                <data android:pathPattern=".*\\.docm" />
+                <data android:pathPattern=".*\\..*\\.docm" />
+                <data android:pathPattern=".*\\..*\\..*\\.docm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.docm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.docm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.docm" />
+                <data android:pathPattern=".*\\.DOCM" />
+                <data android:pathPattern=".*\\..*\\.DOCM" />
+                <data android:pathPattern=".*\\..*\\..*\\.DOCM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.DOCM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.DOCM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.DOCM" />
+                <data android:pathPattern=".*\\.dotx" />
+                <data android:pathPattern=".*\\..*\\.dotx" />
+                <data android:pathPattern=".*\\..*\\..*\\.dotx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.dotx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.dotx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.dotx" />
+                <data android:pathPattern=".*\\.DOTX" />
+                <data android:pathPattern=".*\\..*\\.DOTX" />
+                <data android:pathPattern=".*\\..*\\..*\\.DOTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.DOTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.DOTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.DOTX" />
+                <data android:pathPattern=".*\\.dotm" />
+                <data android:pathPattern=".*\\..*\\.dotm" />
+                <data android:pathPattern=".*\\..*\\..*\\.dotm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.dotm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.dotm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.dotm" />
+                <data android:pathPattern=".*\\.DOTM" />
+                <data android:pathPattern=".*\\..*\\.DOTM" />
+                <data android:pathPattern=".*\\..*\\..*\\.DOTM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.DOTM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.DOTM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.DOTM" />
+                <data android:pathPattern=".*\\.doc" />
+                <data android:pathPattern=".*\\..*\\.doc" />
+                <data android:pathPattern=".*\\..*\\..*\\.doc" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.doc" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.doc" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.doc" />
+                <data android:pathPattern=".*\\.DOC" />
+                <data android:pathPattern=".*\\..*\\.DOC" />
+                <data android:pathPattern=".*\\..*\\..*\\.DOC" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.DOC" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.DOC" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.DOC" />
+                <data android:pathPattern=".*\\.odt" />
+                <data android:pathPattern=".*\\..*\\.odt" />
+                <data android:pathPattern=".*\\..*\\..*\\.odt" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.odt" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.odt" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.odt" />
+                <data android:pathPattern=".*\\.ODT" />
+                <data android:pathPattern=".*\\..*\\.ODT" />
+                <data android:pathPattern=".*\\..*\\..*\\.ODT" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.ODT" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.ODT" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.ODT" />
+                <data android:pathPattern=".*\\.rtf" />
+                <data android:pathPattern=".*\\..*\\.rtf" />
+                <data android:pathPattern=".*\\..*\\..*\\.rtf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.rtf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.rtf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.rtf" />
+                <data android:pathPattern=".*\\.RTF" />
+                <data android:pathPattern=".*\\..*\\.RTF" />
+                <data android:pathPattern=".*\\..*\\..*\\.RTF" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.RTF" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.RTF" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.RTF" />
+                <data android:pathPattern=".*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.pdf" />
+                <data android:pathPattern=".*\\.PDF" />
+                <data android:pathPattern=".*\\..*\\.PDF" />
+                <data android:pathPattern=".*\\..*\\..*\\.PDF" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.PDF" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.PDF" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.PDF" />
+                <data android:pathPattern=".*\\.pptx" />
+                <data android:pathPattern=".*\\..*\\.pptx" />
+                <data android:pathPattern=".*\\..*\\..*\\.pptx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.pptx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.pptx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.pptx" />
+                <data android:pathPattern=".*\\.PPTX" />
+                <data android:pathPattern=".*\\..*\\.PPTX" />
+                <data android:pathPattern=".*\\..*\\..*\\.PPTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.PPTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.PPTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.PPTX" />
+                <data android:pathPattern=".*\\.ppsx" />
+                <data android:pathPattern=".*\\..*\\.ppsx" />
+                <data android:pathPattern=".*\\..*\\..*\\.ppsx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.ppsx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.ppsx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.ppsx" />
+                <data android:pathPattern=".*\\.PPSX" />
+                <data android:pathPattern=".*\\..*\\.PPSX" />
+                <data android:pathPattern=".*\\..*\\..*\\.PPSX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.PPSX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.PPSX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.PPSX" />
+                <data android:pathPattern=".*\\.potx" />
+                <data android:pathPattern=".*\\..*\\.potx" />
+                <data android:pathPattern=".*\\..*\\..*\\.potx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.potx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.potx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.potx" />
+                <data android:pathPattern=".*\\.POTX" />
+                <data android:pathPattern=".*\\..*\\.POTX" />
+                <data android:pathPattern=".*\\..*\\..*\\.POTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.POTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.POTX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.POTX" />
+                <data android:pathPattern=".*\\.xlsx" />
+                <data android:pathPattern=".*\\..*\\.xlsx" />
+                <data android:pathPattern=".*\\..*\\..*\\.xlsx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.xlsx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.xlsx" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.xlsx" />
+                <data android:pathPattern=".*\\.XLSX" />
+                <data android:pathPattern=".*\\..*\\.XLSX" />
+                <data android:pathPattern=".*\\..*\\..*\\.XLSX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.XLSX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.XLSX" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.XLSX" />
+                <data android:pathPattern=".*\\.xlsm" />
+                <data android:pathPattern=".*\\..*\\.xlsm" />
+                <data android:pathPattern=".*\\..*\\..*\\.xlsm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.xlsm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.xlsm" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.xlsm" />
+                <data android:pathPattern=".*\\.XLSM" />
+                <data android:pathPattern=".*\\..*\\.XLSM" />
+                <data android:pathPattern=".*\\..*\\..*\\.XLSM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.XLSM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.XLSM" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.XLSM" />
+                <data android:pathPattern=".*\\.xls" />
+                <data android:pathPattern=".*\\..*\\.xls" />
+                <data android:pathPattern=".*\\..*\\..*\\.xls" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.xls" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.xls" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.xls" />
+                <data android:pathPattern=".*\\.XLS" />
+                <data android:pathPattern=".*\\..*\\.XLS" />
+                <data android:pathPattern=".*\\..*\\..*\\.XLS" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.XLS" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.XLS" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.XLS" />
+                <data android:pathPattern=".*\\.xlsb" />
+                <data android:pathPattern=".*\\..*\\.xlsb" />
+                <data android:pathPattern=".*\\..*\\..*\\.xlsb" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.xlsb" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.xlsb" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.xlsb" />
+                <data android:pathPattern=".*\\.XLSB" />
+                <data android:pathPattern=".*\\..*\\.XLSB" />
+                <data android:pathPattern=".*\\..*\\..*\\.XLSB" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.XLSB" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.XLSB" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.XLSB" />
+                <data android:pathPattern=".*\\.ods" />
+                <data android:pathPattern=".*\\..*\\.ods" />
+                <data android:pathPattern=".*\\..*\\..*\\.ods" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.ods" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.ods" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.ods" />
+                <data android:pathPattern=".*\\.ODS" />
+                <data android:pathPattern=".*\\..*\\.ODS" />
+                <data android:pathPattern=".*\\..*\\..*\\.ODS" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.ODS" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.ODS" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.ODS" />
+                <data android:pathPattern=".*\\.csv" />
+                <data android:pathPattern=".*\\..*\\.csv" />
+                <data android:pathPattern=".*\\..*\\..*\\.csv" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.csv" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.csv" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.csv" />
+                <data android:pathPattern=".*\\.CSV" />
+                <data android:pathPattern=".*\\..*\\.CSV" />
+                <data android:pathPattern=".*\\..*\\..*\\.CSV" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\.CSV" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\.CSV" />
+                <data android:pathPattern=".*\\..*\\..*\\..*\\..*\\..*\\.CSV" />
             </intent-filter>
         </activity>
 

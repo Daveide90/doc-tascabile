@@ -1,6 +1,6 @@
 //! Il lavoro sul PDF (piano «PDF completo», P1): le modifiche mandate al motore sul suo thread,
 //! annulla e ripeti, lo stato «Modifiche non salvate», Salva (sul file quando si può
-//! scrivere, altrimenti una copia in Documenti/Tascabile come in Word), Salva una copia e
+//! scrivere, altrimenti una copia in Documents/Tascabile come in Word), Salva una copia e
 //! Condividi il PDF modificato; l'avviso delle firme digitali prima della prima modifica che le
 //! renderebbe non valide; la barra dei modi del bozzetto 7 e il foglio Strumenti del bozzetto 8,
 //! con solo le voci che funzionano (gli altri modi e strumenti arrivano coi passaggi dopo: qui
@@ -38,7 +38,7 @@ pub(crate) const PDF_FIRMATO: &str = "PDF firmato";
 pub(crate) const MODIFICA_ORIGINALE: &str = "Modifica l'originale";
 pub(crate) const LAVORA_SU_COPIA: &str = "Lavora su una copia";
 const FIRMA_SUL_FILE: &str = "Questo PDF ha una firma digitale: se lo modifichi, la firma risulterà non valida. Puoi lavorare su una copia e lasciare intatto l'originale firmato.";
-const FIRMA_IN_COPIA: &str = "Questo PDF ha una firma digitale: se lo modifichi, la firma risulterà non valida. Le modifiche andranno in una copia in Documenti/Tascabile: l'originale firmato resta com'è.";
+const FIRMA_IN_COPIA: &str = "Questo PDF ha una firma digitale: se lo modifichi, la firma risulterà non valida. Le modifiche andranno in una copia in Documents/Tascabile: l'originale firmato resta com'è.";
 /// Il dialogo di un PDF che si può solo leggere.
 pub(crate) const SOLO_LETTURA: &str = "Solo lettura";
 const CERTIFICATO: &str = "Chi ha firmato questo PDF l'ha certificato senza modifiche permesse: si può solo leggere.";
@@ -327,15 +327,15 @@ pub(crate) fn strumenti_disponibili(stato: &Istantanea) -> Vec<(&'static str, To
 /// Che cosa scrive un salvataggio del PDF.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AzioneSalva {
-    /// Sul file aperto se si può scrivere, altrimenti una copia in Documenti/Tascabile.
+    /// Sul file aperto se si può scrivere, altrimenti una copia in Documents/Tascabile.
     Salva,
-    /// Una copia in Documenti/Tascabile, che da lì è il documento.
+    /// Una copia in Documents/Tascabile, che da lì è il documento.
     SalvaCopia,
     /// I byte di adesso, con le modifiche, al foglio di condivisione: il documento resta da
     /// salvare com'era.
     Condividi,
     /// La copia definitiva (moduli, note, disegni e firme fissati nelle pagine) in
-    /// Documenti/Tascabile: il documento resta com'era.
+    /// Documents/Tascabile: il documento resta com'era.
     Definitiva,
     /// Come Salva, ma tutto il file riscritto senza le revisioni di prima (P6).
     SalvaPulito,
@@ -360,6 +360,9 @@ pub(crate) struct ScrittoPdf {
     azione: AzioneSalva,
     esito: Result<Salvato, ErroreSalva>,
     impronta: Option<String>,
+    /// L'impronta dei byte scritti per i recenti (SHA-256): con lei il file si ritrova se
+    /// un'altra app lo sposta dopo il salvataggio (revisione del 10/11).
+    impronta_file: Option<tascabile_files::ImprontaFile>,
 }
 
 impl Scritto for ScrittoPdf {
@@ -371,9 +374,9 @@ impl Scritto for ScrittoPdf {
 /// Dove scrive un salvataggio del PDF.
 enum Destino {
     /// Sul file aperto, sostituito tutto o niente; se il telefono non lo lascia scrivere, una
-    /// copia in Documenti/Tascabile.
+    /// copia in Documents/Tascabile.
     File { percorso: PathBuf, radice: PathBuf, base: String },
-    /// Un file nuovo in Documenti/Tascabile, che non sostituisce niente.
+    /// Un file nuovo in Documents/Tascabile, che non sostituisce niente.
     Copia { radice: PathBuf, base: String },
     /// In `condivisi/` della cache, per il foglio di condivisione.
     Condivisi { cache: PathBuf, nome: String },
@@ -383,7 +386,7 @@ fn da_io(e: std::io::Error) -> ErroreSalva {
     ErroreSalva { genere: format!("{:?}", e.kind()), messaggio: e.to_string() }
 }
 
-/// Una copia nuova in Documenti/Tascabile sotto `radice` (creata se manca).
+/// Una copia nuova in Documents/Tascabile sotto `radice` (creata se manca).
 fn copia_in_documenti(radice: &std::path::Path, base: &str, byte: &[u8]) -> Result<Salvato, ErroreSalva> {
     let cartella = cartella_tascabile(radice);
     std::fs::create_dir_all(&cartella).map_err(da_io)?;
@@ -422,11 +425,24 @@ fn nome_da_condividere(nome: &str) -> String {
 /// Dove va il salvataggio quando non scrive sul file aperto (un PDF arrivato da un'altra app, una
 /// copia scelta): Oscura, Proteggi e Salva pulito lo dicono prima, perché l'originale resta com'era
 /// e chi lo inoltra manda quello (revisione del 31/10, punto 11).
-pub(crate) const IN_UNA_COPIA: &str = "Il salvataggio va in una copia in Documenti/Tascabile: l'originale resta com'era.";
+pub(crate) const IN_UNA_COPIA: &str = "Il salvataggio va in una copia in Documents/Tascabile: l'originale resta com'era.";
 
 /// Il testo di un dialogo, con la frase sulla copia se Salva non scrive sul file aperto.
 pub(crate) fn con_la_copia(testo: &str, p: &PdfAperto) -> String {
     if salva_sul_file(p).is_some() { testo.to_string() } else { format!("{testo} {IN_UNA_COPIA}") }
+}
+
+/// Il testo del dialogo di «Salva pulito»: che cosa fa, quale file ne esce (questo, se si può
+/// scrivere; altrimenti una copia), e il rimando a «Copia definitiva», che è un'altra cosa
+/// (segnalazione dell'autore del 10/11: «le copie pulite o il file definitivo non si capisce la
+/// differenza»).
+pub(crate) fn spiega_salva_pulito(p: &PdfAperto) -> String {
+    let quale = if salva_sul_file(p).is_some() { "Non è una copia: resta questo file, e si può ancora modificare." } else { IN_UNA_COPIA };
+    // Tre capoversi: che cosa fa, quale file ne esce, che cosa invece non è.
+    format!(
+        "Riscrivo tutto il file com'è adesso, senza le versioni di prima: le pagine e i dati tolti non restano nascosti nel PDF.\n\n\
+         {quale}\n\nPer una copia da mandare, con note e firme fissate nella pagina, c'è «Copia definitiva»."
+    )
 }
 
 /// Salva scrive sul file aperto: è un file della memoria del telefono (non arrivato da un'altra
@@ -618,7 +634,7 @@ impl TascabileApp {
     }
 
     /// Sì all'avviso delle firme: la modifica si fa, e le prossime non chiedono più; con
-    /// `copia` Salva scriverà una copia in Documenti/Tascabile e mai sull'originale.
+    /// `copia` Salva scriverà una copia in Documents/Tascabile e mai sull'originale.
     fn accetta_firme_pdf(&mut self, copia: bool) {
         let Some(p) = self.pdf.as_mut() else { return };
         let Some(m) = p.in_attesa_firme.take() else { return };
@@ -663,8 +679,10 @@ impl TascabileApp {
         };
         let scrittura: Scrittura<ScrittoPdf> = Box::new(move |byte: &Arc<Vec<u8>>| {
             let esito = scrivi_pdf(destino, byte);
-            let impronta = (esito.is_ok() && !matches!(azione, AzioneSalva::Condividi | AzioneSalva::Definitiva)).then(|| impronta(byte));
-            ScrittoPdf { azione, esito, impronta }
+            let salvato = esito.is_ok() && !matches!(azione, AzioneSalva::Condividi | AzioneSalva::Definitiva);
+            let impronta = salvato.then(|| impronta(byte));
+            let impronta_file = salvato.then(|| tascabile_files::ImprontaFile::di(byte));
+            ScrittoPdf { azione, esito, impronta, impronta_file }
         });
         let mandato = match azione {
             AzioneSalva::Definitiva => p.motore.appiattita(scrittura),
@@ -828,12 +846,12 @@ impl TascabileApp {
             return;
         }
         if s.azione == AzioneSalva::Definitiva {
-            // Una copia per chi la riceve: il documento aperto resta quello di prima.
-            let file = r.percorso.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            // Una copia per chi la riceve: il documento aperto resta quello di prima. Dov'è lo dice
+            // un dialogo che resta, con «Condividi» (10/11): l'avviso breve spariva in tre secondi.
             diagnosi(format!("pdf: copia definitiva in {ms} ms, {byte} byte"));
-            let firmato = self.pdf.as_ref().is_some_and(|p| p.motore.stato().protezione.firmato());
-            let firme = if firmato { " Nella copia le firme digitali non valgono più." } else { "" };
-            self.avviso_breve.avvisa(format!("Copia definitiva in Documenti/Tascabile: {file}.{firme}"));
+            if let Some(p) = self.pdf.as_mut() {
+                p.pagine.definitiva = Some(r.percorso);
+            }
             return;
         }
         diagnosi(format!("pdf: salvato in {ms} ms, {byte} byte{}", if segnata { "" } else { ", ma il motore non l'ha preso come base" }));
@@ -867,16 +885,21 @@ impl TascabileApp {
                     tipo: Tipo::Pdf,
                     aperto_alle: adesso(),
                     pagine: Some(pagine),
+                    impronta: s.impronta_file,
                 }),
                 None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
             }
+        } else if let (Some(chiave), Some(impronta)) = (r.percorso.to_str(), s.impronta_file) {
+            // Scritto sul file aperto: il suo recente prende l'impronta dei byte nuovi.
+            self.home.impronta_salvata(chiave, impronta);
         }
+        // Un file nuovo, o ripulito per mandarlo: l'avviso ha «Condividi» (10/11).
         match (s.azione, r.come) {
-            (AzioneSalva::SalvaPulito, Come::SulFile) => self.avviso_breve.avvisa("Salvato pulito"),
-            (AzioneSalva::SalvaPulito, _) => self.avviso_breve.avvisa(format!("Salvato pulito in Documenti/Tascabile: {file}")),
+            (AzioneSalva::SalvaPulito, Come::SulFile) => self.avvisa_col_condividi("Salvato pulito", &r.percorso),
+            (AzioneSalva::SalvaPulito, _) => self.avvisa_col_condividi(format!("Salvato pulito in Documents/Tascabile: {file}"), &r.percorso),
             (_, Come::SulFile) => self.avviso_breve.avvisa("Salvato"),
-            (AzioneSalva::SalvaCopia, _) => self.avviso_breve.avvisa(format!("Copia salvata in Documenti/Tascabile: {file}")),
-            _ => self.avviso_breve.avvisa(format!("Salvato in Documenti/Tascabile: {file}")),
+            (AzioneSalva::SalvaCopia, _) => self.avvisa_col_condividi(format!("Copia salvata in Documents/Tascabile: {file}"), &r.percorso),
+            _ => self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {file}"), &r.percorso),
         }
         if let Some(dopo) = self.pdf.as_mut().and_then(|p| p.dopo_il_salvataggio.take()) {
             self.fai(dopo);

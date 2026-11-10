@@ -3,7 +3,7 @@
 //! la data»): la prova pubblica e gratuita che il file esisteva così com'è, col protocollo aperto
 //! OpenTimestamps (crate `tascabile-prova-data`). È
 //! l'unica cosa per cui l'app va in rete, e ci va solo l'impronta del file. La prova si salva
-//! accanto al file (`Nome.pdf.ots`), o in Documenti/Tascabile se il file è arrivato da un'altra
+//! accanto al file (`Nome.pdf.ots`), o in Documents/Tascabile se il file è arrivato da un'altra
 //! app o la sua cartella non si scrive. Il lavoro gira su un thread suo, col dialogo
 //! dell'avanzamento; l'esito sale in un foglio.
 //!
@@ -59,14 +59,14 @@ impl FileDelDocumento {
     }
 
     /// Dove può stare la sua prova, in ordine: accanto al file (se è un file del telefono) e in
-    /// Documenti/Tascabile.
+    /// Documents/Tascabile.
     fn posti(&self, radice: &Path) -> Vec<PathBuf> {
         let mut v = Vec::new();
         if !self.uri() {
             v.push(PathBuf::from(format!("{}.ots", self.chiave)));
         }
         // Solo il nome del file: per un documento arrivato con «Apri con» lo manda l'altra app, e
-        // «../» o un percorso intero portavano il .ots fuori da Documenti/Tascabile (revisione del
+        // «../» o un percorso intero portavano il .ots fuori da Documents/Tascabile (revisione del
         // 31/10, punto 7).
         let nome = Path::new(&self.nome).file_name().map_or_else(|| "documento".to_string(), |n| n.to_string_lossy().into_owned());
         v.push(tascabile_files::cartella_tascabile(radice).join(format!("{nome}.ots")));
@@ -166,24 +166,86 @@ fn quando(secondi_utc: u32) -> String {
 fn dove_sta(posto: &Path, radice: &Path) -> String {
     let nome = posto.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     if posto.starts_with(tascabile_files::cartella_tascabile(radice)) {
-        format!("{nome}, in Documenti/Tascabile")
+        format!("{nome}, in Documents/Tascabile")
     } else {
         format!("{nome}, accanto al file")
     }
 }
 
-/// Scrive la prova nel primo posto dove si riesce: accanto al file, se no in Documenti/Tascabile.
-/// Mai sopra un file che c'è già.
+/// Scrive la prova nel primo posto dove si riesce: accanto al file, se no in Documents/Tascabile.
+/// Mai sopra un file che c'è già: il file si crea in esclusiva, e se il nome è preso (anche da un
+/// collegamento, che non si segue) si passa al posto dopo. Prima c'era un controllo e poi la
+/// scrittura: un file comparso in mezzo si sovrascriveva (revisione del 10/11). Una scrittura
+/// rimasta a metà non lascia il pezzo.
 fn scrivi_nuova(posti: &[PathBuf], byte: &[u8]) -> Option<PathBuf> {
+    use std::io::Write;
     posti.iter().find_map(|p| {
-        if p.exists() {
-            return None;
-        }
         if let Some(cartella) = p.parent() {
             let _ = std::fs::create_dir_all(cartella);
         }
-        std::fs::write(p, byte).ok().map(|_| p.clone())
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(p).ok()?;
+        match file.write_all(byte).and_then(|()| file.sync_all()) {
+            Ok(()) => Some(p.clone()),
+            Err(_) => {
+                drop(file);
+                let _ = std::fs::remove_file(p);
+                None
+            }
+        }
     })
+}
+
+/// Com'è andata al timestamp di un file rinominato.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TimestampRinominato {
+    /// Il file non ha un timestamp, o quello in Documents/Tascabile con quel nome non è il suo.
+    Nessuno,
+    /// Il timestamp ha preso il nome nuovo, come il file.
+    Seguito,
+    /// Il timestamp c'è ma è rimasto col nome di prima: il nome nuovo è preso, o il disco ha
+    /// detto di no.
+    Rimasto,
+}
+
+/// Il nome di un file con «.ots» in coda, senza passare da una stringa: vale anche per i nomi
+/// che non sono UTF-8.
+fn con_ots(file: &Path) -> PathBuf {
+    let mut nome = file.as_os_str().to_os_string();
+    nome.push(".ots");
+    PathBuf::from(nome)
+}
+
+/// Dopo il rinomina di un file, il suo timestamp prende il nome nuovo (revisione del 10/11:
+/// restava col nome vecchio, e «Controlla il timestamp» sul file rinominato non lo trovava più).
+/// Accanto al file il `.ots` è suo per posto. In Documents/Tascabile, dove va quando accanto al
+/// file non si scrive, il nome non basta, perché due file con lo stesso nome in cartelle diverse
+/// lì hanno lo stesso posto: segue il file solo la prova con l'impronta dei suoi byte. Mai sopra
+/// un altro file.
+pub(crate) fn rinomina_il_timestamp(vecchio: &Path, nuovo: &Path, radice: &Path) -> TimestampRinominato {
+    let sposta = |da: &Path, a: &Path| match tascabile_files::sposta_senza_sostituire(da, a) {
+        Ok(()) => TimestampRinominato::Seguito,
+        Err(_) => TimestampRinominato::Rimasto,
+    };
+    let accanto = con_ots(vecchio);
+    if accanto.is_file() {
+        return sposta(&accanto, &con_ots(nuovo));
+    }
+    let (Some(nome_vecchio), Some(nome_nuovo)) = (vecchio.file_name(), nuovo.file_name()) else {
+        return TimestampRinominato::Nessuno;
+    };
+    let cartella = tascabile_files::cartella_tascabile(radice);
+    let prova = cartella.join(con_ots(Path::new(nome_vecchio)));
+    if !prova.is_file() {
+        return TimestampRinominato::Nessuno;
+    }
+    let sua = leggi_la_prova(&prova).ok().and_then(|byte| tascabile_prova_data::Prova::leggi(&byte).ok()).is_some_and(|p| {
+        let impronta = tascabile_prova_data::formato::esadecimale(p.impronta());
+        tascabile_files::ImprontaFile::del_file(nuovo).is_ok_and(|i| i.sha256 == impronta)
+    });
+    if !sua {
+        return TimestampRinominato::Nessuno;
+    }
+    sposta(&prova, &cartella.join(con_ots(Path::new(nome_nuovo))))
 }
 
 /// Il titolo e il testo del foglio per un esito.
@@ -233,7 +295,7 @@ fn esito_da_mostrare(esito: &Esito, radice: &Path) -> (String, String) {
         ),
         Err(ErroreLavoro::Lettura) => (TIMESTAMP_CHE_NON_VA.into(), "Non riesco a leggere il file o il suo timestamp.".into()),
         Err(ErroreLavoro::Scrittura) => {
-            (TIMESTAMP_CHE_NON_VA.into(), "Non riesco a salvare il timestamp, né accanto al file né in Documenti/Tascabile.".into())
+            (TIMESTAMP_CHE_NON_VA.into(), "Non riesco a salvare il timestamp, né accanto al file né in Documents/Tascabile.".into())
         }
     }
 }
@@ -562,7 +624,85 @@ mod test {
             assert_eq!(f.posti(radice), [PathBuf::from("/storage/emulated/0/Documents/Tascabile").join(ots)], "{nome}");
         }
         assert_eq!(dove_sta(Path::new("/storage/emulated/0/Download/Contratto.pdf.ots"), radice), "Contratto.pdf.ots, accanto al file");
-        assert_eq!(dove_sta(Path::new("/storage/emulated/0/Documents/Tascabile/Referto.pdf.ots"), radice), "Referto.pdf.ots, in Documenti/Tascabile");
+        assert_eq!(dove_sta(Path::new("/storage/emulated/0/Documents/Tascabile/Referto.pdf.ots"), radice), "Referto.pdf.ots, in Documents/Tascabile");
+    }
+
+    #[test]
+    fn il_timestamp_di_un_file_rinominato() {
+        use tascabile_prova_data::prova::{ESEMPIO_OTS, ESEMPIO_TXT};
+        let radice = std::env::temp_dir().join(format!("tascabile-timestamp-rinominato-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&radice);
+        let scaricati = radice.join("Download");
+        let tascabile = tascabile_files::cartella_tascabile(&radice);
+        std::fs::create_dir_all(&scaricati).unwrap();
+        std::fs::create_dir_all(&tascabile).unwrap();
+        let (vecchio, nuovo) = (scaricati.join("Saluto.txt"), scaricati.join("Ciao.txt"));
+        std::fs::write(&nuovo, ESEMPIO_TXT).unwrap();
+
+        // Nessun timestamp: niente da fare, e niente di nuovo sul disco.
+        assert_eq!(rinomina_il_timestamp(&vecchio, &nuovo, &radice), TimestampRinominato::Nessuno);
+        assert!(!scaricati.join("Ciao.txt.ots").exists());
+
+        // Accanto al file: prende il nome nuovo, coi suoi byte.
+        std::fs::write(scaricati.join("Saluto.txt.ots"), ESEMPIO_OTS).unwrap();
+        assert_eq!(rinomina_il_timestamp(&vecchio, &nuovo, &radice), TimestampRinominato::Seguito);
+        assert!(!scaricati.join("Saluto.txt.ots").exists());
+        assert_eq!(std::fs::read(scaricati.join("Ciao.txt.ots")).unwrap(), ESEMPIO_OTS);
+
+        // Il nome nuovo del timestamp è preso da un altro file: resta col nome di prima, e
+        // l'altro non si tocca.
+        std::fs::write(scaricati.join("Saluto.txt.ots"), ESEMPIO_OTS).unwrap();
+        std::fs::write(scaricati.join("Ciao.txt.ots"), b"di un altro").unwrap();
+        assert_eq!(rinomina_il_timestamp(&vecchio, &nuovo, &radice), TimestampRinominato::Rimasto);
+        assert_eq!(std::fs::read(scaricati.join("Saluto.txt.ots")).unwrap(), ESEMPIO_OTS);
+        assert_eq!(std::fs::read(scaricati.join("Ciao.txt.ots")).unwrap(), b"di un altro");
+        std::fs::remove_file(scaricati.join("Saluto.txt.ots")).unwrap();
+        std::fs::remove_file(scaricati.join("Ciao.txt.ots")).unwrap();
+
+        // In Documents/Tascabile (dove va quando accanto al file non si scrive) il nome non basta:
+        // segue il file solo se l'impronta scritta nella prova è quella dei suoi byte.
+        std::fs::write(tascabile.join("Saluto.txt.ots"), ESEMPIO_OTS).unwrap();
+        assert_eq!(rinomina_il_timestamp(&vecchio, &nuovo, &radice), TimestampRinominato::Seguito);
+        assert!(!tascabile.join("Saluto.txt.ots").exists());
+        assert_eq!(std::fs::read(tascabile.join("Ciao.txt.ots")).unwrap(), ESEMPIO_OTS);
+        std::fs::remove_file(tascabile.join("Ciao.txt.ots")).unwrap();
+
+        // La prova di un altro file con lo stesso nome, in un'altra cartella: resta dov'è.
+        std::fs::write(tascabile.join("Saluto.txt.ots"), ESEMPIO_OTS).unwrap();
+        std::fs::write(&nuovo, b"un altro file che si chiamava uguale").unwrap();
+        assert_eq!(rinomina_il_timestamp(&vecchio, &nuovo, &radice), TimestampRinominato::Nessuno);
+        assert_eq!(std::fs::read(tascabile.join("Saluto.txt.ots")).unwrap(), ESEMPIO_OTS);
+        assert!(!tascabile.join("Ciao.txt.ots").exists());
+        // Un file che non è una prova, con quel nome: resta dov'è.
+        std::fs::write(tascabile.join("Saluto.txt.ots"), b"non una prova").unwrap();
+        assert_eq!(rinomina_il_timestamp(&vecchio, &nuovo, &radice), TimestampRinominato::Nessuno);
+        assert!(tascabile.join("Saluto.txt.ots").exists());
+        let _ = std::fs::remove_dir_all(&radice);
+    }
+
+    #[test]
+    fn la_prova_nuova_non_va_mai_sopra_un_file() {
+        let d = std::env::temp_dir().join(format!("tascabile-prova-nuova-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let (accanto, ripiego) = (d.join("Contratto.pdf.ots"), d.join("Tascabile").join("Contratto.pdf.ots"));
+        // Libero: va nel primo posto.
+        assert_eq!(scrivi_nuova(&[accanto.clone(), ripiego.clone()], b"prima"), Some(accanto.clone()));
+        assert_eq!(std::fs::read(&accanto).unwrap(), b"prima");
+        // Preso: il primo non si tocca, va nel secondo (la cartella si crea).
+        assert_eq!(scrivi_nuova(&[accanto.clone(), ripiego.clone()], b"seconda"), Some(ripiego.clone()));
+        assert_eq!(std::fs::read(&accanto).unwrap(), b"prima");
+        assert_eq!(std::fs::read(&ripiego).unwrap(), b"seconda");
+        // Presi tutti e due: niente, e nessuno dei due cambia.
+        assert_eq!(scrivi_nuova(&[accanto.clone(), ripiego.clone()], b"terza"), None);
+        assert_eq!(std::fs::read(&accanto).unwrap(), b"prima");
+        assert_eq!(std::fs::read(&ripiego).unwrap(), b"seconda");
+        // Un collegamento rotto con quel nome: non si segue, il nome è preso.
+        let rotto = d.join("Rotto.ots");
+        std::os::unix::fs::symlink(d.join("altrove-che-non-c-e"), &rotto).unwrap();
+        assert_eq!(scrivi_nuova(std::slice::from_ref(&rotto), b"quarta"), None);
+        assert!(!d.join("altrove-che-non-c-e").exists());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

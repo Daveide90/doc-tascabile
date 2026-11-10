@@ -136,11 +136,32 @@ pub struct Chip<'a> {
     testo: &'a str,
     icona: Option<&'a str>,
     acceso: bool,
+    margine: f32,
 }
 
 impl<'a> Chip<'a> {
+    /// Il margine dentro un chip, i due lati insieme: 14 dp per lato.
+    pub const MARGINE: f32 = 28.0;
+
     pub fn new(testo: &'a str) -> Self {
-        Self { testo, icona: None, acceso: false }
+        Self { testo, icona: None, acceso: false, margine: Self::MARGINE }
+    }
+
+    /// Un margine più stretto di [`Chip::MARGINE`] (i due lati insieme), per una fila che se no
+    /// non sta nello schermo.
+    pub fn margine(mut self, margine: f32) -> Self {
+        self.margine = margine;
+        self
+    }
+
+    /// Quanto è largo ciò che c'è scritto, senza il margine: serve a chi mette i chip in fila.
+    pub fn larghezza_del_testo(&self, ui: &Ui) -> f32 {
+        self.riga(ui, tema::INCHIOSTRO).larghezza()
+    }
+
+    fn riga(&self, ui: &Ui, colore: Color32) -> Riga {
+        let font = Carattere::Grassetto.font(ui.ctx(), 14.0);
+        Riga::new(ui, self.icona.map(|i| (i, Carattere::Icona, 18.0)), Some((self.testo, font)), 6.0, colore)
     }
 
     /// Un'icona prima del testo.
@@ -158,9 +179,8 @@ impl<'a> Chip<'a> {
 impl Widget for Chip<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let colore = if self.acceso { tema::FOGLIO } else { tema::INCHIOSTRO };
-        let font = Carattere::Grassetto.font(ui.ctx(), 14.0);
-        let riga = Riga::new(ui, self.icona.map(|i| (i, Carattere::Icona, 18.0)), Some((self.testo, font)), 6.0, colore);
-        let (rect, r) = ui.allocate_exact_size(vec2(riga.larghezza() + 28.0, tema::CHIP), Sense::click());
+        let riga = self.riga(ui, colore);
+        let (rect, r) = ui.allocate_exact_size(vec2(riga.larghezza() + self.margine, tema::CHIP), Sense::click());
         info(&r, true, Some(self.acceso), self.testo);
         if ui.is_rect_visible(rect) {
             let p = ui.painter();

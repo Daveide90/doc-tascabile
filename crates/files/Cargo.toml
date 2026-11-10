@@ -12,3 +12,6 @@ unicode-segmentation.workspace = true
 # Il controllo degli archivi zip (archivio.rs) legge con lo stesso lettore dei motori: la zip del
 # workspace, la stessa dei crate dei motori in vendor/. Le prove ci scrivono anche i loro archivi.
 zip.workspace = true
+# L'impronta dei file recenti (ritrova.rs), per ritrovarli quando un'altra app li sposta. Già nel
+# lock, portata da tascabile-prova-data.
+sha2 = "0.11.1"

@@ -5,7 +5,7 @@
 //! per le volte dopo) gira su un thread suo col dialogo dell'avanzamento e Annulla; le parole
 //! diventano lo strato di testo invisibile con una modifica del motore, che si annulla.
 //!
-//! Esporta in Word: dal menu e dal foglio Strumenti, il `.docx` del motore in Documenti/Tascabile.
+//! Esporta in Word: dal menu e dal foglio Strumenti, il `.docx` del motore in Documents/Tascabile.
 //!
 //! Scansiona: dal foglio Strumenti e dal «Nuovo» della Home. La fotocamera di sistema (l'Intent
 //! della foto della firma, P3); poi, dalla 0.8.2 (R3, «migliora la scansione, ora fa pena»), dopo
@@ -14,7 +14,7 @@
 //! dito, e Tutta la foto, Rifai, Fatto. Raddrizzamento e pulizia su un thread; l'anteprima a tutto
 //! schermo con la pagina che si sceglie dalle miniature, l'aspetto (Documento, Grigi, Bianco e
 //! nero, Originale), Bordi e Ruota in alto, Rifai, Altra pagina e Crea PDF in fondo; il PDF nuovo
-//! va in Documenti/Tascabile con l'OCR già fatto e si apre. Foto e pagine si tengono in JPEG (o PNG
+//! va in Documents/Tascabile con l'OCR già fatto e si apre. Foto e pagine si tengono in JPEG (o PNG
 //! a un bit), non in pixel nudi. La foto si cancella dalla cache appena letta; nella diagnosi solo
 //! conti, misure e tempi, mai testo, pixel o nomi di file.
 
@@ -587,7 +587,7 @@ impl TascabileApp {
         }
     }
 
-    /// «Esporta in Word»: il `.docx` del motore in Documenti/Tascabile, fatto sul thread
+    /// «Esporta in Word»: il `.docx` del motore in Documents/Tascabile, fatto sul thread
     /// `pdf-word` dai byte di adesso (con le modifiche non salvate).
     pub(crate) fn esporta_word_pdf(&mut self, ctx: &egui::Context) {
         if self.word.is_some() {
@@ -630,7 +630,7 @@ impl TascabileApp {
                 let protetto = self.pdf.as_ref().is_some_and(|p| p.motore.stato().cifrato);
                 let senza = if protetto { ", senza la password del PDF" } else { "" };
                 let solo = if riconosciuto { ", solo il testo riconosciuto" } else { "" };
-                self.avviso_breve.avvisa(format!("Salvato in Documenti/Tascabile: {nome}{senza}{solo}"));
+                self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {nome}{senza}{solo}"), &percorso);
             }
             Some(Err(genere)) => {
                 diagnosi(format!("pdf: word non esportato ({genere})"));
@@ -640,11 +640,11 @@ impl TascabileApp {
         }
     }
 
-    /// Il PDF della scansione è pronto in Documenti/Tascabile: si apre al posto del documento di
+    /// Il PDF della scansione è pronto in Documents/Tascabile: si apre al posto del documento di
     /// adesso, ma prima «Salvare le modifiche?» se ne ha, come Indietro: il PDF di prima non esce
     /// senza le sue modifiche e la sua copia di recupero. Con Annulla la scansione resta dov'è.
     pub(crate) fn apri_la_scansione(&mut self, percorso: std::path::PathBuf, nome: String) {
-        self.avviso_breve.avvisa(format!("Scansione salvata in Documenti/Tascabile: {nome}"));
+        self.avvisa_col_condividi(format!("Scansione salvata in Documents/Tascabile: {nome}"), &percorso);
         self.chiudi_poi(crate::Dopo::ApriFile(percorso, nome));
     }
 
@@ -1100,7 +1100,7 @@ impl TascabileApp {
         }
     }
 
-    /// «Crea PDF»: il PDF con l'OCR sul thread `scansione-pdf`, poi in Documenti/Tascabile.
+    /// «Crea PDF»: il PDF con l'OCR sul thread `scansione-pdf`, poi in Documents/Tascabile.
     fn crea_pdf_della_scansione(&mut self, ctx: &egui::Context) {
         let Some(s) = self.scansione.as_ref() else { return };
         if s.pagine.is_empty() || s.creazione.is_some() {

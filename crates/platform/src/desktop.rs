@@ -372,8 +372,12 @@ impl Piattaforma {
     /// Sul PC l'«URI» è un percorso. Nel genere dell'errore solo il tipo dell'errore di I/O o il
     /// tetto, come sul telefono.
     pub fn read_uri(&self, uri: &str) -> Result<Vec<u8>, ErroreLettura> {
-        let file = std::fs::File::open(uri).map_err(|e| ErroreLettura { genere: format!("{:?}", e.kind()), messaggio: format!("{uri}: {e}") })?;
-        crate::leggi_con_tetto(file, uri)
+        crate::leggi_con_tetto(self.apri_uri(uri)?, uri)
+    }
+
+    /// Come sul telefono: il file aperto, da leggere anche su un altro thread.
+    pub fn apri_uri(&self, uri: &str) -> Result<std::fs::File, ErroreLettura> {
+        std::fs::File::open(uri).map_err(|e| ErroreLettura { genere: format!("{:?}", e.kind()), messaggio: format!("{uri}: {e}") })
     }
 
     /// La foto della firma: sul telefono la fotocamera o la scelta di un'immagine, con un Intent

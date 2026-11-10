@@ -47,3 +47,5 @@ env_logger.workspace = true
 [dev-dependencies]
 egui_kittest = { workspace = true, features = ["wgpu"] }
 image.workspace = true
+# Le prove dei file rotti (tests/file_rotti.rs) riaprono e richiudono gli archivi: la zip del workspace.
+zip.workspace = true

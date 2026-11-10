@@ -13,10 +13,12 @@ import android.graphics.Color;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.display.DisplayManager;
+import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PersistableBundle;
@@ -296,6 +298,57 @@ public class MainActivity extends GameActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         nativeNewIntent();
+    }
+
+    /** Fino a quando sono stati segnalati i file di Documents/Tascabile, in millisecondi; 0 = mai. */
+    private static volatile long segnalatiFinoA = 0;
+    /** Quanti file al massimo in una segnalazione: i più recenti. */
+    private static final int MASSIMO_SEGNALATI = 2000;
+
+    /**
+     * L'app lascia lo schermo (per un gestore di file, per il foglio di condivisione, per un'altra
+     * app): i file nuovi di Documents/Tascabile si dicono ad Android. Dopo onPause non gira più
+     * nessun frame, quindi si fa qui e non in Rust.
+     */
+    @Override
+    protected void onPause() {
+        super.onPause();
+        segnalaIFileNuovi();
+    }
+
+    /**
+     * Dice ad Android i file di Documents/Tascabile scritti dall'ultima volta (la prima volta
+     * tutti), perché li metta nel suo indice: senza, non tutti ci finiscono (sul telefono
+     * dell'autore, il 10/11/2026, 7 su 22 mancavano) e le app che cercano i documenti passando
+     * dall'indice non li trovano. La cartella si legge su un thread suo. Non si segnalano le
+     * cartelle né i file nascosti, che sono i temporanei dei salvataggi. Alla diagnosi quanti
+     * file, mai quali.
+     */
+    private void segnalaIFileNuovi() {
+        final long da = segnalatiFinoA;
+        final long adesso = System.currentTimeMillis();
+        new Thread(() -> {
+            try {
+                File cartella = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS), "Tascabile");
+                File[] voci = cartella.listFiles();
+                if (voci == null) return;
+                List<File> nuovi = new ArrayList<>();
+                for (File f : voci) {
+                    if (f.isFile() && !f.getName().startsWith(".") && f.lastModified() > da) nuovi.add(f);
+                }
+                // Un minuto di margine: un file che si stava scrivendo adesso torna la prossima volta.
+                segnalatiFinoA = adesso - 60_000;
+                if (nuovi.isEmpty()) return;
+                nuovi.sort((a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+                int quanti = Math.min(nuovi.size(), MASSIMO_SEGNALATI);
+                String[] percorsi = new String[quanti];
+                for (int i = 0; i < quanti; i++) percorsi[i] = nuovi.get(i).getAbsolutePath();
+                MediaScannerConnection.scanFile(getApplicationContext(), percorsi, null, null);
+                nativeDiagnosi("archivio: " + quanti + " file di Documents/Tascabile segnalati ad Android");
+            } catch (RuntimeException e) {
+                nativeDiagnosi("archivio: file non segnalati ad Android (" + e.getClass().getSimpleName() + ")");
+            }
+        }, "tascabile-indice").start();
     }
 
     /**

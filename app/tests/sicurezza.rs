@@ -146,3 +146,98 @@ fn il_controllo_e_i_motori_leggono_con_la_stessa_zip() {
     let riga = manifest.lines().find(|r| r.starts_with("zip = ")).expect("manca zip fra le dipendenze del workspace");
     assert!(riga.contains(&format!(r#""={}""#, versioni[0])), "il workspace non fissa la zip del lock: {riga}");
 }
+
+/// Segnalazione dell'autore del 7/11: «se apro un pdf da WhatsApp o Telegram l'app si blocca su
+/// schermo bianco». Nel registro del telefono, l'«Apri con» di Telegram passa dal selettore di
+/// Android chiedendo un risultato (flg=0x3000001, FORWARD_RESULT): Android allora ignora
+/// singleTask e crea una seconda MainActivity nel task di Telegram, nello stesso processo; la
+/// seconda non disegna mai (eframe parte una volta sola per processo) e il processo si blocca.
+/// L'«Apri con» arriva a un'attività di passaggio senza schermo, che gira il file a MainActivity
+/// con NEW_TASK e senza risultato, e si chiude: così singleTask vale e la finestra resta una.
+#[test]
+fn l_apri_con_passa_da_un_attivita_di_passaggio() {
+    let manifest = android("app/src/main/AndroidManifest.xml");
+    let blocco = |nome: &str| -> String {
+        let i = manifest.find(&format!("android:name=\".{nome}\"")).unwrap_or_else(|| panic!("manca {nome}"));
+        let inizio = manifest[..i].rfind("<activity").unwrap();
+        let fine = manifest[i..].find("</activity>").unwrap() + i;
+        manifest[inizio..fine].to_string()
+    };
+    let principale = blocco("MainActivity");
+    assert!(!principale.contains("android.intent.action.VIEW"), "MainActivity riceve ancora l'«Apri con» direttamente");
+    assert!(principale.contains(r#"android:launchMode="singleTask""#));
+    let passaggio = blocco("ApriConActivity");
+    // Come MainActivity alle 16:52 del 7/11, che a freddo partiva: finestra unica in un task suo e
+    // un tema visibile. Invisibile (NoDisplay) e «multipla» nel task di Telegram, il telefono
+    // (nubia) la creava senza mai avviare il processo: ad app chiusa l'«Apri con» non partiva.
+    assert!(!passaggio.contains("Theme.NoDisplay") && !passaggio.contains("Translucent"), "un'attività invisibile non avvia l'app chiusa");
+    for attributo in [
+        r#"android:exported="true""#,
+        r#"android:launchMode="singleTask""#,
+        r#"android:taskAffinity="it.tascabile.app.apricon""#,
+        r#"android:noHistory="true""#,
+        r#"android:excludeFromRecents="true""#,
+        r#"android:autoRemoveFromRecents="true""#,
+        "android.intent.action.VIEW",
+        r#"android:mimeType="application/pdf""#,
+    ] {
+        assert!(passaggio.contains(attributo), "ApriConActivity senza {attributo}");
+    }
+    let java = android("app/src/main/java/it/tascabile/app/ApriConActivity.java");
+    assert!(java.contains("Intent.FLAG_ACTIVITY_NEW_TASK"), "MainActivity va aperta in un task suo");
+    assert!(java.contains("setFlags("), "i flag dell'altra app (FORWARD_RESULT) vanno tolti, non aggiunti");
+    assert!(java.contains("Intent.FLAG_GRANT_READ_URI_PERMISSION"), "il permesso di lettura va passato a MainActivity");
+    assert!(java.contains("MainActivity.class") && java.contains("finish()"));
+    assert!(!java.contains("startActivityForResult"));
+    // Revisione del 10/11: se il passaggio non riesce, chi ha toccato «Apri con» lo deve sapere
+    // (prima restava solo una riga nel registro di sistema). Nel messaggio niente URI.
+    assert!(java.contains("Toast.makeText("), "un passaggio non riuscito va detto a chi usa l'app");
+    assert!(!java.contains("getMessage()"), "il messaggio dell'errore può avere l'URI");
+}
+
+/// Revisione del 10/11: l'app non si offriva per i file .rtf (Android li dichiara `text/rtf`), per
+/// i modelli e i documenti con macro di Word e di Excel, e per i documenti che un'altra app manda
+/// senza dirne il tipo (`application/octet-stream`). Per questi ultimi conta l'estensione nel
+/// percorso dell'URI: l'app non si offre mai per un file qualunque.
+#[test]
+fn l_apri_con_si_offre_anche_per_rtf_modelli_e_file_senza_tipo() {
+    let manifest = android("app/src/main/AndroidManifest.xml");
+    for tipo in [
+        "text/rtf",
+        "application/x-rtf",
+        "application/vnd.ms-word.document.macroenabled.12",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+        "application/vnd.ms-word.template.macroenabled.12",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+        "application/vnd.ms-excel.template.macroenabled.12",
+        "application/vnd.ms-excel.sheet.binary.macroenabled.12",
+    ] {
+        assert!(manifest.contains(&format!(r#"android:mimeType="{tipo}""#)), "manca {tipo}");
+    }
+    // Il filtro dei file senza tipo è a parte: in un filtro solo i percorsi varrebbero per tutti i
+    // tipi, e un PDF con un URI senza nome non si aprirebbe più.
+    let i = manifest.find(r#"android:mimeType="application/octet-stream""#).expect("manca il filtro dei file senza tipo");
+    let inizio = manifest[..i].rfind("<intent-filter").unwrap();
+    let fine = manifest[i..].find("</intent-filter>").unwrap() + i;
+    let filtro = &manifest[inizio..fine];
+    assert!(filtro.contains(r#"android:scheme="content""#) && filtro.contains(r#"android:host="*""#), "{filtro}");
+    assert!(filtro.contains("android.intent.action.VIEW") && filtro.contains("android.intent.category.DEFAULT"));
+    assert_eq!(filtro.matches("android:mimeType=").count(), 1, "il filtro per estensione vale solo per i file senza tipo");
+    // Le estensioni che l'app apre (non il testo semplice: comparirebbe per ogni .txt). Il motivo
+    // di Android si ferma al primo punto e non torna indietro: serve una riga per ogni numero di
+    // punti nel percorso, da uno a sei (le cartelle di Telegram ne hanno già due), e una per le
+    // maiuscole.
+    for ext in ["docx", "docm", "dotx", "dotm", "doc", "odt", "rtf", "pdf", "pptx", "ppsx", "potx", "xlsx", "xlsm", "xls", "xlsb", "ods", "csv"] {
+        for e in [ext.to_string(), ext.to_uppercase()] {
+            for punti in 0..6 {
+                let motivo = format!(r#"android:pathPattern=".*{}\\.{e}""#, r"\\..*".repeat(punti));
+                assert!(filtro.contains(&motivo), "manca {motivo}");
+            }
+        }
+    }
+    assert_eq!(filtro.matches("android:pathPattern=").count(), 17 * 2 * 6);
+    // Mai tutti i file.
+    assert!(!manifest.contains(r#"android:mimeType="*/*""#));
+    let principale = &manifest[..manifest.find(".ApriConActivity").unwrap()];
+    assert!(!principale.contains("octet-stream"), "il filtro va sull'attività di passaggio, non su MainActivity");
+}

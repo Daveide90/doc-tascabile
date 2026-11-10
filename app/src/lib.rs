@@ -3,6 +3,9 @@
 
 #[cfg(target_os = "android")]
 mod android_main;
+mod apertura;
+mod rinomina;
+mod le_mie_firme;
 mod blocco;
 mod dizionario;
 mod fissa_data;
@@ -200,8 +203,9 @@ pub(crate) const APRI_CON_RIFIUTATO: &str =
 const NON_CONDIVISO: &str = "Condivisione non riuscita";
 const NON_RECUPERATO: &str = "Recupero non riuscito";
 const HO_CAPITO: &str = "Ho capito";
-/// L'azione dell'avviso «PDF pronto».
-const CONDIVIDI_PDF: &str = "Condividi";
+/// L'azione dell'avviso e dei dialoghi dopo un file nuovo (un PDF esportato, una copia, la copia
+/// definitiva, la copia compressa): lo manda subito al foglio di condivisione.
+const CONDIVIDI_SUBITO: &str = "Condividi";
 
 impl Errore {
     fn apertura(testo: impl Into<String>) -> Self {
@@ -238,6 +242,10 @@ impl Da {
     }
 }
 
+/// Il .docx di «Esporta in Word»: dove, quanti byte, se viene dal testo riconosciuto; o perché
+/// non è riuscito.
+type WordEsportato = Result<(PathBuf, usize, bool), &'static str>;
+
 pub struct TascabileApp {
     piattaforma: Piattaforma,
     schermata: Schermata,
@@ -266,8 +274,9 @@ pub struct TascabileApp {
     errore: Option<Errore>,
     /// L'esito di un comando che non è un errore (salvato, copia salvata, PDF pronto), in basso.
     avviso_breve: AvvisoBreve,
-    /// Il PDF appena esportato, da condividere con l'azione del suo avviso.
-    pdf_pronto: Option<PathBuf>,
+    /// Il file appena scritto (un PDF esportato, una copia), da condividere con l'azione del suo
+    /// avviso.
+    pronto_da_condividere: Option<PathBuf>,
     /// Il recupero all'avvio: le copie da proporre nella Home.
     recupero: Recupero,
     /// Il contesto di egui, per il risveglio del recupero (dal thread del motore).
@@ -342,6 +351,10 @@ pub struct TascabileApp {
     pub(crate) blocco: blocco::Blocco,
     /// Un PDF che chiede la password, col suo dialogo.
     password_pdf: Option<schermo_pdf::Password>,
+    /// Il foglio del rinomina di un file (`rinomina`, 7/11).
+    rinomina: rinomina::StatoRinomina,
+    /// «Le mie firme»: le firme salvate, da guardare ed eliminare (0.9.7).
+    le_mie_firme: le_mie_firme::StatoLeMieFirme,
     /// La posizione di un PDF che si sta scrivendo sul suo thread, con pagina e pagine per la
     /// riga della diagnosi.
     scrittura_posizioni: Option<schermo_pdf::ScritturaPosizione>,
@@ -349,8 +362,8 @@ pub struct TascabileApp {
     dizionario: dizionario::Dizionario,
     /// «Riconosci testo» che lavora, «Esporta in Word» che scrive, la scansione aperta (P8).
     riconosci: Option<pdf_ocr::Lavoro<Result<tascabile_pdf::ocr::EsitoOcr, tascabile_pdf::ocr::ErroreOcr>>>,
-    /// Il .docx di Esporta in Word: dove, quanti byte, se viene dal testo riconosciuto.
-    word: Option<pdf_ocr::Lavoro<Result<(PathBuf, usize, bool), &'static str>>>,
+    /// Il .docx di Esporta in Word che si scrive sul suo thread.
+    word: Option<pdf_ocr::Lavoro<WordEsportato>>,
     scansione: Option<pdf_ocr::Scansione>,
     /// «Timestamp con blockchain» e «Controlla il timestamp»: il foglio e il lavoro in corso.
     data: fissa_data::DataDelDocumento,
@@ -363,6 +376,11 @@ pub struct TascabileApp {
     /// Il foglio di calcolo aperto, e quello che si apre.
     foglio: Option<schermo_foglio::FoglioAperto>,
     apertura_foglio: Option<schermo_foglio::AperturaFoglio>,
+    /// Un documento che si apre sul suo thread (`apertura`).
+    apertura_documento: Option<apertura::AperturaDocumento>,
+    /// Il documento aperto è stato impaginato già col dizionario (`apertura`): quando il
+    /// dizionario arriva non si rifà.
+    impaginato_col_dizionario: bool,
     /// I fogli delle Slide: miniature e note.
     fogli_slide: schermo_slide::FogliSlide,
 }
@@ -581,7 +599,7 @@ impl TascabileApp {
             avvio_home_ms: None,
             errore: None,
             avviso_breve: AvvisoBreve::new(egui::Id::new("avviso_breve")),
-            pdf_pronto: None,
+            pronto_da_condividere: None,
             recupero,
             contesto,
             risveglio,
@@ -623,6 +641,8 @@ impl TascabileApp {
             firme: pdf_firma::FirmeSalvate::default(),
             blocco: blocco::Blocco::all_avvio(blocco),
             password_pdf: None,
+            rinomina: rinomina::StatoRinomina::default(),
+            le_mie_firme: le_mie_firme::StatoLeMieFirme::default(),
             scrittura_posizioni: None,
             dizionario: dizionario::Dizionario::default(),
             riconosci: None,
@@ -634,6 +654,8 @@ impl TascabileApp {
             apertura_slide: None,
             foglio: None,
             apertura_foglio: None,
+            apertura_documento: None,
+            impaginato_col_dizionario: false,
             fogli_slide: schermo_slide::FogliSlide::new(),
         }
     }
@@ -771,6 +793,8 @@ impl TascabileApp {
 
     /// Apre nell'Editor un documento che non è una prova.
     fn cambia_documento(&mut self, editor: Editor) {
+        // Vale per il documento che si apre adesso: chi lo apre dal thread lo rimette (`apertura`).
+        self.impaginato_col_dizionario = false;
         self.apri(Aperto::documento(editor));
     }
 
@@ -980,6 +1004,9 @@ impl TascabileApp {
     fn campo_mut(&mut self) -> Option<&mut CampoTesto> {
         if self.password_pdf.is_some() {
             return self.password_pdf.as_mut().map(|p| &mut p.campo);
+        }
+        if self.rinomina.aperto() {
+            return self.rinomina.campo_mut();
         }
         match self.schermata {
             Schermata::Editor if self.campo_word_aperto() => match self.quale_campo_word() {
@@ -1258,6 +1285,16 @@ impl TascabileApp {
             self.scegli(Scelta::Annulla);
             return;
         }
+        // «Le mie firme»: prima la conferma, poi il foglio.
+        if self.le_mie_firme.indietro() {
+            return;
+        }
+        // Il foglio del rinomina si chiude senza cambiare il nome.
+        if self.rinomina.aperto() {
+            diagnosi("indietro: rinomina chiuso");
+            self.chiudi_rinomina();
+            return;
+        }
         // L'avviso delle firme di un PDF: vale Annulla.
         if self.annulla_firme_pdf() {
             return;
@@ -1297,7 +1334,11 @@ impl TascabileApp {
             diagnosi("indietro: apertura del pdf annullata");
             return;
         }
-        // Lo stesso per un foglio di calcolo (revisione del 3/11: si aspettava la fine).
+        // Lo stesso per un documento e per un foglio di calcolo (revisione del 3/11: si aspettava
+        // la fine).
+        if self.lascia_l_apertura() {
+            return;
+        }
         if self.apertura_foglio.take().is_some() {
             diagnosi("indietro: apertura del foglio di calcolo annullata");
             return;
@@ -1514,121 +1555,29 @@ impl TascabileApp {
         }
     }
 
-    /// Legge, apre e porta nell'Editor un documento (`nome` decide il lettore del motore); se si
-    /// apre e ha una `chiave`, va in cima ai recenti. Nella diagnosi tipo e misura del file e
-    /// com'è andata, mai il nome, l'URI o il messaggio d'errore, che di solito riporta il nome. Un
-    /// errore del lettore del documento va nell'avviso; un errore di lettura torna a chi chiama,
-    /// che sa che cosa dire.
-    fn apri_documento(
-        &mut self,
-        da: Da,
-        leggi: impl FnOnce(&Piattaforma) -> Result<Vec<u8>, ErroreLettura>,
-        nome: &str,
-        chiave: Option<String>,
-        origine: Origine,
-    ) -> Result<(), ErroreLettura> {
-        // «apertura➡pagina» conta anche lettura e conversione del file.
-        let inizio = Instant::now();
-        // Un altro documento al posto del PDF che chiedeva la password, e del foglio di calcolo
-        // che si stava aprendo: finito dopo, chiuderebbe questo (revisione del 3/11).
-        self.annulla_password();
-        self.apertura_foglio = None;
-        let etichetta = da.etichetta();
-        let tipo = documento::estensione_nota(nome).unwrap_or_else(|| "sconosciuto".to_string());
-        let byte = match leggi(&self.piattaforma) {
-            Ok(byte) => byte,
-            Err(e) => {
-                da.scrivi(format!("{etichetta}: errore di lettura ({}), tipo {tipo}", e.genere));
-                return Err(e);
-            }
-        };
-        // Anche un file che si chiama PDF (o arriva col tipo del PDF) ma non comincia con %PDF va
-        // al lettore PDF, che dice in italiano che è vuoto o rovinato: Word apriva un documento
-        // vuoto, o il codice di una pagina d'errore del web (analisi del 27/10, lettura I4).
-        if tascabile_pdf::sembra_pdf(&byte) || tipo_da_nome(nome) == Tipo::Pdf {
-            self.apri_pdf(da, byte, nome, chiave, inizio);
-            return Ok(());
-        }
-        // I fogli di calcolo: per nome, o per contenuto (un pacchetto di Excel, un .xls, un
-        // OpenDocument di fogli) se il nome non dice niente: senza estensione o con una che non
-        // conosciamo, mai per una presentazione (revisione del 3/11, B3).
-        if tipo_da_nome(nome) == Tipo::Foglio || (tipo_da_nome(nome) == Tipo::Altro && tascabile_foglio::sembra_foglio(&byte)) {
-            self.apri_foglio(da, byte, nome, chiave, inizio);
-            return Ok(());
-        }
-        // Le presentazioni alle Slide: per nome (anche .ppt e .odp, che così dicono perché non si
-        // aprono) o per contenuto, se il nome non lo dice.
-        if tipo_da_nome(nome) == Tipo::Presentazione || tascabile_slide::sembra_presentazione(&byte) {
-            self.apri_slide(da, byte, nome, chiave, inizio);
-            return Ok(());
-        }
-        match documento::apri_byte(nome, &byte) {
-            Ok(s) => {
-                da.scrivi(format!(
-                    "{etichetta}: {} byte, tipo {tipo}, aperto in {:.0} ms, {} paragrafi",
-                    byte.len(),
-                    inizio.elapsed().as_secs_f64() * 1000.0,
-                    s.doc.paragraph_count()
-                ));
-                let mut editor = Editor::con_origine(s, nome, origine);
-                editor.aperto_alle = inizio;
-                self.cambia_documento(editor);
-                // Il motore salta commenti e note di .odt e .rtf, e Salva li scrive in un .docx
-                // accanto: va detto subito, prima che si cerchino.
-                if matches!(tipo.as_str(), "odt" | "rtf") {
-                    self.avviso_breve.avvisa("Di questo file qui non si vedono tutte le parti, come commenti e note: Salva fa un .docx accanto.");
-                }
-                match chiave {
-                    Some(chiave) => {
-                        self.home.ricorda(Recente { chiave, nome: nome.to_string(), tipo: tipo_da_nome(nome), aperto_alle: adesso(), pagine: None })
-                    }
-                    None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
-                }
-            }
-            Err(e) => {
-                // Il genere sì (zip troppo grande, protetto da password), il messaggio no: quello
-                // del motore può riportare il nome del file.
-                da.scrivi(format!("{etichetta}: {} byte, tipo {tipo}, errore di apertura ({})", byte.len(), e.genere));
-                self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
-            }
-        }
-        Ok(())
-    }
-
+    /// Un documento arrivato con «Apri con»: qui solo la richiesta ad Android; lettura, ricerca
+    /// dello stesso file nelle cartelle e apertura sul thread (`apertura`).
     fn apri_con(&mut self, r: &OpenRequest) {
         let nome = nome_di_apri_con(r);
-        let letti = self.piattaforma.read_uri(&r.uri);
-        // Lo stesso file nelle cartelle del telefono (WhatsApp, Telegram, Download): si apre da
-        // lì, così resta nei recenti anche quando il permesso di «Apri con» se ne va, dopo un
-        // aggiornamento dell'app (segnalazione dell'autore del 3/11), e Salva scrive nel file.
-        let sul_telefono = match &letti {
-            Ok(byte) if self.home.accesso() => tascabile_files::lo_stesso_file(&self.piattaforma.radice_archivio(), &nome, byte, home::provenienza(&r.uri)),
-            _ => None,
-        };
-        let esito = match sul_telefono {
-            Some(percorso) => {
-                diagnosi("apri con: lo stesso file è nelle cartelle del telefono, aperto da lì");
-                let nome = percorso.file_name().and_then(|n| n.to_str()).map_or(nome.clone(), str::to_string);
-                let chiave = percorso.to_str().map(str::to_string);
-                self.apri_documento(Da::ApriCon, move |_| letti, &nome, chiave, Origine::File(percorso))
-            }
-            None => {
-                let origine = Origine::Uri { uri: r.uri.clone(), nome: nome.clone() };
-                self.apri_documento(Da::ApriCon, move |_| letti, &nome, Some(r.uri.clone()), origine)
+        let file = match self.piattaforma.apri_uri(&r.uri) {
+            Ok(file) => file,
+            Err(e) => {
+                let tipo = documento::estensione_nota(&nome).unwrap_or_else(|| "sconosciuto".to_string());
+                Da::ApriCon.scrivi(format!("{}: errore di lettura ({}), tipo {tipo}", Da::ApriCon.etichetta(), e.genere));
+                self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
+                return;
             }
         };
-        if let Err(e) = esito {
-            self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
-        }
+        // Lo stesso file nelle cartelle del telefono si cerca solo con l'accesso ai file.
+        let cerca = self.home.accesso().then(|| apertura::CercaStesso { radice: self.piattaforma.radice_archivio(), da_app: home::provenienza(&r.uri) });
+        let dove = apertura::Dove { nome: nome.clone(), chiave: Some(r.uri.clone()), origine: Origine::Uri { uri: r.uri.clone(), nome } };
+        self.avvia_apertura(Da::ApriCon, apertura::Richiesta::ApriCon, apertura::Sorgente::File(file), dove, cerca, None);
     }
 
     /// Un documento toccato nel navigatore.
     fn apri_file(&mut self, percorso: &Path, nome: &str) {
-        let chiave = percorso.to_str().map(str::to_string);
-        let origine = Origine::File(percorso.to_path_buf());
-        if let Err(e) = self.apri_documento(Da::Cartella, |_| leggi_file(percorso), nome, chiave, origine) {
-            self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
-        }
+        let dove = apertura::Dove { nome: nome.to_string(), chiave: percorso.to_str().map(str::to_string), origine: Origine::File(percorso.to_path_buf()) };
+        self.avvia_apertura(Da::Cartella, apertura::Richiesta::Cartella, apertura::Sorgente::Percorso(percorso.to_path_buf()), dove, None, None);
     }
 
     /// Un recente toccato nella Home. Un URI che non si legge più (il permesso di un «Apri con»
@@ -1637,46 +1586,33 @@ impl TascabileApp {
     /// subito dopo un aggiornamento dell'app (segnalato dall'autore il 1/11: i file «non esistevano
     /// più» e al tocco dopo si aprivano). Si riprova dopo un attimo, e lo si toglie dal suo menu.
     fn apri_recente(&mut self, r: Recente) {
-        let uri = home::e_uri(&r.chiave);
-        let esito = if uri {
-            let origine = Origine::Uri { uri: r.chiave.clone(), nome: r.nome.clone() };
-            self.apri_documento(Da::Recenti, |p| p.read_uri(&r.chiave), &r.nome, Some(r.chiave.clone()), origine)
-        } else {
-            let origine = Origine::File(PathBuf::from(&r.chiave));
-            let leggi = |_: &Piattaforma| {
-                leggi_file(Path::new(&r.chiave)).or_else(|e| {
-                    if e.genere != "NotFound" {
-                        return Err(e);
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(250));
-                    leggi_file(Path::new(&r.chiave))
-                })
-            };
-            self.apri_documento(Da::Recenti, leggi, &r.nome, Some(r.chiave.clone()), origine)
+        // Con l'accesso ai file e l'impronta, un recente che non è più al suo posto si cerca
+        // altrove dai suoi byte (`apertura`, `tascabile_files::cerca_per_impronta`).
+        let ritrova = || match (&r.impronta, self.home.accesso()) {
+            (Some(impronta), true) => Some(apertura::Ritrova { radice: self.piattaforma.radice_archivio(), impronta: impronta.clone() }),
+            _ => None,
         };
-        let Err(e) = esito else { return };
-        if uri && non_si_apre_piu(&e.genere) {
-            self.home.dimentica(&r.chiave);
-            diagnosi("recenti: tolto un documento arrivato da un'altra app, che non si apre più");
-            let mut messaggio = match home::provenienza(&r.chiave) {
-                Some(app) => format!("Non si apre più: riaprilo da {app}."),
-                None => "Non si apre più: riaprilo dall'app da cui era arrivato.".to_string(),
-            };
-            // Un file con lo stesso nome nelle cartelle del telefono si dice, non si apre: può
-            // essere un altro documento, e Salva ci scriverebbe sopra (revisione del 3/11, M3).
-            if self.home.accesso()
-                && let Some(cartella) = tascabile_files::cartella_dell_omonimo(&self.piattaforma.radice_archivio(), &r.nome)
-            {
-                diagnosi("recenti: un file con lo stesso nome nelle cartelle del telefono, detto e non aperto");
-                messaggio.push_str(&format!(" In «{cartella}» c'è un file con lo stesso nome: se è lui, aprilo da lì."));
+        let (sorgente, origine) = if home::e_uri(&r.chiave) {
+            let origine = Origine::Uri { uri: r.chiave.clone(), nome: r.nome.clone() };
+            match self.piattaforma.apri_uri(&r.chiave) {
+                Ok(file) => (apertura::Sorgente::File(file), origine),
+                Err(e) => {
+                    let tipo = documento::estensione_nota(&r.nome).unwrap_or_else(|| "sconosciuto".to_string());
+                    Da::Recenti.scrivi(format!("{}: errore di lettura ({}), tipo {tipo}", Da::Recenti.etichetta(), e.genere));
+                    // Il permesso è scaduto: senza impronta o senza accesso non c'è altro da fare.
+                    if !(non_si_apre_piu(&e.genere) && ritrova().is_some()) {
+                        self.recente_non_letto(r, e);
+                        return;
+                    }
+                    (apertura::Sorgente::Nessuna(e), origine)
+                }
             }
-            self.errore = Some(Errore::apertura(messaggio));
-        } else if !uri && e.genere == "NotFound" {
-            diagnosi("recenti: file non trovato, lasciato nei recenti");
-            self.errore = Some(Errore::apertura(NON_TROVATO));
         } else {
-            self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
-        }
+            (apertura::Sorgente::Percorso(PathBuf::from(&r.chiave)), Origine::File(PathBuf::from(&r.chiave)))
+        };
+        let ritrova = ritrova();
+        let dove = apertura::Dove { nome: r.nome.clone(), chiave: Some(r.chiave.clone()), origine };
+        self.avvia_apertura(Da::Recenti, apertura::Richiesta::Recente(r), sorgente, dove, None, ritrova);
     }
 
     fn azione_della_home(&mut self, azione: Azione) {
@@ -1687,6 +1623,7 @@ impl TascabileApp {
             Azione::ApriFile { percorso, nome } => self.apri_file(&percorso, &nome),
             Azione::ApriRecente(r) => self.apri_recente(r),
             Azione::CondividiRecente(r) => self.condividi_recente(&r),
+            Azione::Rinomina { chiave, nome } => self.apri_rinomina(&chiave, &nome),
             Azione::ConcediAccesso => self.piattaforma.chiedi_accesso_file(),
             Azione::Impostazioni => self.vai(Schermata::Impostazioni),
             Azione::Cerca => self.fuoco_alla_ricerca(),
@@ -1728,7 +1665,7 @@ impl TascabileApp {
             Scelta::CondividiDiagnosi => self.piattaforma.condividi_testo(&diagnosi_testo(), &format!("Diagnosi di {NOME_APP}")),
             Scelta::Checklist => self.apri_checklist(),
             Scelta::Lungo => self.apri_lungo(),
-            Scelta::CancellaFirma => self.cancella_firma_salvata(),
+            Scelta::LeMieFirme => self.apri_le_mie_firme(),
             Scelta::Autore => {
                 diagnosi("impostazioni: autore aperto");
                 self.impostazioni.campo_autore = CampoTesto::new().con_testo(&self.impostazioni.autore);
@@ -1900,6 +1837,12 @@ impl TascabileApp {
                 return false;
             }
         };
+        // I byte del file sono altri: il suo recente prende la loro impronta, letta dal file
+        // scritto (revisione del 10/11; prima restava quella dell'apertura).
+        let mut impronta = match r.come {
+            salva::Come::SulFile | salva::Come::ComeDocx | salva::Come::Copia => tascabile_files::ImprontaFile::del_file(&r.percorso).ok(),
+            salva::Come::Pdf | salva::Come::Condivisione => None,
+        };
         // Un file nuovo (la copia, il .docx al posto di un .doc) diventa il documento: nome nella
         // testata e nei recenti al posto di quello di prima, se era arrivato da un'altra app.
         if matches!(r.come, salva::Come::Copia | salva::Come::ComeDocx) {
@@ -1911,10 +1854,16 @@ impl TascabileApp {
             }
             match r.percorso.to_str() {
                 Some(chiave) => {
-                    self.home.ricorda(Recente { chiave: chiave.to_string(), tipo: tipo_da_nome(&nome), nome, aperto_alle: adesso(), pagine: None })
+                    let impronta = impronta.take();
+                    self.home.ricorda(Recente { chiave: chiave.to_string(), tipo: tipo_da_nome(&nome), nome, aperto_alle: adesso(), pagine: None, impronta })
                 }
                 None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
             }
+        }
+        if r.come == salva::Come::SulFile
+            && let (Some(chiave), Some(impronta)) = (r.percorso.to_str(), impronta.take())
+        {
+            self.home.impronta_salvata(chiave, impronta);
         }
         if let Some(a) = self.aperto.as_mut()
             && !a.editor.s.dirty
@@ -1926,28 +1875,48 @@ impl TascabileApp {
             salva::Come::SulFile => self.avviso_breve.avvisa("Salvato"),
             salva::Come::ComeDocx => self.avviso_breve.avvisa(format!("Salvato come documento Word nella stessa cartella: {}", file_di(&r))),
             salva::Come::Copia if comando == Comando::SalvaCopia => {
-                self.avviso_breve.avvisa(format!("Copia salvata in Documenti/Tascabile: {}", file_di(&r)));
+                self.avvisa_col_condividi(format!("Copia salvata in Documents/Tascabile: {}", file_di(&r)), &r.percorso);
             }
-            salva::Come::Copia => self.avviso_breve.avvisa(format!("Salvato in Documenti/Tascabile: {}", file_di(&r))),
-            salva::Come::Pdf => {
-                self.avviso_breve.avvisa_con_azione(format!("PDF pronto in Documenti/Tascabile: {}", file_di(&r)), CONDIVIDI_PDF);
-                self.pdf_pronto = Some(r.percorso.clone());
-            }
+            salva::Come::Copia => self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {}", file_di(&r)), &r.percorso),
+            salva::Come::Pdf => self.avvisa_col_condividi(format!("PDF pronto in Documents/Tascabile: {}", file_di(&r)), &r.percorso),
             // Il foglio di condivisione del sistema è già l'esito.
             salva::Come::Condivisione => self.piattaforma.condividi_file(&r.percorso, salva::mime(&r.tipo), "Condividi il documento"),
         }
         true
     }
 
-    /// «Condividi il PDF» dopo «Esporta PDF»: il PDF va in una sottocartella nuova di `condivisi/`
-    /// e al foglio di sistema.
-    fn condividi_pdf(&mut self) {
-        let Some(pdf) = self.pdf_pronto.take() else { return };
-        let esito = salva::copia_in_condivisi(&pdf, &self.piattaforma.cartella_cache());
-        scrivi_esito("condividi pdf", "pdf", &esito);
+    /// L'avviso breve di un file nuovo, con «Condividi» per mandarlo subito (segnalazione
+    /// dell'autore del 10/11: le copie «si deve avere la possibilità di condividerle subito»).
+    pub(crate) fn avvisa_col_condividi(&mut self, testo: impl Into<String>, file: &Path) {
+        self.avviso_breve.avvisa_con_azione(testo, CONDIVIDI_SUBITO);
+        self.pronto_da_condividere = Some(file.to_path_buf());
+    }
+
+    /// Per le prove a schermo: c'è un file appena scritto che l'avviso offre di condividere.
+    #[doc(hidden)]
+    pub fn c_e_da_condividere(&self) -> bool {
+        self.pronto_da_condividere.is_some()
+    }
+
+    /// «Condividi» toccato nell'avviso breve: parte il file che l'avviso diceva.
+    fn condividi_subito(&mut self) {
+        if let Some(file) = self.pronto_da_condividere.take() {
+            self.condividi_il_file(&file);
+        }
+    }
+
+    /// Un file appena scritto, com'è sul disco, in una sottocartella nuova di `condivisi/` e al
+    /// foglio di sistema. Nella diagnosi tipo e misura, mai il nome.
+    pub(crate) fn condividi_il_file(&mut self, file: &Path) {
+        let tipo = file.file_name().and_then(|n| documento::estensione_nota(&n.to_string_lossy())).unwrap_or_else(|| "sconosciuto".to_string());
+        let esito = salva::copia_in_condivisi(file, &self.piattaforma.cartella_cache());
+        scrivi_esito("condividi subito", &tipo, &esito);
         match esito {
-            Ok(r) => self.piattaforma.condividi_file(&r.percorso, "application/pdf", "Condividi il PDF"),
-            Err(e) => self.errore = Some(Errore { titolo: NON_CONDIVISO, testo: format!("Non riesco a condividere il PDF: {e}") }),
+            Ok(r) => {
+                let titolo = if r.tipo == "pdf" { "Condividi il PDF" } else { "Condividi il documento" };
+                self.piattaforma.condividi_file(&r.percorso, salva::mime(&r.tipo), titolo);
+            }
+            Err(e) => self.errore = Some(Errore { titolo: NON_CONDIVISO, testo: format!("Non riesco a condividere il file: {e}") }),
         }
     }
 
@@ -2179,6 +2148,7 @@ impl TascabileApp {
         self.passo_apertura_pdf();
         self.passo_apertura_slide();
         self.passo_apertura_foglio();
+        self.passo_apertura_documento();
         self.passo_pdf_slide();
         self.passo_motore_pdf();
         self.passo_copia_pdf(ctx);
@@ -2274,6 +2244,8 @@ impl TascabileApp {
     fn invio_nel_campo(&mut self) {
         if self.password_pdf.is_some() {
             self.apri_con_la_password();
+        } else if self.rinomina.aperto() {
+            self.conferma_rinomina();
         } else if self.schermata == Schermata::Home {
             self.fuoco_al_documento();
             self.piattaforma.hide_keyboard();
@@ -2377,6 +2349,9 @@ impl TascabileApp {
         self.mostra_apertura_pdf(ui.ctx());
         self.mostra_apertura_slide(ui.ctx());
         self.mostra_apertura_foglio(ui.ctx());
+        self.mostra_apertura_documento(ui.ctx());
+        self.mostra_rinomina(ui.ctx());
+        self.mostra_le_mie_firme(ui.ctx());
         self.mostra_password_pdf(ui.ctx());
         if self.dialogo.is_some() {
             self.mostra_dialogo(ui.ctx());
@@ -2384,7 +2359,7 @@ impl TascabileApp {
         self.mostra_errore(ui.ctx());
         let fondo = self.fondo_degli_avvisi(ui.ctx());
         if self.avviso_breve.mostra(ui.ctx(), fondo) {
-            self.condividi_pdf();
+            self.condividi_subito();
         }
         if self.avvio_home_ms.is_none() {
             let ms = self.avvio.elapsed().as_secs_f32() * 1000.0;
@@ -2616,6 +2591,15 @@ mod test {
     fn passo(app: &mut TascabileApp, ctx: &egui::Context, eventi: Vec<egui::Event>) {
         let mut out = ctx.run_ui(egui::RawInput { events: eventi, ..Default::default() }, |ui| app.passo_logica(ui.ctx()));
         out.textures_delta.clear();
+        // Un documento che si apre sul suo thread (`apertura`): si aspetta che arrivi, come farebbe
+        // chi guarda lo schermo.
+        let fine = Instant::now() + Duration::from_secs(20);
+        while app.documento_in_apertura() {
+            assert!(Instant::now() < fine, "il documento non si è aperto in 20 s");
+            std::thread::sleep(Duration::from_millis(5));
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| app.passo_logica(ui.ctx()));
+            out.textures_delta.clear();
+        }
     }
 
     fn tasto(key: egui::Key) -> egui::Event {
@@ -2659,6 +2643,10 @@ mod test {
     fn tocca(h: &mut Telefono, etichetta: &str) {
         h.get_by_role_and_label(Role::Button, etichetta).click();
         h.run_steps(2);
+        // Un tocco che apre un documento: si aspetta che arrivi.
+        if h.state().documento_in_apertura() {
+            aspetta_l_apertura(h);
+        }
     }
 
     /// Dalla Home, «Nuovo» e poi «Documento» nel foglio che sale.
@@ -3135,6 +3123,7 @@ mod test {
         std::fs::write(&percorso, tascabile_pdf::prova::pdf(&pagine)).unwrap();
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
         h.state_mut().apri_file(&percorso, "Verbale Zanzibar.pdf");
+        aspetta_l_apertura(&mut h);
         let fine = Instant::now() + Duration::from_secs(20);
         while h.state().schermata != Schermata::Pdf {
             assert!(Instant::now() < fine, "il lettore non si è aperto");
@@ -3180,6 +3169,19 @@ mod test {
     }
 
     /// Passi finché il lettore non è aperto e non aspetta più niente dal pool, al massimo 20 s.
+    /// Passi finché il documento che si apre sul suo thread (`apertura`) non è arrivato, al
+    /// massimo 20 s.
+    fn aspetta_l_apertura(h: &mut Telefono) {
+        let fine = Instant::now() + Duration::from_secs(20);
+        h.step();
+        while h.state().documento_in_apertura() {
+            assert!(Instant::now() < fine, "il documento non si è aperto in 20 s");
+            std::thread::sleep(Duration::from_millis(5));
+            h.step();
+        }
+        h.run_steps(2);
+    }
+
     fn aspetta_il_lettore(h: &mut Telefono) {
         let fine = Instant::now() + Duration::from_secs(20);
         h.step();
@@ -3207,7 +3209,7 @@ mod test {
     fn aspetta_le_slide(h: &mut Telefono) {
         let fine = Instant::now() + Duration::from_secs(20);
         h.step();
-        while h.state().slide_in_apertura() {
+        while h.state().slide_in_apertura() || h.state().documento_in_apertura() {
             assert!(Instant::now() < fine, "la presentazione non si è aperta in 20 s");
             std::thread::sleep(Duration::from_millis(5));
             h.step();
@@ -3230,7 +3232,7 @@ mod test {
     fn aspetta_il_foglio(h: &mut Telefono) {
         let fine = Instant::now() + Duration::from_secs(20);
         h.step();
-        while h.state().foglio_in_apertura() {
+        while h.state().foglio_in_apertura() || h.state().documento_in_apertura() {
             assert!(Instant::now() < fine, "il foglio di calcolo non si è aperto in 20 s");
             std::thread::sleep(Duration::from_millis(5));
             h.step();
@@ -3316,13 +3318,15 @@ mod test {
         indietro(&mut h);
         h.run_steps(2);
         assert_eq!(h.state().schermata, Schermata::Home);
+        // Prima si legge il file (`apertura`), poi il foglio si apre sul suo thread: Indietro
+        // lascia andare l'una o l'altro.
         h.state_mut().apri_file(&senza_nome, "allegato");
-        assert!(h.state().foglio_in_apertura());
+        assert!(h.state().documento_in_apertura());
         indietro(&mut h);
-        assert!(!h.state().foglio_in_apertura());
+        assert!(!h.state().documento_in_apertura() && !h.state().foglio_in_apertura());
         h.run_steps(5);
         assert_eq!(h.state().schermata, Schermata::Home);
-        assert!(diagnosi_della_prova().contains("] indietro: apertura del foglio di calcolo annullata\n"));
+        assert!(diagnosi_della_prova().contains("] indietro: apertura del documento annullata\n"));
     }
 
     #[test]
@@ -3588,7 +3592,7 @@ mod test {
         std::fs::write(&percorso, wordcraft_engine::io::save_bytes("prova.docx", &s.doc).unwrap()).unwrap();
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
         h.state_mut().apri_file(&percorso, "Verbale Zanzibar.docx");
-        h.run_steps(3);
+        aspetta_l_apertura(&mut h);
         h.get_by_label(tascabile_word::editor::PROTETTO_SOLA_LETTURA);
     }
 
@@ -3623,8 +3627,8 @@ mod test {
         aspetta_il_pdf_delle_slide(&mut h);
         let pdf = dir.join("radice/Documents/Tascabile/Lezione Zanzibar.pdf");
         assert_eq!(tascabile_pdf::Pdf::apri(std::fs::read(&pdf).unwrap(), None).unwrap().pagine(), 3);
-        h.get_by_label("PDF pronto in Documenti/Tascabile: Lezione Zanzibar.pdf");
-        tocca(&mut h, CONDIVIDI_PDF);
+        h.get_by_label("PDF pronto in Documents/Tascabile: Lezione Zanzibar.pdf");
+        tocca(&mut h, CONDIVIDI_SUBITO);
         assert!(dir.join("cache/condivisi").exists());
         // Con le note: un altro file, accanto.
         dal_menu_delle_slide(&mut h, schermo_slide::PDF_CON_NOTE);
@@ -3655,7 +3659,7 @@ mod test {
         assert_eq!(h.state().slide_presentata(), None);
         dal_menu_delle_slide(&mut h, schermo_slide::ESPORTA_PDF);
         aspetta_il_pdf_delle_slide(&mut h);
-        h.get_by_label("PDF pronto in Documenti/Tascabile: Quattro terzi.pdf");
+        h.get_by_label("PDF pronto in Documents/Tascabile: Quattro terzi.pdf");
         // Tutte nascoste: si leggono velate, si presenta dall'inizio (la prima, nascosta), il PDF
         // dice perché non si fa.
         let mut h = telefono_col_file("slide-nascoste", "Nascoste.pptx", tascabile_slide::prova::TUTTE_NASCOSTE);
@@ -3930,7 +3934,7 @@ mod test {
         assert!(!d.contains("Zanzibar") && !d.contains("prove-app"), "{d}");
     }
 
-    /// Un PDF arrivato con «Apri con» si salva in una copia in Documenti/Tascabile, che diventa il
+    /// Un PDF arrivato con «Apri con» si salva in una copia in Documents/Tascabile, che diventa il
     /// documento; l'originale resta com'è. Condividi dà i byte con le modifiche senza salvarle.
     #[test]
     fn un_pdf_arrivato_da_un_altra_app_si_salva_in_una_copia() {
@@ -3950,14 +3954,14 @@ mod test {
         let condiviso = std::fs::read_dir(dir.join("cache/condivisi")).unwrap().flatten().next().unwrap().path().join("Referto Zanzibar.pdf");
         assert_eq!(tascabile_pdf::Pdf::apri(std::fs::read(&condiviso).unwrap(), None).unwrap().misura(0).unwrap().larghezza, 842.0);
         assert_eq!(h.state().pdf_modificato(), Some(true));
-        // Salva: una copia in Documenti/Tascabile, col nome del PDF.
+        // Salva: una copia in Documents/Tascabile, col nome del PDF.
         tocca(&mut h, schermo_pdf::MENU);
         tocca(&mut h, pdf_lavoro::SALVA);
         aspetta_il_motore(&mut h);
         let copia = dir.join("radice/Documents/Tascabile/Referto Zanzibar.pdf");
         assert_eq!(tascabile_pdf::Pdf::apri(std::fs::read(&copia).unwrap(), None).unwrap().misura(0).unwrap().larghezza, 842.0);
         assert_eq!(std::fs::read(&arrivato).unwrap(), byte, "l'originale è cambiato");
-        h.get_by_label("Salvato in Documenti/Tascabile: Referto Zanzibar.pdf");
+        h.get_by_label("Salvato in Documents/Tascabile: Referto Zanzibar.pdf");
         assert_eq!(h.state().home.recenti()[0].chiave, copia.to_str().unwrap());
         // Da qui Salva scrive sulla copia, ed è un altro giro: «Salva una copia» ne fa un'altra.
         ruota_dagli_strumenti(&mut h);
@@ -3972,7 +3976,7 @@ mod test {
         tocca(&mut h, pdf_lavoro::SALVA_COPIA);
         aspetta_il_motore(&mut h);
         assert!(dir.join("radice/Documents/Tascabile/Referto Zanzibar (2).pdf").exists());
-        h.get_by_label("Copia salvata in Documenti/Tascabile: Referto Zanzibar (2).pdf");
+        h.get_by_label("Copia salvata in Documents/Tascabile: Referto Zanzibar (2).pdf");
         let d = diagnosi_della_prova();
         assert!(d.contains("] condividi pdf aperto: riuscito, tipo pdf, ") && d.contains("] salva una copia pdf: riuscito, tipo pdf, "), "{d}");
         assert!(!d.contains("Zanzibar"), "{d}");
@@ -4212,14 +4216,17 @@ mod test {
         aspetta_il_motore(&mut h);
         let misure = h.state().misure_del_pdf();
         assert_eq!((misure.len(), misure[1]), (5, misure[0]));
-        // Le prime due estratte in un PDF nuovo in Documenti/Tascabile.
+        // Le prime due estratte in un PDF nuovo in Documents/Tascabile.
         tocca_pagina(&mut h, 1);
         assert_eq!(h.state().pagine_scelte(), Some(vec![0, 1]));
         tocca(&mut h, pdf_pagine::ESTRAI);
         aspetta_il_lavoro(&mut h);
         let estratto = dir.join("radice/Documents/Tascabile/Lettera Zanzibar pagine 1-2.pdf");
         assert_eq!(ordine_delle_pagine(std::fs::read(&estratto).unwrap(), None), ["Pagina 4", ""]);
-        h.get_by_label_contains("Salvato in Documenti/Tascabile: Lettera Zanzibar pagine 1-2.pdf");
+        h.get_by_label_contains("Salvato in Documents/Tascabile: Lettera Zanzibar pagine 1-2.pdf");
+        // Il file nuovo si condivide subito dall'avviso (10/11).
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        assert!(condiviso_uguale(&dir, "Lettera Zanzibar pagine 1-2.pdf", &estratto), "{:?}", i_condivisi(&dir));
         // Annulla nella barra della griglia: la pagina bianca se ne va.
         tocca(&mut h, pdf_lavoro::ANNULLA_MODIFICA);
         aspetta_il_motore(&mut h);
@@ -4245,7 +4252,7 @@ mod test {
         assert!(!d.contains("Zanzibar") && !d.contains("prove-app"), "{d}");
     }
 
-    /// Unisci (da Documenti/Tascabile e dalla scelta dei file), Dividi per intervalli, Comprimi
+    /// Unisci (da Documents/Tascabile e dalla scelta dei file), Dividi per intervalli, Comprimi
     /// su una copia, Proteggi con la password e Togli la protezione, Salva pulito: col motore vero.
     /// La password non va mai nella diagnosi.
     #[test]
@@ -4328,6 +4335,7 @@ mod test {
         let foto = dir.join("radice/Foto Zanzibar.pdf");
         std::fs::write(&foto, tascabile_pdf::prova::pdf_con_foto()).unwrap();
         h.state_mut().apri_file(&foto, "Foto Zanzibar.pdf");
+        aspetta_l_apertura(&mut h);
         finche(&mut h, "il PDF della foto", |h| h.state().misure_del_pdf().len() == 1);
         aspetta_il_lettore(&mut h);
         dagli_strumenti(&mut h, pdf_pagine::COMPRIMI);
@@ -4335,10 +4343,13 @@ mod test {
         tocca(&mut h, "Media · Come «Riduci dimensioni» di Acrobat");
         aspetta_il_lavoro(&mut h);
         h.get_by_label(pdf_pagine::PDF_COMPRESSO);
-        h.get_by_label_contains("in meno. La copia è in Documenti/Tascabile: «Foto Zanzibar compresso.pdf»");
+        h.get_by_label_contains("in meno. La copia è in Documents/Tascabile: «Foto Zanzibar compresso.pdf»");
         let compresso = std::fs::read(tascabile.join("Foto Zanzibar compresso.pdf")).unwrap();
         assert!(compresso.len() < std::fs::read(&foto).unwrap().len());
-        tocca(&mut h, "Ho capito");
+        // La copia compressa si condivide subito dal dialogo (10/11), che poi si chiude.
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        assert!(condiviso_uguale(&dir, "Foto Zanzibar compresso.pdf", &tascabile.join("Foto Zanzibar compresso.pdf")), "{:?}", i_condivisi(&dir));
+        assert!(h.query_by_label(pdf_pagine::PDF_COMPRESSO).is_none(), "il dialogo è rimasto");
         let d = diagnosi_della_prova();
         for riga in [
             "] pdf: unisci 1 pagina in fondo\n",
@@ -4682,7 +4693,7 @@ mod test {
     /// scorrere la pagina, la gomma toglie il tratto; una nota col testo scritto, riletta nel suo
     /// foglio e riscritta; un testo libero, scelto e tolto, Annulla lo rimette. L'autore viene
     /// dalle Impostazioni. Salvato e riaperto, il PDF ha tutto; la copia definitiva (il foglio
-    /// spiega prima che cosa fa) in Documenti/Tascabile non ha più annotazioni, e il documento
+    /// spiega prima che cosa fa) in Documents/Tascabile non ha più annotazioni, e il documento
     /// resta com'era. Nella diagnosi nessun testo né l'autore.
     #[test]
     fn annotare_un_pdf_e_farne_la_copia_definitiva() {
@@ -4786,7 +4797,10 @@ mod test {
         aspetta_il_motore(&mut h);
         assert!(definitiva.is_file(), "{}", diagnosi_della_prova());
         assert!(tascabile_pdf::Pdf::apri(std::fs::read(&definitiva).unwrap(), None).unwrap().annotazioni().is_empty());
-        h.get_by_label_contains("Copia definitiva in Documenti/Tascabile: Lettera Zanzibar definitivo.pdf");
+        // Il dialogo dice dov'è; chiuso, si torna al PDF di prima.
+        h.get_by_label(schermo_pdf::COPIA_PRONTA);
+        h.get_by_label_contains("«Lettera Zanzibar definitivo.pdf» è nella memoria del telefono, in Documents/Tascabile");
+        tocca(&mut h, schermo_pdf::CHIUDI);
         assert_eq!(h.state().pdf_modificato(), Some(true));
         assert_eq!(annotazioni_pdf(&h).len(), 3);
         // Salva e riapri: le tre annotazioni con l'autore.
@@ -5309,21 +5323,89 @@ mod test {
         let piattaforma = Piattaforma::con_cartelle(dir.join("app"), dir.join("cache"), dir.join("radice"));
         let mut altra = telefono(TascabileApp::new(piattaforma, Instant::now()));
         assert!(matches!(altra.state_mut().firme().di(false), Some(tascabile_pdf::Firma::Tratti(d)) if d.tratti.len() == 2));
-        dalle_impostazioni(&mut altra, impostazioni::CANCELLA_FIRMA);
+        dalle_impostazioni(&mut altra, impostazioni::LE_MIE_FIRME);
+        altra.run_steps(4);
+        tocca(&mut altra, "Elimina Firma");
+        altra.run_steps(2);
+        altra.get_by_label(le_mie_firme::ELIMINARE_QUESTA);
+        tocca(&mut altra, le_mie_firme::ELIMINA);
+        altra.run_steps(2);
         assert!(!dir.join("app/firme/firma.txt").exists() && !altra.state_mut().firme().qualcuna());
         altra.run_steps(2);
-        assert!(altra.query_by_label(impostazioni::CANCELLA_FIRMA).is_none());
+        assert!(altra.query_by_label(impostazioni::LE_MIE_FIRME).is_none());
         let d = diagnosi_della_prova();
         for riga in [
             "] pdf: campo firma toccato nella pagina 1\n",
             "] pdf: firma col dito fatta, 2 tratti,",
             "] firma: firma salvata, Tratti(2 tratti, stilografica, nero)\n",
             "] pdf: firma posate, col dito, nella pagina 1\n",
-            "] firma: firma e iniziali salvate cancellate\n",
+            "] firma: una salvata eliminata, ne restano 0\n",
         ] {
             assert!(d.contains(riga), "manca «{riga}»:\n{d}");
         }
         assert!(!d.contains("Zanzibar") && !d.contains("firme/"), "{d}");
+    }
+
+    /// Segnalazione dell'autore del 7/11: «se sovrapposta la firma comunque risulta 1 e non 2».
+    /// Con una firma da posare dove si tocca, il tocco sopra una firma già messa sceglieva quella
+    /// vecchia e la nuova restava in attesa. Ora il tocco la posa dovunque, anche sopra un'altra
+    /// firma o un campo, e salvato il PDF le firme sono due.
+    #[test]
+    fn una_firma_si_posa_anche_sopra_un_altra() {
+        let (piattaforma, dir) = piattaforma_di_prova("pdf-firme-sovrapposte");
+        let percorso = dir.join("radice/Modulo Zanzibar.pdf");
+        std::fs::write(&percorso, tascabile_pdf::prova::modulo_da_compilare()).unwrap();
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&percorso, "Modulo Zanzibar.pdf");
+        aspetta_il_lettore(&mut h);
+        tocca(&mut h, "Firma del paziente o del tutore");
+        h.run_steps(6);
+        tocca(&mut h, pdf_firma::FIRMA_COL_DITO);
+        h.run_steps(2);
+        firma_col_dito(&mut h, egui::pos2(60.0, 400.0));
+        tocca(&mut h, pdf_firma::FATTO);
+        aspetta_il_motore(&mut h);
+        let segni = |h: &Telefono| h.state().pdf.as_ref().unwrap().motore.stato().segni.clone();
+        assert_eq!(segni(&h).len(), 1);
+        let s = segni(&h)[0].clone();
+        let c = [(s.rettangolo[0] + s.rettangolo[2]) / 2.0, (s.rettangolo[1] + s.rettangolo[3]) / 2.0];
+        let sopra = h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(s.pagina, [c[0], c[1], c[0], c[1]]).unwrap().center();
+        // La seconda dagli Strumenti, toccando proprio sopra la prima (che è ancora scelta).
+        dagli_strumenti(&mut h, pdf_firma::FIRMA);
+        h.run_steps(6);
+        tocca(&mut h, pdf_firma::METTI_LA_FIRMA);
+        h.run_steps(4);
+        tocca_in(&mut h, sopra);
+        h.run_steps(6);
+        aspetta_il_motore(&mut h);
+        assert_eq!(segni(&h).len(), 2, "la seconda firma non si è posata sopra la prima");
+        assert!(h.state().pdf.as_ref().unwrap().compila.firma.da_toccare.is_none());
+        // La terza sopra un campo di testo: anche lì la firma, non la scrittura nel campo.
+        let campo = h.state().pdf.as_ref().unwrap().motore.stato().campi.iter().find(|c| c.genere == tascabile_pdf::GenereCampo::Testo).unwrap().posti[0].clone();
+        let r = campo.rettangolo;
+        let sul_campo = h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(campo.pagina, [r[0] + 4.0, r[1] + 2.0, r[0] + 4.0, r[1] + 2.0]).unwrap().center();
+        dagli_strumenti(&mut h, pdf_firma::FIRMA);
+        h.run_steps(6);
+        tocca(&mut h, pdf_firma::METTI_LA_FIRMA);
+        h.run_steps(4);
+        tocca_in(&mut h, sul_campo);
+        h.run_steps(6);
+        aspetta_il_motore(&mut h);
+        assert_eq!(segni(&h).len(), 3, "la firma non si è posata sopra il campo");
+        assert!(h.state().pdf.as_ref().unwrap().compila.scrittura.is_none(), "il tocco ha aperto la scrittura nel campo");
+        // Salvato e riletto, le firme sono tre.
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, pdf_lavoro::SALVA);
+        aspetta_il_motore(&mut h);
+        let lette = tascabile_pdf::Pdf::apri(std::fs::read(&percorso).unwrap(), None).unwrap().segni();
+        assert_eq!(lette.iter().filter(|s| s.genere == tascabile_pdf::GenereSegno::Firma).count(), 3);
+        // Le Informazioni le contano a parte dalle digitali.
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, schermo_pdf::INFORMAZIONI);
+        h.run_steps(4);
+        h.get_by_label(schermo_pdf::FIRME_A_MANO);
+        h.get_by_label("3 firme");
+        h.get_by_label("Firme digitali");
     }
 
     /// Revisione del 31/10, punto 3: una firma nuova che non si riesce a salvare si posa lo stesso,
@@ -5366,17 +5448,20 @@ mod test {
         aspetta_il_motore(&mut h);
         let dopo = proporzione(&h);
         assert!(prima > dopo * 1.5, "si è posata la firma salvata prima: proporzioni {prima} e {dopo}");
-        // C'era una firma salvata: si chiede se sostituirla, e il salvataggio non riesce.
-        tocca(&mut h, pdf_firma::SALVA_LA_NUOVA);
+        // C'era una firma salvata: si chiede se aggiungere la nuova, e il salvataggio non riesce
+        // (al posto del file libero dopo, una cartella).
+        std::fs::create_dir(dir.join("app/firme/firma-2.txt")).unwrap();
+        tocca(&mut h, pdf_firma::SALVALA);
         assert!(diagnosi_della_prova().contains("] firma: firma non salvata ("));
     }
 
     /// Revisione del 31/10, punto 3: con una firma già salvata, la nuova va sul documento e poi si
-    /// chiede se salvarla al posto di quella; «Tieni quella di prima» la lascia, «Salva la nuova» la
-    /// cambia. Un collega col telefono in mano non sostituisce più la firma di chi usa l'app senza domande.
+    /// chiede se aggiungerla a «Le mie firme» (0.9.7; prima sostituiva la salvata): «Solo qui» la
+    /// lascia solo sul documento, «Salvala» la aggiunge accanto, senza toccare la prima. Un collega
+    /// col telefono in mano non finisce fra le firme di chi usa l'app senza domande.
     #[test]
-    fn prima_di_sostituire_la_firma_salvata_si_chiede() {
-        let (piattaforma, dir) = piattaforma_di_prova("pdf-firma-sostituita");
+    fn prima_di_aggiungere_una_firma_salvata_si_chiede() {
+        let (piattaforma, dir) = piattaforma_di_prova("pdf-firma-aggiunta");
         let percorso = dir.join("radice/Consenso Zanzibar.pdf");
         std::fs::write(&percorso, tascabile_pdf::prova::modulo_da_compilare()).unwrap();
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
@@ -5398,25 +5483,141 @@ mod test {
         firma_nuova(&mut h, &[egui::pos2(60.0, 400.0)]);
         assert!(h.query_by_label(pdf_firma::SALVARE_LA_NUOVA).is_none());
         let salvata = dir.join("app/firme/firma.txt");
+        let seconda = dir.join("app/firme/firma-2.txt");
         let prima = std::fs::read(&salvata).unwrap();
         tocca(&mut h, pdf_lavoro::ANNULLA_MODIFICA);
         aspetta_il_motore(&mut h);
-        // La seconda va sul documento; la salvata resta, se si sceglie così.
+        // La seconda va sul documento; «Solo qui» non la salva.
         firma_nuova(&mut h, &[egui::pos2(60.0, 300.0), egui::pos2(60.0, 600.0)]);
         h.get_by_label(pdf_firma::SALVARE_LA_NUOVA);
         assert_eq!(h.state().pdf.as_ref().unwrap().motore.stato().segni.len(), 1);
-        tocca(&mut h, pdf_firma::TIENI_QUELLA_DI_PRIMA);
+        tocca(&mut h, pdf_firma::SOLO_QUI);
         assert_eq!(std::fs::read(&salvata).unwrap(), prima);
+        assert!(!seconda.exists());
         tocca(&mut h, pdf_lavoro::ANNULLA_MODIFICA);
         aspetta_il_motore(&mut h);
-        // La terza prende il suo posto.
+        // La terza si aggiunge accanto alla prima, che resta com'era.
         firma_nuova(&mut h, &[egui::pos2(60.0, 300.0), egui::pos2(60.0, 600.0)]);
-        tocca(&mut h, pdf_firma::SALVA_LA_NUOVA);
-        assert_ne!(std::fs::read(&salvata).unwrap(), prima);
+        tocca(&mut h, pdf_firma::SALVALA);
+        assert_eq!(std::fs::read(&salvata).unwrap(), prima);
+        assert!(seconda.exists());
+        assert_eq!(h.state_mut().firme().voci().len(), 2);
         let d = diagnosi_della_prova();
-        for riga in ["] firma: firma nuova, si chiede se sostituire la salvata\n", "] firma: firma salvata lasciata com'era\n"] {
+        for riga in ["] firma: firma nuova, si chiede se aggiungerla alle salvate\n", "] firma: firma nuova solo sul documento\n"] {
             assert!(d.contains(riga), "manca «{riga}»:\n{d}");
         }
+    }
+
+    /// Segnalazione dell'autore del 7/11: «manca un gestionale firme, non si può eliminare una firma
+    /// se salvata». «Le mie firme»: più firme salvate, ognuna nel foglio della firma per metterla;
+    /// dal foglio, o dalle Impostazioni, si eliminano una per una (con conferma) o tutte.
+    #[test]
+    fn le_mie_firme_si_mettono_e_si_eliminano_una_per_una() {
+        let (piattaforma, dir) = piattaforma_di_prova("pdf-le-mie-firme");
+        let percorso = dir.join("radice/Consenso Zanzibar.pdf");
+        std::fs::write(&percorso, tascabile_pdf::prova::modulo_da_compilare()).unwrap();
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        // Senza l'impronta: qui conta l'elenco.
+        h.state_mut().impostazioni.impronta_firma = false;
+        h.state_mut().apri_file(&percorso, "Consenso Zanzibar.pdf");
+        aspetta_il_lettore(&mut h);
+        let campo = "Firma del paziente o del tutore";
+        tocca(&mut h, campo);
+        h.run_steps(6);
+        tocca(&mut h, pdf_firma::FIRMA_COL_DITO);
+        h.run_steps(2);
+        firma_col_dito(&mut h, egui::pos2(60.0, 400.0));
+        tocca(&mut h, pdf_firma::FATTO);
+        aspetta_il_motore(&mut h);
+        // La seconda, alta, dagli Strumenti: si aggiunge.
+        dagli_strumenti(&mut h, pdf_firma::FIRMA);
+        h.run_steps(6);
+        tocca(&mut h, pdf_firma::FIRMA_COL_DITO);
+        h.run_steps(2);
+        firma_col_dito(&mut h, egui::pos2(60.0, 300.0));
+        firma_col_dito(&mut h, egui::pos2(60.0, 600.0));
+        tocca(&mut h, pdf_firma::FATTO);
+        h.run_steps(2);
+        tocca(&mut h, pdf_firma::SALVALA);
+        h.run_steps(4);
+        tocca_in(&mut h, egui::pos2(216.0, 650.0));
+        h.run_steps(4);
+        aspetta_il_motore(&mut h);
+        assert_eq!(h.state_mut().firme().voci().len(), 2);
+        let segni = |h: &Telefono| h.state().pdf.as_ref().unwrap().motore.stato().segni.len();
+        let prima = segni(&h);
+        // Nel foglio della firma ci sono tutte e due: la seconda si mette dove si tocca.
+        dagli_strumenti(&mut h, pdf_firma::FIRMA);
+        h.run_steps(6);
+        h.get_by_label(pdf_firma::METTI_LA_FIRMA);
+        tocca(&mut h, "Metti la firma 2");
+        h.run_steps(4);
+        tocca_in(&mut h, egui::pos2(216.0, 560.0));
+        h.run_steps(4);
+        aspetta_il_motore(&mut h);
+        assert_eq!(segni(&h), prima + 1);
+        let ultimo = h.state().pdf.as_ref().unwrap().motore.stato().segni.last().unwrap().rettangolo;
+        assert!(ultimo[3] - ultimo[1] > (ultimo[2] - ultimo[0]) * 0.5, "non è la seconda firma, quella alta: {ultimo:?}");
+        // Dal foglio della firma, «Le mie firme»: si elimina la prima, con conferma.
+        dagli_strumenti(&mut h, pdf_firma::FIRMA);
+        h.run_steps(6);
+        tocca(&mut h, pdf_firma::LE_MIE_FIRME);
+        h.run_steps(6);
+        h.get_by_label("Firma 2");
+        tocca(&mut h, "Elimina Firma");
+        h.run_steps(2);
+        // Annulla la lascia.
+        tocca(&mut h, "Annulla");
+        h.run_steps(2);
+        assert_eq!(h.state_mut().firme().voci().len(), 2);
+        tocca(&mut h, "Elimina Firma");
+        h.run_steps(2);
+        tocca(&mut h, le_mie_firme::ELIMINA);
+        h.run_steps(4);
+        assert_eq!(h.state_mut().firme().voci().len(), 1);
+        assert!(!dir.join("app/firme/firma.txt").exists() && dir.join("app/firme/firma-2.txt").exists());
+        // Quella che resta è la prima del foglio, e i segni nel documento non cambiano.
+        h.get_by_label("Firma");
+        assert!(h.query_by_label("Firma 2").is_none());
+        assert_eq!(segni(&h), prima + 1);
+        indietro(&mut h);
+        h.run_steps(4);
+        assert!(!h.state().le_mie_firme.foglio.aperto());
+        // Una terza, poi «Elimina tutte» dalle Impostazioni.
+        dagli_strumenti(&mut h, pdf_firma::FIRMA);
+        h.run_steps(6);
+        tocca(&mut h, pdf_firma::INIZIALI_COL_DITO);
+        h.run_steps(2);
+        firma_col_dito(&mut h, egui::pos2(60.0, 400.0));
+        tocca(&mut h, pdf_firma::FATTO);
+        h.run_steps(2);
+        tocca_in(&mut h, egui::pos2(216.0, 700.0));
+        aspetta_il_motore(&mut h);
+        assert_eq!((h.state_mut().firme().quante(false), h.state_mut().firme().quante(true)), (1, 1));
+        // Un'altra volta dell'app: le due si rileggono dai file; dalle Impostazioni, tutte via.
+        let piattaforma = Piattaforma::con_cartelle(dir.join("app"), dir.join("cache"), dir.join("radice"));
+        let mut altra = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        assert_eq!(altra.state_mut().firme().voci().len(), 2);
+        dalle_impostazioni(&mut altra, impostazioni::LE_MIE_FIRME);
+        altra.run_steps(4);
+        altra.get_by_label("Iniziali");
+        tocca(&mut altra, le_mie_firme::ELIMINA_TUTTE);
+        altra.run_steps(2);
+        altra.get_by_label(le_mie_firme::ELIMINARE_TUTTE);
+        tocca(&mut altra, le_mie_firme::ELIMINA);
+        altra.run_steps(4);
+        assert!(!altra.state_mut().firme().qualcuna() && !dir.join("app/firme").exists());
+        assert!(!altra.state().le_mie_firme.foglio.aperto());
+        let d = diagnosi_della_prova();
+        for riga in [
+            "] firma: le mie firme aperte, 2 salvate\n",
+            "] firma: eliminazione annullata\n",
+            "] firma: una salvata eliminata, ne restano 1\n",
+            "] firma: firma e iniziali salvate cancellate\n",
+        ] {
+            assert!(d.contains(riga), "manca «{riga}»:\n{d}");
+        }
+        assert!(!d.contains("Zanzibar") && !d.contains("firme/"), "{d}");
     }
 
     /// Roadmap della sicurezza, Fase 1: la firma salvata si posa solo dopo l'impronta o il PIN
@@ -5938,6 +6139,7 @@ mod test {
         let altro = dir.join("radice/Altro.pdf");
         std::fs::write(&altro, tascabile_pdf::prova::pdf(&[tascabile_pdf::prova::Pagina::bianca(595.0, 842.0)])).unwrap();
         h.state_mut().apri_file(&altro, "Altro.pdf");
+        aspetta_l_apertura(&mut h);
         assert!(h.state().password_pdf.is_none());
         aspetta_il_lettore(&mut h);
         assert_eq!(h.state().pdf.as_ref().unwrap().nome, "Altro.pdf");
@@ -6025,6 +6227,7 @@ mod test {
         std::fs::write(dir.join("radice/hello-world.txt.ots"), tascabile_prova_data::prova::ESEMPIO_OTS).unwrap();
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
         h.state_mut().apri_file(&percorso, "hello-world.txt");
+        aspetta_l_apertura(&mut h);
         h.run_steps(4);
         assert_eq!(h.state().schermata, Schermata::Editor);
         tocca(&mut h, schermo_editor::MENU);
@@ -6052,6 +6255,7 @@ mod test {
         let chiusa = |h: &Telefono| matches!(h.state().piattaforma.rete().chiedi("https://blockstream.info/api/blocks/tip/height", None), RispostaRete::Collegamento);
         assert!(chiusa(&h), "la rete deve partire chiusa");
         h.state_mut().apri_file(&percorso, "hello-world.txt");
+        aspetta_l_apertura(&mut h);
         h.run_steps(4);
         tocca(&mut h, schermo_editor::MENU);
         h.run_steps(2);
@@ -6075,6 +6279,7 @@ mod test {
         assert!(!h.state().impostazioni.rete_timestamp);
         indietro(&mut h);
         h.state_mut().apri_file(&percorso, "hello-world.txt");
+        aspetta_l_apertura(&mut h);
         h.run_steps(4);
         tocca(&mut h, schermo_editor::MENU);
         h.run_steps(2);
@@ -6135,6 +6340,9 @@ mod test {
         }
         h.run_steps(4);
         h.get_by_label_contains("solo il testo riconosciuto");
+        // Il Word nuovo si condivide subito dall'avviso (10/11).
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        assert!(condiviso_uguale(&dir, "Verbale Zanzibar.docx", &dir.join("radice/Documents/Tascabile/Verbale Zanzibar.docx")), "{:?}", i_condivisi(&dir));
         let docx = std::fs::read(dir.join("radice/Documents/Tascabile/Verbale Zanzibar.docx")).expect("il .docx");
         let s = tascabile_word::documento::apri_byte("Verbale Zanzibar.docx", &docx).expect("si apre");
         let testo = s.doc.plain_text(wordcraft_engine::doc::StoryRef::Body);
@@ -6257,6 +6465,8 @@ mod test {
         for parola in ["Consenso", "Ambulatorio", "Zanzibar"] {
             assert!(!d.contains(parola), "«{parola}» nella diagnosi:\n{d}");
         }
+        // Nessuna firma messa col dito: la riga non c'è.
+        assert!(h.query_by_label(schermo_pdf::FIRME_A_MANO).is_none());
         indietro(&mut h);
         assert!(h.query_by_label("Firme digitali").is_none());
         assert_eq!(h.state().schermata, Schermata::Pdf);
@@ -6449,6 +6659,31 @@ mod test {
 
     // Task 3: Home, Editor e Diagnosi.
 
+    /// Revisione del 10/11: sul telefono da 372 dp il quinto chip della Home, «Fogli», usciva a
+    /// metà dal bordo. I cinque chip si stringono quel poco che serve e stanno tutti nello schermo,
+    /// coi margini della Home; a 412 dp, dove ci stavano già, restano larghi com'erano.
+    #[test]
+    fn i_chip_della_home_stanno_tutti_nello_schermo_anche_a_372_dp() {
+        let largo_di = |h: &Telefono, chip: &str| h.get_by_role_and_label(Role::Button, chip).rect().width();
+        let largo = telefono(app_di_prova("chip-412"));
+        let h = telefono_di(app_di_prova("chip-372"), egui::vec2(372.0, 827.0), 3.0);
+        let zona = egui::Rect::from_min_max(egui::pos2(tema::MARGINE_LARGO - 0.5, 0.0), egui::pos2(372.0 - tema::MARGINE_LARGO + 0.5, 827.0));
+        let posti: Vec<(&str, egui::Rect)> = home::Filtro::CHIP.iter().map(|(_, n)| (*n, h.get_by_role_and_label(Role::Button, n).rect())).collect();
+        for (nome, r) in &posti {
+            assert!(zona.contains_rect(*r), "«{nome}» esce dai margini a 372 dp: {r:?} in {zona:?}");
+            assert!(r.height() >= tema::CHIP && r.width() >= 44.0, "«{nome}» troppo piccolo da toccare: {r:?}");
+            assert!(largo_di(&largo, nome) >= r.width(), "«{nome}» a 412 dp non è più stretto che a 372");
+        }
+        for coppia in posti.windows(2) {
+            assert!(coppia[1].1.left() - coppia[0].1.right() >= 5.5, "fra «{}» e «{}» manca lo spazio", coppia[0].0, coppia[1].0);
+        }
+        // A 412 dp niente è cambiato: il margine dentro il chip è quello di sempre, 14 dp per lato.
+        let ctx = largo.ctx.clone();
+        let font = Carattere::Grassetto.font(&ctx, 14.0);
+        let testo = ctx.fonts_mut(|f| f.layout_no_wrap("Documenti".to_string(), font, egui::Color32::PLACEHOLDER).size().x);
+        assert!((largo_di(&largo, "Documenti") - (testo + 28.0)).abs() < 0.6, "{} e {}", largo_di(&largo, "Documenti"), testo + 28.0);
+    }
+
     #[test]
     fn si_parte_dalla_home() {
         let h = telefono(app_di_prova("parte-dalla-home"));
@@ -6496,6 +6731,7 @@ mod test {
             tipo: tascabile_files::Tipo::Documento,
             aperto_alle: 1_792_738_800,
             pagine: None,
+            impronta: None,
         };
         finti.aggiungi(recente(d.join("radice/Download/Verbale di ottobre.docx").to_string_lossy().into_owned(), "Verbale di ottobre.docx"));
         finti.aggiungi(recente("content://com.whatsapp.provider.media/item/123".into(), "documento.docx"));
@@ -6536,6 +6772,7 @@ mod test {
                 tipo: tascabile_files::Tipo::Documento,
                 aperto_alle: adesso(),
                 pagine: None,
+                impronta: None,
             });
         }
         finti.salva(&d.join("app").join(home::FILE_RECENTI)).unwrap();
@@ -6624,11 +6861,91 @@ mod test {
         assert_eq!(testi(h.state()), [""], "il testo della ricerca è finito nel documento");
     }
 
+    /// Segnalazione dell'autore del 7/11: «non c'è la possibilità di cambiare nome ai file».
+    /// «Rinomina» dal menu di un recente, di un file nella cartella e dal menu dell'Editor: il
+    /// file cambia nome nella sua cartella, l'estensione resta, recente e cartella si aggiornano.
+    #[test]
+    fn un_file_si_rinomina_dai_recenti_dalla_cartella_e_dall_editor() {
+        let (mut h, d) = telefono_con_recenti("rinomina", 1, &["Recente 0.docx"]);
+        let download = d.join("radice/Download");
+        std::fs::write(download.join("Altro.docx"), b"x").unwrap();
+        // Dal menu del recente: il foglio col nome di adesso, senza estensione.
+        tocca(&mut h, &home::etichetta_menu("Recente 0"));
+        tocca(&mut h, rinomina::RINOMINA);
+        assert_eq!(h.state().rinomina.campo.testo(), "Recente 0");
+        assert!(h.state().piattaforma.keyboard_visible());
+        // Un nome già preso lo dice, e il foglio resta.
+        h.state_mut().rinomina.campo = tascabile_touch::CampoTesto::new().con_testo("Altro");
+        tocca(&mut h, rinomina::FATTO);
+        h.get_by_label(rinomina::NOME_PRESO);
+        assert!(h.state().rinomina.aperto());
+        h.state_mut().rinomina.campo = tascabile_touch::CampoTesto::new().con_testo("Verbale del 7 novembre");
+        tocca(&mut h, rinomina::FATTO);
+        assert!(!h.state().rinomina.aperto() && !h.state().piattaforma.keyboard_visible());
+        let nuovo = download.join("Verbale del 7 novembre.docx");
+        assert!(nuovo.is_file() && !download.join("Recente 0.docx").exists());
+        h.get_by_label("Rinominato: Verbale del 7 novembre.docx");
+        let voci = Recenti::carica(&d.join("app").join(home::FILE_RECENTI));
+        assert_eq!((voci.voci()[0].chiave.as_str(), voci.voci()[0].nome.as_str()), (nuovo.to_str().unwrap(), "Verbale del 7 novembre.docx"));
+        // Dalla cartella: il menu del file, e Indietro chiude il foglio senza cambiare niente.
+        tocca(&mut h, "Download");
+        tocca(&mut h, &home::etichetta_menu_file("Verbale del 7 novembre.docx"));
+        tocca(&mut h, rinomina::RINOMINA);
+        indietro(&mut h);
+        assert!(!h.state().rinomina.aperto() && nuovo.is_file());
+        tocca(&mut h, &home::etichetta_menu_file("Verbale del 7 novembre.docx"));
+        tocca(&mut h, rinomina::RINOMINA);
+        h.state_mut().rinomina.campo = tascabile_touch::CampoTesto::new().con_testo("Verbale firmato");
+        tocca(&mut h, rinomina::FATTO);
+        let firmato = download.join("Verbale firmato.docx");
+        assert!(firmato.is_file());
+        h.get_by_role_and_label(Role::Button, "Verbale firmato.docx");
+        // Dall'Editor, col documento aperto: il nome dell'Editor e il file su cui salva cambiano.
+        tocca(&mut h, "Verbale firmato.docx");
+        assert_eq!(h.state().schermata, Schermata::Editor);
+        tocca(&mut h, schermo_editor::MENU);
+        h.run_steps(2);
+        tocca(&mut h, rinomina::RINOMINA);
+        h.state_mut().rinomina.campo = tascabile_touch::CampoTesto::new().con_testo("Verbale archiviato");
+        tocca(&mut h, rinomina::FATTO);
+        let archiviato = download.join("Verbale archiviato.docx");
+        assert!(archiviato.is_file() && !firmato.exists());
+        assert_eq!(editor(h.state()).nome, "Verbale archiviato.docx");
+        assert!(matches!(&editor(h.state()).origine, Origine::File(p) if *p == archiviato));
+        let diag = diagnosi_della_prova();
+        for riga in ["] rinomina: foglio aperto\n", "] rinomina: nome già preso\n", "] rinomina: fatto\n", "] indietro: rinomina chiuso\n", "] rinomina: anche il documento aperto\n"] {
+            assert!(diag.contains(riga), "manca «{riga}»:\n{diag}");
+        }
+        assert!(!diag.contains("Verbale") && !diag.contains("Recente 0"), "{diag}");
+    }
+
+    /// Un documento arrivato con «Apri con» non si rinomina: è dell'altra app.
+    #[test]
+    fn un_recente_di_un_altra_app_non_si_rinomina() {
+        let (piattaforma, d) = piattaforma_di_prova("rinomina-uri");
+        let file_recenti = d.join("app").join(home::FILE_RECENTI);
+        let mut finti = Recenti::default();
+        finti.aggiungi(tascabile_files::Recente {
+            chiave: "content://com.whatsapp.provider.media/item/7".into(),
+            nome: "Referto Zanzibar.pdf".into(),
+            tipo: tascabile_files::Tipo::Pdf,
+            aperto_alle: 1,
+            pagine: None,
+            impronta: None,
+        });
+        finti.salva(&file_recenti).unwrap();
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        tocca(&mut h, &home::etichetta_menu("Referto Zanzibar"));
+        tocca(&mut h, rinomina::RINOMINA);
+        h.get_by_label(rinomina::DA_ALTRA_APP);
+        assert!(!h.state().rinomina.aperto());
+    }
+
     #[test]
     fn il_menu_di_un_recente_condivide_e_toglie() {
         let (mut h, d) = telefono_con_recenti("menu-recente", 2, &["Recente 0.docx"]);
         tocca(&mut h, &home::etichetta_menu("Recente 0"));
-        for voce in ["Apri", "Condividi", "Togli dai recenti"] {
+        for voce in ["Apri", "Condividi", "Rinomina", "Togli dai recenti"] {
             h.get_by_role_and_label(Role::Button, voce);
         }
         // Indietro chiude il menu e basta.
@@ -7769,6 +8086,7 @@ mod test {
             let percorso = dir.join("radice").join(nome);
             std::fs::write(&percorso, byte).unwrap();
             h.state_mut().apri_file(&percorso, nome);
+            aspetta_l_apertura(&mut h);
             finche(&mut h, "l'errore di apertura", |h| h.state().errore.is_some() || h.state().schermata == Schermata::Editor);
             assert_ne!(h.state().schermata, Schermata::Editor, "{nome}: si è aperto Word");
             let e = h.state_mut().errore.take().unwrap();
@@ -7785,9 +8103,60 @@ mod test {
         std::fs::write(&file, wordcraft_engine::io::save_bytes("prova.odt", &s.doc).unwrap()).unwrap();
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
         h.state_mut().apri_file(&file, "Relazione.odt");
-        h.run_steps(4);
+        aspetta_l_apertura(&mut h);
         assert_eq!(h.state().schermata, Schermata::Editor);
         h.get_by_label_contains("non si vedono tutte le parti");
+    }
+
+    /// Segnalazione dell'autore del 7/11: «se apro docx alcuni lagga, e anche se apro direttamente
+    /// dei file dalle altre app». Un documento lungo si apre sul suo thread: intanto lo schermo
+    /// disegna la pillola «Apro il documento», e Indietro lascia andare l'apertura.
+    #[test]
+    fn un_documento_lungo_si_apre_senza_fermare_lo_schermo() {
+        let (piattaforma, d) = piattaforma_di_prova("documento-lungo");
+        let file = d.join("radice/Manuale Zanzibar.docx");
+        let righe: Vec<String> = (0..6000).map(|i| format!("Paragrafo {i} del manuale, con un po' di testo per riempire la riga.")).collect();
+        docx(&file, &righe.iter().map(String::as_str).collect::<Vec<_>>());
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&file, "Manuale Zanzibar.docx");
+        // Subito dopo: l'apertura è sul suo thread, e il fotogramma si disegna con la pillola.
+        let prima = Instant::now();
+        h.step();
+        assert!(prima.elapsed() < Duration::from_millis(500), "il fotogramma ha aspettato l'apertura: {:?}", prima.elapsed());
+        if h.state().documento_in_apertura() {
+            h.get_by_label(apertura::APRO_DOCUMENTO);
+        }
+        aspetta_l_apertura(&mut h);
+        assert_eq!(h.state().schermata, Schermata::Editor);
+        assert_eq!(testi(h.state()).len(), 6000);
+        // L'impaginazione l'ha già fatta il thread, col dizionario: il primo fotogramma dell'Editor
+        // la trova, e quando l'app riceve il dizionario non la rifà.
+        h.run_steps(2);
+        let layout_ms = editor(h.state()).vista.misure.layout_ms;
+        assert!(layout_ms < 50.0, "l'Editor ha impaginato di nuovo: {layout_ms} ms");
+        let fine = Instant::now() + Duration::from_secs(20);
+        while !h.state().dizionario_pronto() && Instant::now() < fine {
+            std::thread::sleep(Duration::from_millis(10));
+            h.step();
+        }
+        assert!(h.state().dizionario_pronto());
+        h.run_steps(2);
+        let layout_ms = editor(h.state()).vista.misure.layout_ms;
+        assert!(layout_ms < 50.0, "il dizionario ha fatto reimpaginare: {layout_ms} ms");
+        // Indietro mentre si riapre: l'apertura si lascia andare e si resta dove si era.
+        indietro(&mut h);
+        h.run_steps(2);
+        assert_eq!(h.state().schermata, Schermata::Home);
+        h.state_mut().apri_file(&file, "Manuale Zanzibar.docx");
+        assert!(h.state().documento_in_apertura());
+        indietro(&mut h);
+        assert!(!h.state().documento_in_apertura());
+        h.run_steps(5);
+        assert_eq!(h.state().schermata, Schermata::Home);
+        let diag = diagnosi_della_prova();
+        assert!(diag.contains("] indietro: apertura del documento annullata\n"), "{diag}");
+        assert!(diag.contains("] apri dalla cartella: ") && diag.contains(", 6000 paragrafi\n"), "{diag}");
+        assert!(!diag.contains("Zanzibar") && !diag.contains("Manuale"), "{diag}");
     }
 
     #[test]
@@ -7963,6 +8332,7 @@ mod test {
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
         tocca(&mut h, "Download");
         tocca(&mut h, "Rotto.docx");
+        h.run_steps(2);
         // Il dialogo del tema: titolo in Fraunces, il messaggio, «Ho capito», sopra il velo scuro.
         assert_eq!(famiglia_del_testo(&h, NON_SI_APRE), Some(Carattere::Titolo.famiglia()));
         h.get_by_label_contains("Non riesco ad aprire il file: ");
@@ -7992,15 +8362,19 @@ mod test {
         assert_eq!(colore_del_testo(&h, "Salvato"), Some(tema::FOGLIO));
         tocca(&mut h, schermo_editor::MENU);
         tocca(&mut h, "Esporta in PDF");
-        h.get_by_label("PDF pronto in Documenti/Tascabile: Verbale.pdf");
+        h.get_by_label("PDF pronto in Documents/Tascabile: Verbale.pdf");
         assert!(h.query_by_label("Salvato").is_none(), "l'avviso nuovo prende il posto di quello di prima");
-        tocca(&mut h, CONDIVIDI_PDF);
+        tocca(&mut h, CONDIVIDI_SUBITO);
         let condivisi: Vec<_> = std::fs::read_dir(d.join("cache/condivisi")).unwrap().flatten().collect();
         assert!(condivisi.len() == 1 && condivisi[0].path().join("Verbale.pdf").is_file());
         assert!(h.query_by_label_contains("PDF pronto").is_none(), "toccata l'azione, l'avviso se ne va");
         tocca(&mut h, schermo_editor::MENU);
         tocca(&mut h, "Salva una copia");
-        h.get_by_label("Copia salvata in Documenti/Tascabile: Verbale.docx");
+        h.get_by_label("Copia salvata in Documents/Tascabile: Verbale.docx");
+        // Anche la copia si condivide subito (10/11): parte il file appena scritto.
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        assert!(condiviso_uguale(&d, "Verbale.docx", &d.join("radice/Documents/Tascabile/Verbale.docx")), "{:?}", i_condivisi(&d));
+        assert!(diagnosi_della_prova().contains("] condividi file: application/vnd.openxmlformats-officedocument.wordprocessingml.document, "));
         // Sotto la barra alta niente righe di messaggi.
         assert!(h.query_by_label_contains("Salvato in").is_none());
     }
@@ -8118,6 +8492,7 @@ mod test {
                 tipo: tascabile_files::Tipo::Documento,
                 aperto_alle: 1,
                 pagine: None,
+                impronta: None,
             });
         }
         finti.salva(&file_recenti).unwrap();
@@ -8155,6 +8530,7 @@ mod test {
             tipo: tascabile_files::Tipo::Documento,
             aperto_alle: 1,
             pagine: None,
+            impronta: None,
         });
         finti.salva(&file_recenti).unwrap();
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
@@ -8185,12 +8561,14 @@ mod test {
             tipo: tascabile_files::Tipo::Documento,
             aperto_alle: 1,
             pagine: None,
+            impronta: None,
         });
         finti.salva(&file_recenti).unwrap();
         piattaforma.simula_accesso_file(false);
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
         tocca(&mut h, "Zanzibar");
-        h.get_by_label(NON_TROVATO);
+        // Senza l'accesso ai file, il messaggio lo dice (7/11).
+        h.get_by_label(apertura::NON_TROVATO_SENZA_ACCESSO);
         tocca(&mut h, HO_CAPITO);
         assert_eq!(Recenti::carica(&file_recenti).voci().len(), 1);
         h.state().piattaforma.simula_accesso_file(true);
@@ -8201,8 +8579,183 @@ mod test {
         tocca(&mut h, "Zanzibar");
         h.get_by_label(NON_TROVATO);
         assert_eq!(Recenti::carica(&file_recenti).voci().len(), 1);
-        let d = tascabile_platform::diagnosi_testo();
-        assert!(d.contains("] recenti: file non trovato, lasciato nei recenti\n") && !d.contains("Zanzibar"), "{d}");
+        // Le righe di questa prova: il registro di tutte, con le altre in parallelo, le spinge fuori.
+        let d = diagnosi_della_prova();
+        assert!(d.contains("] recenti: file non trovato, accesso ai file no, impronta assente, lasciato nei recenti\n"), "{d}");
+        assert!(d.contains("] recenti: file non trovato, accesso ai file sì, impronta assente, lasciato nei recenti\n") && !d.contains("Zanzibar"), "{d}");
+    }
+
+    /// Segnalazione dell'autore del 7/11: «ogni tanto non mi fa aprire i file perché dice che non
+    /// esistono», e la sua idea: «non si potrebbe cercare e indicizzare i file per hash?». Il
+    /// recente tiene l'impronta dei byte; se un'altra app sposta o rinomina il file, si ritrova
+    /// altrove e si riapre, e il recente diventa il percorso nuovo. Un file cancellato lo dice.
+    #[test]
+    fn un_recente_spostato_si_ritrova_dalla_sua_impronta() {
+        let (piattaforma, d) = piattaforma_di_prova("recente-spostato");
+        let file_recenti = d.join("app").join(home::FILE_RECENTI);
+        std::fs::create_dir_all(d.join("radice/Download")).unwrap();
+        let prima = d.join("radice/Download/Verbale Zanzibar.docx");
+        docx(&prima, &["Kilimangiaro"]);
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&prima, "Verbale Zanzibar.docx");
+        aspetta_l_apertura(&mut h);
+        // L'impronta è nel recente, anche su disco.
+        let r = Recenti::carica(&file_recenti).voci()[0].clone();
+        let impronta = r.impronta.clone().expect("l'impronta nel recente");
+        assert_eq!(impronta.byte, std::fs::metadata(&prima).unwrap().len());
+        indietro(&mut h);
+        h.run_steps(2);
+        // Un'altra app lo sposta e lo rinomina.
+        std::fs::create_dir_all(d.join("radice/Documents/Archivio")).unwrap();
+        let dopo = d.join("radice/Documents/Archivio/Verbale del 7 novembre.docx");
+        std::fs::rename(&prima, &dopo).unwrap();
+        tocca(&mut h, "Verbale Zanzibar");
+        assert_eq!(h.state().schermata, Schermata::Editor);
+        assert_eq!(testi(h.state()), ["Kilimangiaro"]);
+        let voci = Recenti::carica(&file_recenti);
+        assert_eq!(voci.voci().len(), 1, "la voce vecchia doveva andarsene");
+        assert_eq!(voci.voci()[0].chiave, dopo.to_str().unwrap());
+        assert_eq!(voci.voci()[0].impronta.as_ref(), Some(&impronta));
+        // Cancellato: lo dice, e il recente resta, da togliere a mano.
+        indietro(&mut h);
+        h.run_steps(2);
+        std::fs::remove_file(&dopo).unwrap();
+        tocca(&mut h, "Verbale del 7 novembre");
+        h.get_by_label(apertura::NON_TROVATO_NEMMENO_ALTROVE);
+        assert_eq!(Recenti::carica(&file_recenti).voci().len(), 1);
+        let diag = diagnosi_della_prova();
+        assert!(diag.contains("] recenti: non era più al suo posto, ritrovato dall'impronta\n"), "{diag}");
+        assert!(diag.contains("] recenti: file non trovato, accesso ai file sì, impronta nota, lasciato nei recenti\n"), "{diag}");
+        for parola in ["Zanzibar", "Kilimangiaro", "Verbale", "novembre", "Archivio"] {
+            assert!(!diag.contains(parola), "«{parola}» nella diagnosi:\n{diag}");
+        }
+    }
+
+    /// Un documento arrivato con «Apri con» il cui permesso è scaduto: con l'impronta, lo stesso
+    /// file nelle cartelle si riapre da lì (revisione del 3/11, M3: mai per nome, solo dai byte).
+    #[test]
+    fn un_recente_con_il_permesso_scaduto_si_riapre_dai_suoi_byte() {
+        let (piattaforma, d) = piattaforma_di_prova("recente-uri-ritrovato");
+        let file_recenti = d.join("app").join(home::FILE_RECENTI);
+        let ricevuti = d.join("radice/Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents/Private");
+        std::fs::create_dir_all(&ricevuti).unwrap();
+        let file = ricevuti.join("DOC-20261107-WA0001.docx");
+        docx(&file, &["Kilimangiaro"]);
+        let impronta = tascabile_files::ImprontaFile::di(&std::fs::read(&file).unwrap());
+        let mut finti = Recenti::default();
+        finti.aggiungi(tascabile_files::Recente {
+            chiave: "content://com.whatsapp.provider.media/item/404".into(),
+            nome: "Relazione Zanzibar.docx".into(),
+            tipo: tascabile_files::Tipo::Documento,
+            aperto_alle: 1,
+            pagine: None,
+            impronta: Some(impronta),
+        });
+        finti.salva(&file_recenti).unwrap();
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        tocca(&mut h, "Relazione Zanzibar");
+        assert_eq!(h.state().schermata, Schermata::Editor);
+        assert_eq!(testi(h.state()), ["Kilimangiaro"]);
+        let voci = Recenti::carica(&file_recenti);
+        assert_eq!(voci.voci().len(), 1);
+        assert_eq!(voci.voci()[0].chiave, file.to_str().unwrap());
+    }
+
+    /// Revisione del 10/11: dopo «Salva» i byte del file sono altri, ma il recente teneva
+    /// l'impronta dell'apertura. Se poi un'altra app spostava il file non si ritrovava più («non
+    /// trovato nemmeno altrove»), o si apriva una copia più vecchia coi byte di prima. Il recente
+    /// prende l'impronta del file salvato, e quello di una copia nasce con la sua.
+    #[test]
+    fn dopo_salva_il_recente_ha_l_impronta_del_file_salvato() {
+        let (mut h, d) = telefono_con_un_docx_modificato("impronta-dopo-salva", "Verbale Zanzibar.docx");
+        let file_recenti = d.join("app").join(home::FILE_RECENTI);
+        let file = d.join("radice/Download/Verbale Zanzibar.docx");
+        let all_apertura = Recenti::carica(&file_recenti).voci()[0].impronta.clone().expect("l'impronta all'apertura");
+        tocca(&mut h, schermo_editor::MENU);
+        tocca(&mut h, "Salva");
+        h.get_by_label("Salvato");
+        let salvato = tascabile_files::ImprontaFile::di(&std::fs::read(&file).unwrap());
+        assert_ne!(salvato, all_apertura, "il salvataggio non ha cambiato i byte");
+        let voci = Recenti::carica(&file_recenti);
+        assert_eq!(voci.voci().len(), 1);
+        assert_eq!(voci.voci()[0].impronta.as_ref(), Some(&salvato), "il recente ha ancora l'impronta dell'apertura");
+        // Un'altra app lo sposta e lo rinomina: si ritrova dai byte salvati.
+        indietro(&mut h);
+        indietro(&mut h);
+        indietro(&mut h);
+        assert_eq!(h.state().schermata, Schermata::Home);
+        std::fs::create_dir_all(d.join("radice/Documents/Archivio")).unwrap();
+        let dopo = d.join("radice/Documents/Archivio/Archiviato.docx");
+        std::fs::rename(&file, &dopo).unwrap();
+        tocca(&mut h, "Verbale Zanzibar");
+        assert_eq!(h.state().schermata, Schermata::Editor, "il file salvato e poi spostato non si è ritrovato");
+        assert!(testi(h.state()).concat().contains("Zanzibar"));
+        assert_eq!(Recenti::carica(&file_recenti).voci()[0].chiave, dopo.to_str().unwrap());
+        // «Salva una copia»: il recente della copia nasce con l'impronta dei suoi byte.
+        tocca(&mut h, schermo_editor::MENU);
+        tocca(&mut h, "Salva una copia");
+        let copia = d.join("radice/Documents/Tascabile/Archiviato.docx");
+        let voci = Recenti::carica(&file_recenti);
+        assert_eq!(voci.voci()[0].chiave, copia.to_str().unwrap());
+        assert_eq!(voci.voci()[0].impronta, Some(tascabile_files::ImprontaFile::di(&std::fs::read(&copia).unwrap())));
+        let diag = diagnosi_della_prova();
+        assert!(diag.contains("] recenti: impronta aggiornata dopo il salvataggio\n"), "{diag}");
+        for parola in ["Zanzibar", "Kilimangiaro", "Verbale", "Archivi"] {
+            assert!(!diag.contains(parola), "«{parola}» nella diagnosi:\n{diag}");
+        }
+    }
+
+    /// Lo stesso per un PDF: il salvataggio lo scrive il thread del motore, e l'impronta dei byte
+    /// scritti arriva con l'esito.
+    #[test]
+    fn dopo_salva_il_recente_del_pdf_ha_l_impronta_del_file_salvato() {
+        let (piattaforma, dir) = piattaforma_di_prova("impronta-dopo-salva-pdf");
+        let file_recenti = dir.join("app").join(home::FILE_RECENTI);
+        let percorso = dir.join("radice/Modulo Zanzibar.pdf");
+        std::fs::write(&percorso, tascabile_pdf::prova::modulo()).unwrap();
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&percorso, "Modulo Zanzibar.pdf");
+        aspetta_il_lettore(&mut h);
+        let all_apertura = Recenti::carica(&file_recenti).voci()[0].impronta.clone().expect("l'impronta all'apertura");
+        ruota_dagli_strumenti(&mut h);
+        aspetta_il_motore(&mut h);
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, pdf_lavoro::SALVA);
+        aspetta_il_motore(&mut h);
+        h.get_by_label("Salvato");
+        let salvato = tascabile_files::ImprontaFile::di(&std::fs::read(&percorso).unwrap());
+        assert_ne!(salvato, all_apertura, "il salvataggio non ha cambiato i byte");
+        assert_eq!(Recenti::carica(&file_recenti).voci()[0].impronta.as_ref(), Some(&salvato), "il recente ha ancora l'impronta dell'apertura");
+        // «Salva una copia»: il recente della copia nasce con l'impronta dei suoi byte.
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, pdf_lavoro::SALVA_COPIA);
+        aspetta_il_motore(&mut h);
+        let copia = dir.join("radice/Documents/Tascabile/Modulo Zanzibar.pdf");
+        let voci = Recenti::carica(&file_recenti);
+        assert_eq!(voci.voci()[0].chiave, copia.to_str().unwrap());
+        assert_eq!(voci.voci()[0].impronta, Some(tascabile_files::ImprontaFile::di(&std::fs::read(&copia).unwrap())));
+        assert!(!diagnosi_della_prova().contains("Zanzibar"));
+    }
+
+    /// Revisione del 10/11: rinominando un file dall'app, il suo timestamp (`Nome.docx.ots`,
+    /// accanto) restava col nome vecchio e «Controlla il timestamp» non lo trovava più. Ora segue
+    /// il file, e lo dice.
+    #[test]
+    fn il_timestamp_segue_il_file_rinominato() {
+        let (mut h, d) = telefono_con_recenti("rinomina-timestamp", 1, &["Recente 0.docx"]);
+        let download = d.join("radice/Download");
+        std::fs::write(download.join("Recente 0.docx.ots"), b"la prova").unwrap();
+        tocca(&mut h, &home::etichetta_menu("Recente 0"));
+        tocca(&mut h, rinomina::RINOMINA);
+        h.state_mut().rinomina.campo = tascabile_touch::CampoTesto::new().con_testo("Verbale firmato");
+        tocca(&mut h, rinomina::FATTO);
+        assert!(download.join("Verbale firmato.docx").is_file());
+        assert!(!download.join("Recente 0.docx.ots").exists(), "il timestamp è rimasto col nome vecchio");
+        assert_eq!(std::fs::read(download.join("Verbale firmato.docx.ots")).unwrap(), b"la prova");
+        h.get_by_label("Rinominato: Verbale firmato.docx, col suo timestamp");
+        let diag = diagnosi_della_prova();
+        assert!(diag.contains("] rinomina: anche il timestamp\n"), "{diag}");
+        assert!(!diag.contains("Verbale") && !diag.contains("Recente 0"), "{diag}");
     }
 
     #[test]
@@ -8276,7 +8829,7 @@ mod test {
             let voci: Vec<_> = std::fs::read_dir(d.join("cache/condivisi")).unwrap().flatten().collect();
             voci.len() == 1 && voci[0].path().join(nome).is_file()
         };
-        tocca(&mut h, CONDIVIDI_PDF);
+        tocca(&mut h, CONDIVIDI_SUBITO);
         assert!(condiviso("Riservato.pdf"));
         tocca(&mut h, schermo_editor::MENU);
         tocca(&mut h, "Condividi");
@@ -8292,7 +8845,7 @@ mod test {
         let diag = diagnosi_della_prova();
         for riga in [
             "] esporta pdf: riuscito, tipo pdf, ",
-            "] condividi pdf: riuscito, tipo pdf, ",
+            "] condividi subito: riuscito, tipo pdf, ",
             "] condividi: riuscito, tipo docx, ",
             "] condividi file: ",
         ] {
@@ -8435,7 +8988,7 @@ mod test {
     /// Un PDF modificato e l'app chiusa a forza: quando perde il fuoco il campo che si scrive va al
     /// motore e la copia di recupero coi byte modificati va nella cartella dell'app (scritta dal
     /// thread del motore). Alla riapertura la Home la propone; riaperto, il PDF ha la modifica e
-    /// va salvato (in una copia in Documenti/Tascabile, l'originale resta com'era); salvato, la
+    /// va salvato (in una copia in Documents/Tascabile, l'originale resta com'era); salvato, la
     /// copia se ne va.
     #[test]
     fn un_pdf_modificato_si_ritrova_dopo_un_uscita_a_forza() {
@@ -8477,7 +9030,7 @@ mod test {
         assert_eq!(campo_del_lettore(&h, C::Luogo).testo(), "Torino");
         h.get_by_label("1 da compilare · non salvato");
         assert!(h.state().modifiche_da_salvare(), "un pdf recuperato si chiude senza chiedere");
-        // Salva: una copia in Documenti/Tascabile; l'originale com'era; la copia di recupero via.
+        // Salva: una copia in Documents/Tascabile; l'originale com'era; la copia di recupero via.
         tocca(&mut h, schermo_pdf::MENU);
         tocca(&mut h, pdf_lavoro::SALVA);
         aspetta_il_motore(&mut h);
@@ -8508,6 +9061,7 @@ mod test {
             std::fs::write(&percorso, originale).unwrap();
             let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
             h.state_mut().apri_file(&percorso, "Referto.pdf");
+            aspetta_l_apertura(&mut h);
             if let Some(password) = password {
                 aspetta_la_password(&mut h);
                 scrivi(&mut h, password);
@@ -8817,6 +9371,14 @@ mod test {
             h.run_steps(10);
             assert_eq!(h.state().revisioni.as_ref().map(|r| (r.modifiche.len(), r.commenti.len())), Some((1, 1)), "{nome}");
             let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, misura);
+            // Revisione del 10/11: a 372 dp il nome dell'interruttore finiva coi puntini («Tieni
+            // traccia delle modi…»). Il nome intero sta nello spazio della voce.
+            let voce = h.get_by_role_and_label(Role::Button, foglio_revisioni::TRACCIA).rect();
+            let ctx = h.ctx.clone();
+            let font = Carattere::Grassetto.font(&ctx, 16.0);
+            let scritto = ctx.fonts_mut(|f| f.layout_no_wrap(foglio_revisioni::TRACCIA.to_string(), font, egui::Color32::PLACEHOLDER).size().x);
+            let spazio = tascabile_touch::Voce::new(tascabile_touch::Tipo::Word, foglio_revisioni::TRACCIA).interruttore(true).spazio_del_testo(voce.width());
+            assert!(scritto <= spazio, "{nome}: «{}» è largo {scritto} dp e ha {spazio} dp", foglio_revisioni::TRACCIA);
             tutti_visibili(
                 &h,
                 &[
@@ -10046,5 +10608,171 @@ mod test {
         h.state_mut().nuovo_documento();
         h.run_steps(2);
         assert!(h.query_by_label("Titolo 1").is_none(), "il foglio è ricomparso nel documento dopo");
+    }
+
+    // ---- Le copie: in che cosa sono diverse, dove vanno, condividerle subito ----
+    // Segnalazione dell'autore del 10/11/2026: «le copie pulite o il file definitivo non si capisce
+    // la differenza e si deve avere la possibilità di condividerle subito e poi non si capisce
+    // bene dove finiscono le cose create o salvate dall'app».
+
+    /// Un PDF di due pagine nella memoria del telefono, aperto dalle cartelle su uno schermo di
+    /// questa misura: il telefono, la cartella della prova e il file.
+    fn telefono_con_la_lettera(prova: &str, misura: egui::Vec2, densita: f32) -> (Telefono, PathBuf, PathBuf) {
+        let (piattaforma, dir) = piattaforma_di_prova(prova);
+        let percorso = dir.join("radice/Lettera Kilimangiaro.pdf");
+        std::fs::write(&percorso, tascabile_pdf::prova::pdf(&[tascabile_pdf::prova::Pagina::bianca(595.0, 842.0); 2])).unwrap();
+        let mut h = telefono_di(TascabileApp::new(piattaforma, Instant::now()), misura, densita);
+        h.state_mut().apri_file(&percorso, "Lettera Kilimangiaro.pdf");
+        aspetta_il_lettore(&mut h);
+        (h, dir, percorso)
+    }
+
+    /// I file dell'ultima condivisione, nella sua sottocartella di `cache/condivisi` (quelle di
+    /// prima si tolgono a ogni condivisione nuova).
+    fn i_condivisi(dir: &Path) -> Vec<PathBuf> {
+        let Ok(cartelle) = std::fs::read_dir(dir.join("cache/condivisi")) else { return Vec::new() };
+        let mut file: Vec<PathBuf> =
+            cartelle.flatten().filter_map(|c| std::fs::read_dir(c.path()).ok()).flat_map(|f| f.flatten().map(|v| v.path())).collect();
+        file.sort();
+        file
+    }
+
+    /// Fra i condivisi c'è un file con questo nome e gli stessi byte di `originale`.
+    fn condiviso_uguale(dir: &Path, nome: &str, originale: &Path) -> bool {
+        let byte = std::fs::read(originale).unwrap();
+        i_condivisi(dir).iter().any(|f| f.file_name().is_some_and(|n| n == nome) && std::fs::read(f).unwrap() == byte)
+    }
+
+    /// Nel menu del PDF le tre voci che si somigliano hanno sotto la riga che le distingue, su una
+    /// riga sola, e il menu sta nello schermo di ogni telefono anche con «Ripeti» in cima.
+    #[test]
+    fn il_menu_del_pdf_dice_che_cosa_fa_ognuna_delle_tre_copie() {
+        for (nome, misura, densita) in [("412", egui::vec2(412.0, 915.0), 2.625), ("372", egui::vec2(372.0, 827.0), 3.0), ("360", egui::vec2(360.0, 760.0), 3.0)] {
+            let (mut h, _dir, _) = telefono_con_la_lettera(&format!("menu-copie-{nome}"), misura, densita);
+            // Una modifica annullata: sui telefoni stretti «Ripeti» va nel menu, che è il più lungo.
+            ruota_dagli_strumenti(&mut h);
+            aspetta_il_motore(&mut h);
+            tocca(&mut h, pdf_lavoro::ANNULLA_MODIFICA);
+            aspetta_il_motore(&mut h);
+            tocca(&mut h, schermo_pdf::MENU);
+            for (voce, spiega) in [
+                (pdf_lavoro::SALVA_COPIA, schermo_pdf::SPIEGA_SALVA_COPIA),
+                (pdf_pagine::SALVA_PULITO, schermo_pdf::SPIEGA_SALVA_PULITO),
+                (schermo_pdf::COPIA_DEFINITIVA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA),
+            ] {
+                let riga = h.get_by_role_and_label(Role::Button, voce).rect();
+                let testo = h.get_by_label(spiega).rect();
+                assert!(riga.contains_rect(testo), "{nome}: «{spiega}» fuori dalla voce «{voce}»: {riga:?} {testo:?}");
+                assert!(testo.height() < 20.0, "{nome}: «{spiega}» è andata a capo: {testo:?}");
+            }
+            let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, misura);
+            for voce in [pdf_lavoro::SALVA, schermo_pdf::INFORMAZIONI] {
+                let r = h.get_by_role_and_label(Role::Button, voce).rect();
+                assert!(schermo.contains_rect(r), "{nome}: «{voce}» esce dallo schermo: {r:?}");
+            }
+            if misura.x < 400.0 {
+                h.get_by_role_and_label(Role::Button, pdf_lavoro::RIPETI_MODIFICA);
+            }
+        }
+    }
+
+    /// La copia definitiva pronta non è un avviso che sparisce: un dialogo dice dov'è, col nome
+    /// vero della cartella, e la condivide subito. Il PDF aperto resta quello di prima.
+    #[test]
+    fn la_copia_definitiva_pronta_dice_dov_e_e_si_condivide_subito() {
+        let misura = egui::vec2(372.0, 827.0);
+        let (mut h, dir, percorso) = telefono_con_la_lettera("definitiva-condividi", misura, 3.0);
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, schermo_pdf::COPIA_DEFINITIVA);
+        h.run_steps(12);
+        // Il foglio dice che è un file in più, e dove va.
+        h.get_by_label_contains("È un file in più");
+        h.get_by_label_contains("Documents/Tascabile");
+        tocca(&mut h, schermo_pdf::CREA_DEFINITIVA);
+        aspetta_il_motore(&mut h);
+        let definitiva = dir.join("radice/Documents/Tascabile/Lettera Kilimangiaro definitivo.pdf");
+        assert!(definitiva.is_file(), "{}", diagnosi_della_prova());
+        let titolo = h.get_by_label(schermo_pdf::COPIA_PRONTA).rect();
+        let testo = h.get_by_label_contains("«Lettera Kilimangiaro definitivo.pdf» è nella memoria del telefono, in Documents/Tascabile").rect();
+        let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, misura);
+        assert!(schermo.contains_rect(titolo) && schermo.contains_rect(testo), "{titolo:?} {testo:?}");
+        for pulsante in [schermo_pdf::CHIUDI, CONDIVIDI_SUBITO] {
+            let r = h.get_by_role_and_label(Role::Button, pulsante).rect();
+            assert!(schermo.contains_rect(r), "«{pulsante}» esce dallo schermo: {r:?}");
+        }
+        // Resta finché non si risponde: dopo dieci secondi è ancora lì.
+        h.run_steps(300);
+        h.get_by_label(schermo_pdf::COPIA_PRONTA);
+        assert!(i_condivisi(&dir).is_empty());
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        assert!(condiviso_uguale(&dir, "Lettera Kilimangiaro definitivo.pdf", &definitiva), "{:?}", i_condivisi(&dir));
+        assert!(h.query_by_label(schermo_pdf::COPIA_PRONTA).is_none(), "il dialogo è rimasto");
+        // Il documento aperto resta l'originale, e la copia non va nei recenti al suo posto.
+        assert_eq!(h.state().pdf.as_ref().unwrap().nome, "Lettera Kilimangiaro.pdf");
+        assert_eq!(h.state().home.recenti()[0].chiave, percorso.to_str().unwrap());
+        // «Chiudi»: il dialogo se ne va e niente parte.
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, schermo_pdf::COPIA_DEFINITIVA);
+        h.run_steps(12);
+        tocca(&mut h, schermo_pdf::CREA_DEFINITIVA);
+        aspetta_il_motore(&mut h);
+        h.get_by_label(schermo_pdf::COPIA_PRONTA);
+        h.get_by_label_contains("«Lettera Kilimangiaro definitivo (2).pdf»");
+        tocca(&mut h, schermo_pdf::CHIUDI);
+        assert!(h.query_by_label(schermo_pdf::COPIA_PRONTA).is_none());
+        assert_eq!(i_condivisi(&dir).len(), 1);
+        let d = diagnosi_della_prova();
+        assert!(d.contains("] pdf: copia definitiva pronta, condivisa\n") && d.contains("] pdf: copia definitiva pronta, chiusa\n"), "{d}");
+        assert!(d.contains("] condividi file: application/pdf, "), "{d}");
+        assert!(!d.contains("Kilimangiaro"), "{d}");
+    }
+
+    /// La scansione salvata è un file nuovo come gli altri: il suo avviso ha «Condividi».
+    #[test]
+    fn la_scansione_salvata_si_condivide_dall_avviso() {
+        let (piattaforma, dir) = piattaforma_di_prova("scansione-condividi");
+        let cartella = dir.join("radice/Documents/Tascabile");
+        std::fs::create_dir_all(&cartella).unwrap();
+        let scansione = cartella.join("Scansione Kilimangiaro.pdf");
+        std::fs::write(&scansione, tascabile_pdf::prova::pdf(&[tascabile_pdf::prova::Pagina::bianca(595.0, 842.0)])).unwrap();
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_la_scansione(scansione.clone(), "Scansione Kilimangiaro.pdf".into());
+        h.run_steps(2);
+        h.get_by_label("Scansione salvata in Documents/Tascabile: Scansione Kilimangiaro.pdf");
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        assert!(condiviso_uguale(&dir, "Scansione Kilimangiaro.pdf", &scansione), "{:?}", i_condivisi(&dir));
+        aspetta_il_lettore(&mut h);
+        assert_eq!(h.state().misure_del_pdf().len(), 1, "la scansione non si è aperta");
+    }
+
+    /// Dopo «Salva pulito» e dopo «Salva una copia» l'avviso ha «Condividi»: parte il file appena
+    /// scritto, com'è sul disco. Il dialogo di «Salva pulito» dice che il file resta questo.
+    #[test]
+    fn dopo_salva_pulito_e_salva_una_copia_si_condivide_dall_avviso() {
+        let (mut h, dir, percorso) = telefono_con_la_lettera("pulito-condividi", egui::vec2(412.0, 915.0), 2.625);
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, pdf_pagine::SALVA_PULITO);
+        h.get_by_label_contains("senza le versioni di prima");
+        h.get_by_label_contains("Non è una copia: resta questo file");
+        h.get_by_label_contains("«Copia definitiva»");
+        tocca(&mut h, pdf_pagine::SALVA_PULITO);
+        aspetta_il_motore(&mut h);
+        h.get_by_label("Salvato pulito");
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        assert!(condiviso_uguale(&dir, "Lettera Kilimangiaro.pdf", &percorso), "{:?}", i_condivisi(&dir));
+        let prima = i_condivisi(&dir);
+        assert!(h.query_by_label("Salvato pulito").is_none(), "toccata l'azione, l'avviso se ne va");
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, pdf_lavoro::SALVA_COPIA);
+        aspetta_il_motore(&mut h);
+        let copia = dir.join("radice/Documents/Tascabile/Lettera Kilimangiaro.pdf");
+        h.get_by_label("Copia salvata in Documents/Tascabile: Lettera Kilimangiaro.pdf");
+        tocca(&mut h, CONDIVIDI_SUBITO);
+        // Una condivisione nuova, nella sua cartella: quella di prima se n'è andata.
+        assert!(i_condivisi(&dir).len() == 1 && i_condivisi(&dir) != prima, "{:?} e {prima:?}", i_condivisi(&dir));
+        assert!(condiviso_uguale(&dir, "Lettera Kilimangiaro.pdf", &copia));
+        let d = diagnosi_della_prova();
+        assert_eq!(d.matches("] condividi subito: riuscito, tipo pdf, ").count(), 2, "{d}");
+        assert!(!d.contains("Kilimangiaro"), "{d}");
     }
 }
