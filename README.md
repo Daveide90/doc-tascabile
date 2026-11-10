@@ -2,7 +2,7 @@
 
 **[English](#english)** · **[Italiano](#italiano)**
 
-Documents, PDFs, slides and spreadsheets on the phone, offline, made for the finger. · Documenti, PDF, slide e fogli di calcolo sul telefono, senza rete, fatti per il dito.
+The office in your pocket: documents, PDFs, slides and spreadsheets on the phone, offline. · L'ufficio in tasca: documenti, PDF, slide e fogli di calcolo sul telefono, senza rete.
 
 Version 0.9.9 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
 
