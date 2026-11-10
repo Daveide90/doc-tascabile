@@ -413,8 +413,9 @@ impl<R: Scritto> Motore<R> {
         self.manda_scrittura(Comando::Scrivi { scrittura, segna, completo: false })
     }
 
-    /// «Salva pulito»: come Salva, ma un firmato non ripiega sul salvataggio in coda: il motore lo
-    /// rifiuta. I byte diventano la base del salvataggio dopo.
+    /// Come Salva, ma un firmato non ripiega sul salvataggio in coda: il motore lo rifiuta. I byte
+    /// diventano la base del salvataggio dopo. (Era il «Salva pulito» del menu, tolto nella 0.9.10
+    /// perché Salva riscrive già tutto il file; resta per chi vuole l'errore al posto del ripiego.)
     pub fn scrivi_pulito(&mut self, scrittura: Scrittura<R>) -> bool {
         self.manda_scrittura(Comando::Scrivi { scrittura, segna: true, completo: true })
     }

@@ -4253,8 +4253,8 @@ mod test {
     }
 
     /// Unisci (da Documents/Tascabile e dalla scelta dei file), Dividi per intervalli, Comprimi
-    /// su una copia, Proteggi con la password e Togli la protezione, Salva pulito: col motore vero.
-    /// La password non va mai nella diagnosi.
+    /// su una copia, Proteggi con la password e Togli la protezione, Salva che riscrive tutto: col
+    /// motore vero. La password non va mai nella diagnosi.
     #[test]
     fn unire_dividere_comprimere_proteggere_e_salvare_pulito() {
         use tascabile_pdf::prova::{Pagina, pdf};
@@ -4321,16 +4321,15 @@ mod test {
         tocca(&mut h, pdf_pagine::TOGLI_PASSWORD);
         aspetta_il_motore(&mut h);
         assert_eq!(h.state().pdf_cifrato(), Some(false));
-        // Salva pulito dal menu: una revisione sola, senza password.
+        // Salva riscrive tutto il file: una revisione sola, senza password («Salva pulito» non c'è
+        // più dalla 0.9.10, faceva la stessa cosa).
         tocca(&mut h, schermo_pdf::MENU);
-        tocca(&mut h, pdf_pagine::SALVA_PULITO);
-        h.get_by_label_contains("senza le versioni di prima");
-        tocca(&mut h, pdf_pagine::SALVA_PULITO);
+        assert!(h.query_by_label_contains("pulito").is_none(), "«Salva pulito» è ancora nel menu");
+        tocca(&mut h, pdf_lavoro::SALVA);
         aspetta_il_motore(&mut h);
         let pulito = std::fs::read(&percorso).unwrap();
         assert_eq!(String::from_utf8_lossy(&pulito).matches("%%EOF").count(), 1);
         assert_eq!(ordine_delle_pagine(pulito, None).len(), 6);
-        h.get_by_label("Salvato pulito");
         // Comprimi una foto a 320 dpi: la copia è più piccola e il dialogo dice quanto.
         let foto = dir.join("radice/Foto Zanzibar.pdf");
         std::fs::write(&foto, tascabile_pdf::prova::pdf_con_foto()).unwrap();
@@ -4356,7 +4355,6 @@ mod test {
             "] pdf da unire: chiesto alla scelta dei file\n",
             "] pdf: dividi in 2 parti\n",
             "] pdf: proteggi con password\n",
-            "] salva pulito pdf: riuscito",
             "] pdf: compresso da ",
         ] {
             assert!(d.contains(riga), "manca «{riga}»:\n{d}");
@@ -10643,10 +10641,15 @@ mod test {
         i_condivisi(dir).iter().any(|f| f.file_name().is_some_and(|n| n == nome) && std::fs::read(f).unwrap() == byte)
     }
 
-    /// Nel menu del PDF le tre voci che si somigliano hanno sotto la riga che le distingue, su una
-    /// riga sola, e il menu sta nello schermo di ogni telefono anche con «Ripeti» in cima.
+    /// Segnalazione dell'autore del 10/11 sulla 0.9.9: «le descrizioni creano ancora più
+    /// confusione… mettile insieme una sotto l'altra e seleziona in evidenza in rosso la copia
+    /// definitiva, che in sostanza i dati li perdi; ma poi 4 salvataggi a che servono?». Nel menu
+    /// del PDF i salvataggi sono tre, uno sotto l'altro senza niente in mezzo: Salva, Salva una
+    /// copia (si può ancora modificare) e Copia definitiva, in rosso (non si può più modificare).
+    /// «Salva pulito» non c'è più: Salva riscrive già tutto il file. Condividi e il resto stanno
+    /// sotto un filo. Su ogni telefono, anche con «Ripeti» in cima.
     #[test]
-    fn il_menu_del_pdf_dice_che_cosa_fa_ognuna_delle_tre_copie() {
+    fn il_menu_del_pdf_ha_tre_salvataggi_insieme_e_la_copia_definitiva_in_rosso() {
         for (nome, misura, densita) in [("412", egui::vec2(412.0, 915.0), 2.625), ("372", egui::vec2(372.0, 827.0), 3.0), ("360", egui::vec2(360.0, 760.0), 3.0)] {
             let (mut h, _dir, _) = telefono_con_la_lettera(&format!("menu-copie-{nome}"), misura, densita);
             // Una modifica annullata: sui telefoni stretti «Ripeti» va nel menu, che è il più lungo.
@@ -10655,16 +10658,32 @@ mod test {
             tocca(&mut h, pdf_lavoro::ANNULLA_MODIFICA);
             aspetta_il_motore(&mut h);
             tocca(&mut h, schermo_pdf::MENU);
-            for (voce, spiega) in [
-                (pdf_lavoro::SALVA_COPIA, schermo_pdf::SPIEGA_SALVA_COPIA),
-                (pdf_pagine::SALVA_PULITO, schermo_pdf::SPIEGA_SALVA_PULITO),
-                (schermo_pdf::COPIA_DEFINITIVA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA),
-            ] {
+            assert!(h.query_by_label_contains("pulito").is_none(), "{nome}: «Salva pulito» è ancora nel menu");
+            for (voce, spiega) in
+                [(pdf_lavoro::SALVA_COPIA, schermo_pdf::SPIEGA_SALVA_COPIA), (schermo_pdf::COPIA_DEFINITIVA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA)]
+            {
                 let riga = h.get_by_role_and_label(Role::Button, voce).rect();
                 let testo = h.get_by_label(spiega).rect();
                 assert!(riga.contains_rect(testo), "{nome}: «{spiega}» fuori dalla voce «{voce}»: {riga:?} {testo:?}");
                 assert!(testo.height() < 20.0, "{nome}: «{spiega}» è andata a capo: {testo:?}");
             }
+            assert_eq!((schermo_pdf::SPIEGA_SALVA_COPIA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA), ("Si può ancora modificare", "Non si può più modificare"));
+            // I tre salvataggi uno sotto l'altro, senza un filo in mezzo; Condividi dopo un filo.
+            let riga = |h: &Telefono, voce: &str| h.get_by_role_and_label(Role::Button, voce).rect();
+            let (salva, copia, definitiva, condividi) = (
+                riga(&h, pdf_lavoro::SALVA),
+                riga(&h, pdf_lavoro::SALVA_COPIA),
+                riga(&h, schermo_pdf::COPIA_DEFINITIVA),
+                riga(&h, schermo_pdf::CONDIVIDI),
+            );
+            assert!((copia.top() - salva.bottom()).abs() < 0.5 && (definitiva.top() - copia.bottom()).abs() < 0.5, "{nome}: {salva:?} {copia:?} {definitiva:?}");
+            assert!(condividi.top() - definitiva.bottom() >= 12.0, "{nome}: manca il filo sotto i salvataggi: {definitiva:?} {condividi:?}");
+            // La copia definitiva in rosso: etichetta, icona e riga sotto. Le altre com'erano.
+            for testo in [schermo_pdf::COPIA_DEFINITIVA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA, icone::PICTURE_AS_PDF] {
+                assert_eq!(colore_del_testo(&h, testo), Some(tema::ROSSO), "{nome}: «{testo}» non è rosso");
+            }
+            assert_eq!(colore_del_testo(&h, pdf_lavoro::SALVA_COPIA), Some(tema::INCHIOSTRO));
+            assert_eq!(colore_del_testo(&h, schermo_pdf::SPIEGA_SALVA_COPIA), Some(tema::MATITA));
             let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, misura);
             for voce in [pdf_lavoro::SALVA, schermo_pdf::INFORMAZIONI] {
                 let r = h.get_by_role_and_label(Role::Button, voce).rect();
@@ -10685,8 +10704,12 @@ mod test {
         tocca(&mut h, schermo_pdf::MENU);
         tocca(&mut h, schermo_pdf::COPIA_DEFINITIVA);
         h.run_steps(12);
-        // Il foglio dice che è un file in più, e dove va.
-        h.get_by_label_contains("È un file in più");
+        // Il foglio dice per prima cosa che cosa si perde nella copia, in rosso; poi che è un
+        // file in più, e dove va.
+        let perde = h.get_by_label_contains("non si modificano e non si tolgono più").rect();
+        let in_piu = h.get_by_label_contains("È un file in più").rect();
+        assert!(perde.bottom() <= in_piu.top(), "la conseguenza viene dopo: {perde:?} {in_piu:?}");
+        assert_eq!(colore_del_testo(&h, schermo_pdf::SPIEGA_DEFINITIVA[0]), Some(tema::ROSSO));
         h.get_by_label_contains("Documents/Tascabile");
         tocca(&mut h, schermo_pdf::CREA_DEFINITIVA);
         aspetta_il_motore(&mut h);
@@ -10745,34 +10768,344 @@ mod test {
         assert_eq!(h.state().misure_del_pdf().len(), 1, "la scansione non si è aperta");
     }
 
-    /// Dopo «Salva pulito» e dopo «Salva una copia» l'avviso ha «Condividi»: parte il file appena
-    /// scritto, com'è sul disco. Il dialogo di «Salva pulito» dice che il file resta questo.
+    /// Dopo «Salva una copia» l'avviso ha «Condividi»: parte il file appena scritto, com'è sul
+    /// disco, e toccata l'azione l'avviso se ne va.
     #[test]
-    fn dopo_salva_pulito_e_salva_una_copia_si_condivide_dall_avviso() {
-        let (mut h, dir, percorso) = telefono_con_la_lettera("pulito-condividi", egui::vec2(412.0, 915.0), 2.625);
-        tocca(&mut h, schermo_pdf::MENU);
-        tocca(&mut h, pdf_pagine::SALVA_PULITO);
-        h.get_by_label_contains("senza le versioni di prima");
-        h.get_by_label_contains("Non è una copia: resta questo file");
-        h.get_by_label_contains("«Copia definitiva»");
-        tocca(&mut h, pdf_pagine::SALVA_PULITO);
-        aspetta_il_motore(&mut h);
-        h.get_by_label("Salvato pulito");
-        tocca(&mut h, CONDIVIDI_SUBITO);
-        assert!(condiviso_uguale(&dir, "Lettera Kilimangiaro.pdf", &percorso), "{:?}", i_condivisi(&dir));
-        let prima = i_condivisi(&dir);
-        assert!(h.query_by_label("Salvato pulito").is_none(), "toccata l'azione, l'avviso se ne va");
+    fn dopo_salva_una_copia_si_condivide_dall_avviso() {
+        let (mut h, dir, _) = telefono_con_la_lettera("copia-condividi", egui::vec2(412.0, 915.0), 2.625);
         tocca(&mut h, schermo_pdf::MENU);
         tocca(&mut h, pdf_lavoro::SALVA_COPIA);
         aspetta_il_motore(&mut h);
         let copia = dir.join("radice/Documents/Tascabile/Lettera Kilimangiaro.pdf");
-        h.get_by_label("Copia salvata in Documents/Tascabile: Lettera Kilimangiaro.pdf");
+        const AVVISO: &str = "Copia salvata in Documents/Tascabile: Lettera Kilimangiaro.pdf";
+        h.get_by_label(AVVISO);
         tocca(&mut h, CONDIVIDI_SUBITO);
-        // Una condivisione nuova, nella sua cartella: quella di prima se n'è andata.
-        assert!(i_condivisi(&dir).len() == 1 && i_condivisi(&dir) != prima, "{:?} e {prima:?}", i_condivisi(&dir));
-        assert!(condiviso_uguale(&dir, "Lettera Kilimangiaro.pdf", &copia));
+        assert!(condiviso_uguale(&dir, "Lettera Kilimangiaro.pdf", &copia), "{:?}", i_condivisi(&dir));
+        assert_eq!(i_condivisi(&dir).len(), 1);
+        assert!(h.query_by_label(AVVISO).is_none(), "toccata l'azione, l'avviso se ne va");
         let d = diagnosi_della_prova();
-        assert_eq!(d.matches("] condividi subito: riuscito, tipo pdf, ").count(), 2, "{d}");
+        assert_eq!(d.matches("] condividi subito: riuscito, tipo pdf, ").count(), 1, "{d}");
         assert!(!d.contains("Kilimangiaro"), "{d}");
+    }
+
+    /// Richiesta dell'autore del 10/11: «i file devono essere sortabili per ultima modifica, anzi
+    /// deve essere il default». In una cartella i file stanno dal modificato più di recente, con
+    /// le cartelle sempre in cima; «Nome» li mette in ordine alfabetico; vale anche per «Tutti i
+    /// file»; la scelta resta per le volte dopo, anche in un'app riaperta. Su un telefono stretto.
+    #[test]
+    fn in_una_cartella_i_file_piu_recenti_stanno_in_cima_e_si_ordinano_per_nome() {
+        let misura = egui::vec2(360.0, 760.0);
+        let (piattaforma, d) = piattaforma_di_prova("cartella-ordine");
+        let download = d.join("radice/Download");
+        std::fs::create_dir_all(download.join("Zeta")).unwrap();
+        let ora = std::time::SystemTime::now();
+        for (nome, giorni_fa) in [("Alfa.pdf", 30), ("Beta.docx", 1), ("Gamma.pdf", 10)] {
+            let f = download.join(nome);
+            std::fs::write(&f, b"%PDF-1.7").unwrap();
+            std::fs::File::options().write(true).open(&f).unwrap().set_modified(ora - Duration::from_secs(giorni_fa * 86_400)).unwrap();
+        }
+        let mut h = telefono_di(TascabileApp::new(piattaforma, Instant::now()), misura, 3.0);
+        tocca(&mut h, "Download");
+        let alto = |h: &Telefono, nome: &str| h.get_by_role_and_label(Role::Button, nome).rect().top();
+        let in_ordine = |h: &Telefono, nomi: &[&str]| nomi.windows(2).all(|c| alto(h, c[0]) < alto(h, c[1]));
+        // Il default: l'ultima modifica, le cartelle in cima.
+        assert!(acceso(&h, home::ORDINE_MODIFICA) && !acceso(&h, home::ORDINE_NOME));
+        assert!(in_ordine(&h, &["Zeta", "Beta.docx", "Gamma.pdf", "Alfa.pdf"]), "non sono dal più recente");
+        // Per nome.
+        tocca(&mut h, home::ORDINE_NOME);
+        assert!(acceso(&h, home::ORDINE_NOME) && !acceso(&h, home::ORDINE_MODIFICA));
+        assert!(in_ordine(&h, &["Zeta", "Alfa.pdf", "Beta.docx", "Gamma.pdf"]), "non sono per nome");
+        assert_eq!(std::fs::read_to_string(d.join("app").join(home::FILE_ORDINE)).unwrap(), "nome");
+        // Anche «Tutti i file», nei due ordini.
+        tocca(&mut h, home::VISTA_TUTTI);
+        finche(&mut h, "tutti i file", |h| h.query_by_label(home::CERCO_I_DOCUMENTI).is_none());
+        assert!(in_ordine(&h, &["Alfa.pdf", "Beta.docx", "Gamma.pdf"]), "tutti i file non sono per nome");
+        tocca(&mut h, home::ORDINE_MODIFICA);
+        assert!(in_ordine(&h, &["Beta.docx", "Gamma.pdf", "Alfa.pdf"]), "tutti i file non sono dal più recente");
+        // I comandi stanno nello schermo stretto, su una riga.
+        let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, misura);
+        for b in [home::VISTA_CARTELLE, home::VISTA_TUTTI, home::ORDINE_MODIFICA, home::ORDINE_NOME] {
+            let r = h.get_by_role_and_label(Role::Button, b).rect();
+            assert!(schermo.contains_rect(r), "«{b}» esce dallo schermo: {r:?}");
+        }
+        let (modifica, nome) = (h.get_by_role_and_label(Role::Button, home::ORDINE_MODIFICA).rect(), h.get_by_role_and_label(Role::Button, home::ORDINE_NOME).rect());
+        assert!((modifica.center().y - nome.center().y).abs() < 1.0, "le due scelte dell'ordine non sono sulla stessa riga");
+        // Uscendo e tornando l'ordine resta; e un'app riaperta lo rilegge.
+        tocca(&mut h, home::ORDINE_NOME);
+        indietro(&mut h);
+        tocca(&mut h, "Download");
+        assert!(acceso(&h, home::ORDINE_NOME));
+        let riaperta = Piattaforma::con_cartelle(d.join("app"), d.join("cache"), d.join("radice"));
+        let mut h = telefono_di(TascabileApp::new(riaperta, Instant::now()), misura, 3.0);
+        tocca(&mut h, "Download");
+        assert!(acceso(&h, home::ORDINE_NOME), "l'app riaperta non ricorda l'ordine");
+        let diag = diagnosi_della_prova();
+        assert!(diag.contains("] cartella: ordine per nome\n") && diag.contains("] cartella: ordine per ultima modifica\n"), "{diag}");
+        assert!(!diag.contains("Alfa") && !diag.contains("Gamma"), "{diag}");
+    }
+
+    // ---- 0.9.10: Oscura col pizzico libero, i rettangoli da modellare, niente uscite a metà ----
+
+    /// Un PDF di una pagina col «Codice segreto 98765» su un telefono largo 372 dp, nel modo
+    /// Modifica con lo strumento Oscura aperto: il telefono, la cartella della prova, il file.
+    fn telefono_in_oscura(prova: &str) -> (Telefono, PathBuf, PathBuf) {
+        let contenuto = "BT /F1 24 Tf 60 700 Td (Pagina di prova) Tj ET\nBT /F1 12 Tf 60 450 Td (Codice segreto 98765) Tj ET";
+        let pagina = tascabile_pdf::prova::Pagina { larghezza: 595.0, altezza: 842.0, rotazione: 0, contenuto };
+        let (piattaforma, dir) = piattaforma_di_prova(prova);
+        let percorso = dir.join("radice/Lettera Zanzibar.pdf");
+        std::fs::write(&percorso, tascabile_pdf::prova::pdf(&[pagina])).unwrap();
+        let mut h = telefono_di(TascabileApp::new(piattaforma, Instant::now()), egui::vec2(372.0, 827.0), 3.0);
+        h.state_mut().apri_file(&percorso, "Lettera Zanzibar.pdf");
+        aspetta_il_lettore(&mut h);
+        tocca(&mut h, "Modifica");
+        finche(&mut h, "gli oggetti della pagina", |h| oggetti_pdf(h, 0).len() == 2);
+        dagli_strumenti(&mut h, pdf_modifica::OSCURA);
+        h.run_steps(12);
+        (h, dir, percorso)
+    }
+
+    /// Lo strumento Oscura, che dev'essere aperto.
+    fn oscura(h: &Telefono) -> &pdf_modifica::Oscura {
+        h.state().pdf.as_ref().unwrap().modifica.oscura.as_ref().expect("Oscura non è aperto")
+    }
+
+    /// Dove sta sullo schermo il primo rettangolo di Oscura.
+    fn primo_rettangolo(h: &Telefono) -> egui::Rect {
+        h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(0, oscura(h).rettangoli[0]).expect("il rettangolo sullo schermo")
+    }
+
+    /// Un rettangolo di Oscura disegnato col dito sopra il codice segreto.
+    fn copri_il_segreto(h: &mut Telefono) {
+        let segreto = oggetti_pdf(h, 0).into_iter().find(|o| o.testo.contains("segreto")).unwrap();
+        let r = h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(0, segreto.rettangolo).unwrap().expand(4.0);
+        trascina_col_dito(h, r.left_top(), r.size());
+        assert_eq!(oscura(h).rettangoli.len(), 1, "{}", diagnosi_della_prova());
+    }
+
+    /// Il testo della prima pagina di un PDF, come lo estrae un lettore.
+    fn testo_della_prima_pagina(byte: &[u8]) -> String {
+        let pdf = tascabile_pdf::Pdf::apri(byte.to_vec(), None).unwrap();
+        pdf.testo(0).map(|t| t.text_of(0..t.glyphs.len())).unwrap_or_default()
+    }
+
+    /// Il codice della prova si legge ancora in questi byte, o nel testo che un lettore ne estrae.
+    fn si_legge_il_segreto(byte: &[u8]) -> bool {
+        let t = testo_della_prima_pagina(byte);
+        byte.windows(7).any(|w| w == b"segreto") || byte.windows(5).any(|w| w == b"98765") || t.contains("segreto") || t.contains("98765")
+    }
+
+    /// Segnalazione dell'autore del 10/11: «se uso l'opzione oscuramento e zoomo, lui mi prende
+    /// come primo input per il rettangolo di oscuramento il primo tocco che faccio per zoomare
+    /// con due dita». Il pizzico ingrandisce e non lascia rettangoli, anche se il primo dito si
+    /// è già mosso un poco e si alza per ultimo; dopo, un dito solo disegna.
+    #[test]
+    fn il_pizzico_in_oscura_ingrandisce_e_non_disegna_rettangoli() {
+        let (mut h, _dir, _) = telefono_in_oscura("oscura-pizzico");
+        let zoom = h.state().pdf.as_ref().unwrap().lettore.zoom();
+        let dito = |id, fase, pos| egui::Event::Touch { device_id: egui::TouchDeviceId(1), id: egui::TouchId(id), phase: fase, pos, force: None };
+        let tasto =
+            |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: egui::Modifiers::NONE };
+        // Il primo dito si appoggia e si muove un poco prima che arrivi il secondo.
+        let (a, b) = (egui::pos2(150.0, 330.0), egui::pos2(230.0, 470.0));
+        h.event(dito(0, egui::TouchPhase::Start, a));
+        h.event(egui::Event::PointerMoved(a));
+        h.event(tasto(a, true));
+        h.run_steps(1);
+        let mut p = a + egui::vec2(-4.0, -6.0);
+        h.event(dito(0, egui::TouchPhase::Move, p));
+        h.event(egui::Event::PointerMoved(p));
+        h.run_steps(1);
+        let mut q = b;
+        h.event(dito(1, egui::TouchPhase::Start, q));
+        h.run_steps(1);
+        // Le due dita si allargano.
+        for _ in 0..12 {
+            p += egui::vec2(-5.0, -7.0);
+            q += egui::vec2(5.0, 7.0);
+            h.event(dito(0, egui::TouchPhase::Move, p));
+            h.event(egui::Event::PointerMoved(p));
+            h.event(dito(1, egui::TouchPhase::Move, q));
+            h.run_steps(1);
+        }
+        // Il secondo dito si alza per primo; il primo si muove ancora e poi si alza.
+        h.event(dito(1, egui::TouchPhase::End, q));
+        h.run_steps(1);
+        p += egui::vec2(-10.0, -14.0);
+        h.event(dito(0, egui::TouchPhase::Move, p));
+        h.event(egui::Event::PointerMoved(p));
+        h.run_steps(1);
+        h.event(dito(0, egui::TouchPhase::End, p));
+        h.event(tasto(p, false));
+        h.event(egui::Event::PointerGone);
+        h.run_steps(3);
+        assert!(h.state().pdf.as_ref().unwrap().lettore.zoom() > zoom, "il pizzico non ha ingrandito");
+        assert!(oscura(&h).rettangoli.is_empty(), "il pizzico ha lasciato {} rettangoli", oscura(&h).rettangoli.len());
+        // Adesso un dito solo disegna il rettangolo.
+        trascina_col_dito(&mut h, egui::pos2(120.0, 300.0), egui::vec2(100.0, 40.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 1, "{}", diagnosi_della_prova());
+    }
+
+    /// «…e poi lo devo poter modellare una volta a posto»: il rettangolo appena disegnato è
+    /// scelto, con due maniglie (in alto a sinistra e in basso a destra); col dito dentro si
+    /// sposta, da una maniglia si misura (l'angolo di fronte resta fermo), un tocco fuori lo
+    /// lascia, un tocco sopra lo riprende, «Togli» lo toglie.
+    #[test]
+    fn un_rettangolo_di_oscura_si_sposta_si_misura_e_si_toglie() {
+        let (mut h, _dir, _) = telefono_in_oscura("oscura-modella");
+        trascina_col_dito(&mut h, egui::pos2(100.0, 300.0), egui::vec2(120.0, 40.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 1);
+        assert_eq!(oscura(&h).scelto, Some(0), "il rettangolo appena disegnato non è scelto");
+        let k = h.state().pdf.as_ref().unwrap().lettore.dp_per_pt(0);
+        let misura = |r: [f32; 4]| (r[2] - r[0], r[3] - r[1]);
+        // Col dito dentro si sposta, e resta della stessa misura.
+        let prima = oscura(&h).rettangoli[0];
+        let centro = primo_rettangolo(&h).center();
+        trascina_col_dito(&mut h, centro, egui::vec2(30.0, 50.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 1, "lo spostamento ha disegnato un altro rettangolo");
+        let spostato = oscura(&h).rettangoli[0];
+        assert!((spostato[0] - prima[0] - 30.0 / k).abs() < 0.5 && (spostato[1] - prima[1] - 50.0 / k).abs() < 0.5, "{prima:?} → {spostato:?}");
+        let ((l, a), (l2, a2)) = (misura(prima), misura(spostato));
+        assert!((l - l2).abs() < 0.01 && (a - a2).abs() < 0.01, "spostato ha cambiato misura: {prima:?} → {spostato:?}");
+        // Dalla maniglia in basso a destra si allarga e si allunga; l'angolo in alto a sinistra resta fermo.
+        let maniglia = pdf_modifica::maniglie_oscura(primo_rettangolo(&h))[1];
+        trascina_col_dito(&mut h, maniglia, egui::vec2(40.0, 20.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 1, "la maniglia ha disegnato un altro rettangolo");
+        let misurato = oscura(&h).rettangoli[0];
+        assert!((misurato[0] - spostato[0]).abs() < 0.01 && (misurato[1] - spostato[1]).abs() < 0.01, "l'angolo fermo si è mosso");
+        assert!((misurato[2] - spostato[2] - 40.0 / k).abs() < 0.5 && (misurato[3] - spostato[3] - 20.0 / k).abs() < 0.5, "{spostato:?} → {misurato:?}");
+        // Dalla maniglia in alto a sinistra si tirano gli altri due lati; l'angolo in basso a destra resta fermo.
+        let maniglia = pdf_modifica::maniglie_oscura(primo_rettangolo(&h))[0];
+        trascina_col_dito(&mut h, maniglia, egui::vec2(-20.0, -10.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 1, "la maniglia ha disegnato un altro rettangolo");
+        let tirato = oscura(&h).rettangoli[0];
+        assert!((tirato[2] - misurato[2]).abs() < 0.01 && (tirato[3] - misurato[3]).abs() < 0.01, "l'angolo fermo si è mosso");
+        assert!((tirato[0] - misurato[0] + 20.0 / k).abs() < 0.5 && (tirato[1] - misurato[1] + 10.0 / k).abs() < 0.5, "{misurato:?} → {tirato:?}");
+        // Un tocco fuori lo lascia, un tocco sopra lo riprende.
+        tocca_in(&mut h, egui::pos2(60.0, 180.0));
+        h.run_steps(2);
+        assert_eq!((oscura(&h).scelto, oscura(&h).rettangoli.len()), (None, 1));
+        assert!(h.query_by_label(pdf_modifica::TOGLI_OSCURA).is_none(), "«Togli» senza un rettangolo scelto");
+        let centro = primo_rettangolo(&h).center();
+        tocca_in(&mut h, centro);
+        h.run_steps(2);
+        assert_eq!(oscura(&h).scelto, Some(0));
+        // «Togli» lo toglie; senza rettangoli non c'è «Applica».
+        tocca(&mut h, pdf_modifica::TOGLI_OSCURA);
+        h.run_steps(2);
+        assert!(oscura(&h).rettangoli.is_empty());
+        assert!(h.query_by_label(pdf_modifica::APPLICA).is_none());
+        // Nella diagnosi i numeri, mai il nome del file.
+        let d = diagnosi_della_prova();
+        assert!(d.contains("] pdf: oscura, rettangolo spostato\n") && d.contains("] pdf: oscura, rettangolo misurato\n"), "{d}");
+        assert!(d.contains("] pdf: oscura, rettangolo tolto, ne restano 0\n") && !d.contains("Zanzibar"), "{d}");
+    }
+
+    /// Due righe una sotto l'altra, poi un dato accanto sulla stessa riga: il rettangolo nuovo
+    /// comincia a pochi dp da quello appena disegnato (che è scelto) e resta un rettangolo nuovo,
+    /// non tira una maniglia dell'altro. Per questo le maniglie sono due, in alto a sinistra e in
+    /// basso a destra, dove un rettangolo nuovo non comincia quasi mai (trovato dalla prova a
+    /// schermo: con quattro maniglie il secondo rettangolo tirava il primo).
+    #[test]
+    fn il_rettangolo_della_riga_sotto_non_tira_quello_di_sopra() {
+        let (mut h, _dir, _) = telefono_in_oscura("oscura-righe");
+        trascina_col_dito(&mut h, egui::pos2(60.0, 300.0), egui::vec2(160.0, 18.0));
+        let primo = oscura(&h).rettangoli[0];
+        // La riga sotto: da 10 dp sotto l'angolo in basso a sinistra.
+        let da = primo_rettangolo(&h).left_bottom() + egui::vec2(0.0, 10.0);
+        trascina_col_dito(&mut h, da, egui::vec2(160.0, 18.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 2, "il rettangolo della riga sotto ha tirato quello di sopra");
+        assert_eq!(oscura(&h).rettangoli[0], primo, "il primo rettangolo è cambiato");
+        assert_eq!(oscura(&h).scelto, Some(1));
+        // Il dato accanto, sulla stessa riga: da 8 dp dopo l'angolo in alto a destra del secondo.
+        let secondo = oscura(&h).rettangoli[1];
+        let s = h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(0, secondo).unwrap();
+        trascina_col_dito(&mut h, s.right_top() + egui::vec2(8.0, 0.0), egui::vec2(60.0, 18.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 3, "il rettangolo accanto ha tirato quello di prima");
+        assert_eq!(oscura(&h).rettangoli[1], secondo, "il secondo rettangolo è cambiato");
+        // E quello della riga sopra il primo, da una riga più su.
+        let da = primo_rettangolo(&h).left_top() + egui::vec2(0.0, -28.0);
+        trascina_col_dito(&mut h, da, egui::vec2(160.0, 18.0));
+        assert_eq!(oscura(&h).rettangoli.len(), 4);
+    }
+
+    /// I rettangoli disegnati e non applicati sono soltanto sullo schermo: nel file il testo
+    /// c'è ancora. Finché ci sono, Salva, Salva una copia, Condividi, Esporta in Word e Copia
+    /// definitiva non scrivono niente e dicono perché; i rettangoli restano lì, da applicare.
+    #[test]
+    fn coi_rettangoli_non_applicati_non_si_salva_ne_si_manda() {
+        let (mut h, dir, percorso) = telefono_in_oscura("oscura-non-applicata");
+        let originale = std::fs::read(&percorso).unwrap();
+        copri_il_segreto(&mut h);
+        for voce in [pdf_lavoro::SALVA, pdf_lavoro::SALVA_COPIA, schermo_pdf::CONDIVIDI, pdf_ocr::ESPORTA_WORD, schermo_pdf::COPIA_DEFINITIVA] {
+            tocca(&mut h, schermo_pdf::MENU);
+            tocca(&mut h, voce);
+            h.run_steps(6);
+            assert!(h.query_by_label(pdf_modifica::PRIMA_APPLICA).is_some(), "«{voce}» non si è fermato\n{}", diagnosi_della_prova());
+            h.get_by_label_contains("nel file il testo sotto c'è ancora");
+            tocca(&mut h, HO_CAPITO);
+            h.run_steps(2);
+            aspetta_il_motore(&mut h);
+        }
+        assert_eq!(std::fs::read(&percorso).unwrap(), originale, "il file è stato riscritto");
+        assert!(i_condivisi(&dir).is_empty(), "{:?}", i_condivisi(&dir));
+        let copie = std::fs::read_dir(dir.join("radice/Documents/Tascabile")).map(|d| d.count()).unwrap_or(0);
+        assert_eq!(copie, 0, "è uscita una copia senza l'oscuramento");
+        assert_eq!(oscura(&h).rettangoli.len(), 1, "i rettangoli non ci sono più");
+        let d = diagnosi_della_prova();
+        assert_eq!(d.matches("] pdf: oscura da applicare, uscita fermata\n").count(), 5, "{d}");
+    }
+
+    /// «Quando esporto la copia definitiva deve essere irremovibile»: applicato l'oscuramento,
+    /// il codice non c'è più né nel file salvato né nella copia definitiva né in quello che si
+    /// condivide, nei byte e nel testo che un lettore estrae; e la copia è una revisione sola,
+    /// senza quella di prima in coda. Il confronto: la copia definitiva fatta prima di oscurare
+    /// il codice ce l'ha, quindi il controllo lo vede.
+    #[test]
+    fn la_copia_definitiva_non_ha_il_testo_oscurato() {
+        let (mut h, dir, percorso) = telefono_in_oscura("oscura-definitiva");
+        let definitiva = |h: &mut Telefono| {
+            tocca(h, schermo_pdf::MENU);
+            tocca(h, schermo_pdf::COPIA_DEFINITIVA);
+            h.run_steps(12);
+            tocca(h, schermo_pdf::CREA_DEFINITIVA);
+            aspetta_il_motore(h);
+            tocca(h, schermo_pdf::CHIUDI);
+            h.run_steps(2);
+        };
+        // Prima di oscurare la copia definitiva ha il codice.
+        tocca(&mut h, pdf_modifica::ANNULLA_OSCURA);
+        h.run_steps(2);
+        definitiva(&mut h);
+        let prima = std::fs::read(dir.join("radice/Documents/Tascabile/Lettera Zanzibar definitivo.pdf")).unwrap();
+        assert!(si_legge_il_segreto(&prima), "il controllo non vede il codice nemmeno quando c'è");
+        // Oscurato e applicato.
+        dagli_strumenti(&mut h, pdf_modifica::OSCURA);
+        h.run_steps(12);
+        copri_il_segreto(&mut h);
+        tocca(&mut h, pdf_modifica::APPLICA);
+        h.run_steps(4);
+        tocca(&mut h, pdf_modifica::OSCURA);
+        finche(&mut h, "il codice oscurato", |h| {
+            let o = oggetti_pdf(h, 0);
+            !o.is_empty() && !o.iter().any(|o| o.testo.contains("segreto"))
+        });
+        definitiva(&mut h);
+        let dopo = std::fs::read(dir.join("radice/Documents/Tascabile/Lettera Zanzibar definitivo (2).pdf")).unwrap();
+        assert!(!si_legge_il_segreto(&dopo), "nella copia definitiva il codice si legge ancora");
+        assert!(testo_della_prima_pagina(&dopo).contains("Pagina di prova"), "il resto della pagina non c'è più");
+        assert_eq!(dopo.windows(5).filter(|w| w == b"%%EOF").count(), 1, "la copia tiene in coda la revisione di prima");
+        // Anche quello che si condivide e il file salvato.
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, schermo_pdf::CONDIVIDI);
+        aspetta_il_motore(&mut h);
+        let condivisi = i_condivisi(&dir);
+        assert_eq!(condivisi.len(), 1, "{condivisi:?}");
+        assert!(!si_legge_il_segreto(&std::fs::read(&condivisi[0]).unwrap()), "nel file condiviso il codice si legge ancora");
+        tocca(&mut h, schermo_pdf::MENU);
+        tocca(&mut h, pdf_lavoro::SALVA);
+        aspetta_il_motore(&mut h);
+        let salvato = std::fs::read(&percorso).unwrap();
+        assert!(!si_legge_il_segreto(&salvato), "nel file salvato il codice si legge ancora");
+        assert_eq!(salvato.windows(5).filter(|w| w == b"%%EOF").count(), 1);
     }
 }

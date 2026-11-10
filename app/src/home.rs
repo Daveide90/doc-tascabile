@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime};
 
 use eframe::egui::{self, Color32, Frame, Margin, Rect, RichText, ScrollArea, Sense, Ui, UiBuilder, Vec2, pos2, vec2};
-use tascabile_files::{Recente, Recenti, Scorciatoia, Tipo, Voce, elenca, elenca_tutto, nome_contiene, scorciatoie};
+use tascabile_files::{Ordine, Recente, Recenti, Scorciatoia, Tipo, Voce, elenca, elenca_tutto, nome_contiene, ordina, scorciatoie};
 use tascabile_platform::diagnosi;
 use tascabile_touch::tema::{self, Carattere};
 use tascabile_touch::{
@@ -50,6 +50,13 @@ pub const VISTA_CARTELLE: &str = "Con le cartelle";
 pub const VISTA_TUTTI: &str = "Tutti i file";
 /// Il file della vista scelta, nella cartella dell'app.
 pub const FILE_VISTA: &str = "vista-cartelle";
+/// L'ordine dei file di una cartella (richiesta dell'autore del 10/11: «i file devono essere
+/// sortabili per ultima modifica, anzi deve essere il default»): la parola davanti, le due scelte
+/// e il file dove resta scritta, nella cartella dell'app.
+pub const ORDINA: &str = "Ordina per";
+pub const ORDINE_MODIFICA: &str = "Ultima modifica";
+pub const ORDINE_NOME: &str = "Nome";
+pub const FILE_ORDINE: &str = "ordine-file";
 /// I file al più nella vista «Tutti i file» e nella ricerca di una cartella.
 const TUTTI_AL_MASSIMO: usize = 2000;
 /// Mentre si leggono tutti i file di una cartella.
@@ -283,6 +290,9 @@ pub struct Home {
     tutti_insieme: bool,
     cerca_in_cartella: bool,
     file_vista: PathBuf,
+    /// L'ordine dei file delle cartelle, e il file dove resta scritto.
+    ordine: Ordine,
+    file_ordine: PathBuf,
     /// «Vedi tutti» toccato: tutti i recenti invece dei primi quattro.
     tutti_i_recenti: bool,
     /// L'impronta dei byte appena letti di un documento che si sta aprendo (`apertura`): va nel
@@ -314,6 +324,8 @@ impl Home {
             tutti_insieme: std::fs::read_to_string(cartella_app.join(FILE_VISTA)).is_ok_and(|v| v.trim() == "tutti"),
             cerca_in_cartella: false,
             file_vista: cartella_app.join(FILE_VISTA),
+            ordine: std::fs::read_to_string(cartella_app.join(FILE_ORDINE)).map(|t| Ordine::da_testo(&t)).unwrap_or_default(),
+            file_ordine: cartella_app.join(FILE_ORDINE),
             tutti_i_recenti: false,
             impronte_lette: std::collections::HashMap::new(),
             menu: None,
@@ -496,9 +508,33 @@ impl Home {
         }
     }
 
+    /// L'ordine dei file delle cartelle: i più recenti in cima o per nome; resta per le volte
+    /// dopo. La cartella aperta si rimette in ordine subito, anche coi file delle sottocartelle.
+    fn scegli_ordine(&mut self, ordine: Ordine) {
+        if self.ordine == ordine {
+            return;
+        }
+        self.ordine = ordine;
+        diagnosi(format!("cartella: ordine per {}", if ordine == Ordine::Nome { "nome" } else { "ultima modifica" }));
+        if let Err(e) = std::fs::write(&self.file_ordine, ordine.testo()) {
+            diagnosi(format!("cartella: ordine non salvato ({:?})", e.kind()));
+        }
+        if let Some(c) = self.cartella.as_mut() {
+            if let Ok(voci) = c.voci.as_mut() {
+                ordina(voci, ordine);
+            }
+            if let Some(tutti) = c.tutti.as_mut() {
+                ordina(tutti, ordine);
+            }
+        }
+    }
+
     /// Legge `percorso` e lo mette sullo schermo, senza toccare la storia.
     fn leggi(&mut self, percorso: PathBuf) {
-        let voci = elenca(&percorso);
+        let mut voci = elenca(&percorso);
+        if let Ok(v) = voci.as_mut() {
+            ordina(v, self.ordine);
+        }
         match &voci {
             Ok(v) => {
                 let cartelle = v.iter().filter(|v| v.cartella).count();
@@ -824,7 +860,7 @@ impl Home {
     /// aperta; le due viste («Con le cartelle»: «..», le sottocartelle e i file; «Tutti i file»:
     /// anche quelli delle sottocartelle, i più recenti prima). Solo i file che l'app apre.
     fn mostra_cartella(&mut self, ui: &mut Ui, c: &Contesto, azione: &mut Option<Azione>) {
-        let tutti_insieme = self.tutti_insieme;
+        let (tutti_insieme, ordine) = (self.tutti_insieme, self.ordine);
         let cercato = if self.cerca_in_cartella { self.ricerca.testo().trim().to_string() } else { String::new() };
         // Tutti i file della cartella, letti la prima volta che servono (vista o ricerca), su un
         // thread; intanto «Cerco i documenti…».
@@ -840,14 +876,18 @@ impl Home {
                         let _ = manda.send(elenca_tutto(&percorso, TUTTI_AL_MASSIMO, |v| si_apre(v.tipo)));
                     };
                     if std::thread::Builder::new().name("cartella-tutti".into()).spawn(lavoro).is_err() {
-                        c.tutti = Some(elenca_tutto(&c.percorso, TUTTI_AL_MASSIMO, |v| si_apre(v.tipo)));
+                        let mut tutti = elenca_tutto(&c.percorso, TUTTI_AL_MASSIMO, |v| si_apre(v.tipo));
+                        ordina(&mut tutti, ordine);
+                        c.tutti = Some(tutti);
                     } else {
                         c.in_lettura = Some(arriva);
                     }
                 }
                 Some(arriva) => match arriva.try_recv() {
-                    Ok(tutti) => {
+                    Ok(mut tutti) => {
                         diagnosi(format!("cartella: {} file con le sottocartelle", tutti.len()));
+                        // Arrivano dal più recente: per nome, se è l'ordine scelto.
+                        ordina(&mut tutti, ordine);
                         c.tutti = Some(tutti);
                         c.in_lettura = None;
                     }
@@ -869,6 +909,7 @@ impl Home {
         let sopra = cartella.percorso.parent().map(|p| self.nome_cartella(p)).unwrap_or_default();
         let si_risale = self.si_risale();
         let (mut indietro, mut su, mut vai, mut vista, mut cerca) = (false, false, None, None, false);
+        let mut ordine_scelto = None;
         let mut menu_file = None;
         ui.spacing_mut().item_spacing = Vec2::ZERO;
         let barra = BarraAlta::new(&titolo).indietro("Indietro").sottotitolo(&sotto).azione(PulsanteIcona::new(icone::SEARCH, CERCA_PULSANTE)).mostra(ui);
@@ -895,6 +936,17 @@ impl Home {
                 }
                 if ui.add(Chip::new(VISTA_TUTTI).acceso(tutti_insieme)).clicked() {
                     vista = Some(true);
+                }
+            });
+            // L'ordine dei file: dal modificato più di recente (com'è la prima volta) o per nome.
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = tema::SPAZIO;
+                ui.label(RichText::new(ORDINA).font(Carattere::Testo.font(ui.ctx(), 13.0)).color(tema::MATITA));
+                for (nome, o) in [(ORDINE_MODIFICA, Ordine::Modifica), (ORDINE_NOME, Ordine::Nome)] {
+                    if ui.add(Chip::new(nome).acceso(ordine == o)).clicked() {
+                        ordine_scelto = Some(o);
+                    }
                 }
             });
         });
@@ -971,6 +1023,9 @@ impl Home {
         }
         if let Some(t) = vista {
             self.scegli_vista(t);
+        }
+        if let Some(o) = ordine_scelto {
+            self.scegli_ordine(o);
         }
         if cerca {
             if self.cerca_in_cartella {

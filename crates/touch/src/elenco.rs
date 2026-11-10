@@ -369,13 +369,14 @@ pub enum SceltaMenu {
 
 #[derive(Debug, Clone)]
 enum VoceMenu<'a> {
-    Voce { icona: &'a str, etichetta: &'a str, sotto: Option<&'a str>, primo: bool },
+    Voce { icona: &'a str, etichetta: &'a str, sotto: Option<&'a str>, primo: bool, rosso: bool },
     Separatore,
 }
 
 /// Il menu (`.menu`): un foglio bianco largo 252 dp sopra tutto, con voci fatte di icona grigia
-/// ed etichetta; la prima voce può essere in grassetto con l'icona blu, e una voce può avere
-/// sotto una riga grigia che la spiega. Chi lo usa tiene se è aperto e lo chiude a ogni scelta.
+/// ed etichetta; la prima voce può essere in grassetto con l'icona blu, una voce può avere
+/// sotto una riga grigia che la spiega, e una può essere tutta rossa (quella che non si disfa).
+/// Chi lo usa tiene se è aperto e lo chiude a ogni scelta.
 #[derive(Debug, Clone)]
 pub struct Menu<'a> {
     id: Id,
@@ -398,19 +399,26 @@ impl<'a> Menu<'a> {
 
     /// La voce principale, in grassetto con l'icona blu.
     pub fn primo(mut self, icona: &'a str, etichetta: &'a str) -> Self {
-        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: true });
+        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: true, rosso: false });
         self
     }
 
     pub fn voce(mut self, icona: &'a str, etichetta: &'a str) -> Self {
-        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: false });
+        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: false, rosso: false });
         self
     }
 
     /// Una voce con sotto una riga grigia più piccola che dice che cosa fa: per le voci che si
-    /// somigliano («Salva una copia», «Salva pulito», «Copia definitiva»).
+    /// somigliano («Salva una copia», «Copia definitiva»).
     pub fn voce_spiegata(mut self, icona: &'a str, etichetta: &'a str, sotto: &'a str) -> Self {
-        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: Some(sotto), primo: false });
+        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: Some(sotto), primo: false, rosso: false });
+        self
+    }
+
+    /// Una voce spiegata tutta rossa (icona, etichetta e riga sotto): quella da cui non si torna
+    /// indietro, come la copia definitiva, dove quello che si fissa non si modifica più.
+    pub fn voce_rossa(mut self, icona: &'a str, etichetta: &'a str, sotto: &'a str) -> Self {
+        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: Some(sotto), primo: false, rosso: true });
         self
     }
 
@@ -438,8 +446,8 @@ impl<'a> Menu<'a> {
                 let mut n = 0;
                 for v in self.voci {
                     match v {
-                        VoceMenu::Voce { icona, etichetta, sotto, primo } => {
-                            if voce_del_menu(ui, icona, etichetta, sotto, primo).clicked() {
+                        VoceMenu::Voce { icona, etichetta, sotto, primo, rosso } => {
+                            if voce_del_menu(ui, icona, etichetta, sotto, primo, rosso).clicked() {
                                 scelta = Some(SceltaMenu::Voce(n));
                             }
                             n += 1;
@@ -462,13 +470,15 @@ impl<'a> Menu<'a> {
 /// Una voce del menu (`.menu .m`): l'icona a 18 dp dal bordo, l'etichetta a 58; va a capo se è
 /// lunga, e due righe stanno ancora nei 48 dp (come nel bozzetto); tre o più la allungano. Con la
 /// spiegazione (`sotto`), una riga grigia di 13 dp sotto l'etichetta, nella stessa colonna, con 8
-/// dp d'aria sopra e sotto: la voce si allunga quanto serve.
-fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, sotto: Option<&str>, primo: bool) -> Response {
+/// dp d'aria sopra e sotto: la voce si allunga quanto serve. Una voce rossa ha rossi l'icona,
+/// l'etichetta e la spiegazione.
+fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, sotto: Option<&str>, primo: bool, rosso: bool) -> Response {
     let ctx = ui.ctx().clone();
     let colonna = tema::MENU - 58.0 - 18.0;
     let font = if primo { Carattere::Grassetto } else { Carattere::Testo }.font(&ctx, 15.5);
-    let testo = ui.painter().layout(etichetta.to_owned(), font, tema::INCHIOSTRO, colonna);
-    let spiega = sotto.map(|s| ui.painter().layout(s.to_owned(), Carattere::Testo.font(&ctx, 13.0), tema::MATITA, colonna));
+    let (inchiostro, matita) = if rosso { (tema::ROSSO, tema::ROSSO) } else { (tema::INCHIOSTRO, tema::MATITA) };
+    let testo = ui.painter().layout(etichetta.to_owned(), font, inchiostro, colonna);
+    let spiega = sotto.map(|s| ui.painter().layout(s.to_owned(), Carattere::Testo.font(&ctx, 13.0), matita, colonna));
     let testi = testo.size().y + spiega.as_ref().map_or(0.0, |g| FRA_ETICHETTA_E_SPIEGA + g.size().y);
     let aria = if spiega.is_some() { 20.0 } else { 8.0 };
     let (rect, r) = ui.allocate_exact_size(vec2(tema::MENU, (testi + aria).max(tema::VOCE_MENU)), Sense::click());
@@ -477,7 +487,7 @@ fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, sotto: Option<&str>,
     if r.is_pointer_button_down_on() {
         p.rect_filled(rect, 0.0, tema::PREMUTO);
     }
-    let colore = if primo { tema::BLU } else { tema::MATITA };
+    let colore = if primo { tema::BLU } else { matita };
     p.text(
         pos2(rect.left() + 18.0 + tema::ICONA / 2.0, rect.center().y),
         Align2::CENTER_CENTER,
@@ -814,8 +824,8 @@ mod test {
         }
     }
 
-    /// Una voce spiegata (segnalazione dell'autore del 10/11: «Salva pulito» e «Copia definitiva»
-    /// non si capiva in che cosa fossero diverse): sotto l'etichetta una riga grigia più piccola,
+    /// Una voce spiegata (segnalazione dell'autore del 10/11: le copie del menu del PDF non si
+    /// capiva in che cosa fossero diverse): sotto l'etichetta una riga grigia più piccola,
     /// nella stessa colonna; la voce si allunga e si tocca anche lì; le altre restano di 48 dp.
     #[test]
     fn una_voce_spiegata_ha_sotto_una_riga_grigia_e_si_tocca_anche_li() {
@@ -824,7 +834,7 @@ mod test {
             |ui, scelte: &mut Vec<SceltaMenu>| {
                 let scelta = Menu::new("spiegato")
                     .primo(icone::SAVE, "Salva")
-                    .voce_spiegata(icone::DELETE_SWEEP, "Salva pulito", SPIEGA)
+                    .voce_spiegata(icone::FILE_COPY, "Salva una copia", SPIEGA)
                     .voce(icone::SHARE, "Condividi")
                     .mostra(ui.ctx(), ANGOLO);
                 scelte.extend(scelta);
@@ -833,26 +843,57 @@ mod test {
         );
         h.run_steps(2);
         let salva = h.get_by_label("Salva").rect();
-        let pulito = h.get_by_label("Salva pulito").rect();
+        let copia = h.get_by_label("Salva una copia").rect();
         let condividi = h.get_by_label("Condividi").rect();
         assert_eq!(salva.height(), tema::VOCE_MENU);
         assert_eq!(condividi.height(), tema::VOCE_MENU);
-        let etichetta = rettangolo_del_testo(&h, "Salva pulito").unwrap();
+        let etichetta = rettangolo_del_testo(&h, "Salva una copia").unwrap();
         let spiega = rettangolo_del_testo(&h, SPIEGA).unwrap();
-        assert!(pulito.height() > tema::VOCE_MENU, "{pulito:?}");
-        assert!(pulito.contains_rect(etichetta) && pulito.contains_rect(spiega), "{pulito:?} {etichetta:?} {spiega:?}");
+        assert!(copia.height() > tema::VOCE_MENU, "{copia:?}");
+        assert!(copia.contains_rect(etichetta) && copia.contains_rect(spiega), "{copia:?} {etichetta:?} {spiega:?}");
         assert!(spiega.top() >= etichetta.bottom() - 4.0, "la spiegazione sta sotto l'etichetta: {etichetta:?} {spiega:?}");
         assert!((spiega.left() - etichetta.left()).abs() < 1.5, "stessa colonna: {etichetta:?} {spiega:?}");
         assert!(spiega.width() <= tema::MENU - 58.0 - 18.0, "{spiega:?}");
-        assert!(spiega.top() - pulito.top() >= 8.0 && pulito.bottom() - spiega.bottom() >= 8.0, "aria sopra e sotto: {pulito:?} {spiega:?}");
+        assert!(spiega.top() - copia.top() >= 8.0 && copia.bottom() - spiega.bottom() >= 8.0, "aria sopra e sotto: {copia:?} {spiega:?}");
         assert_eq!(colore_del_testo(&h, SPIEGA), Some(tema::MATITA));
-        assert_eq!(colore_del_testo(&h, "Salva pulito"), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, "Salva una copia"), Some(tema::INCHIOSTRO));
         // La spiegazione si legge anche da sola (lettore dello schermo, prove), dentro la voce.
-        assert!(pulito.contains_rect(h.get_by_label(SPIEGA).rect()));
+        assert!(copia.contains_rect(h.get_by_label(SPIEGA).rect()));
         // Un tocco sulla spiegazione sceglie la voce.
         tocco(&mut h, spiega.center());
         h.run_steps(2);
         assert_eq!(h.state(), &vec![SceltaMenu::Voce(1)]);
+    }
+
+    /// Una voce rossa (segnalazione dell'autore del 10/11: «seleziona in evidenza in rosso la
+    /// copia definitiva»): l'icona, l'etichetta e la riga sotto sono rosse, le voci vicine restano
+    /// com'erano, e si tocca come le altre.
+    #[test]
+    fn una_voce_rossa_ha_icona_etichetta_e_spiegazione_rosse() {
+        const SPIEGA: &str = "Non si può più modificare";
+        let mut h = banco(
+            |ui, scelte: &mut Vec<SceltaMenu>| {
+                let scelta = Menu::new("rosso")
+                    .primo(icone::SAVE, "Salva")
+                    .voce_spiegata(icone::FILE_COPY, "Salva una copia", "Si può ancora modificare")
+                    .voce_rossa(icone::PICTURE_AS_PDF, "Copia definitiva", SPIEGA)
+                    .mostra(ui.ctx(), ANGOLO);
+                scelte.extend(scelta);
+            },
+            Vec::new(),
+        );
+        h.run_steps(2);
+        for testo in ["Copia definitiva", SPIEGA, icone::PICTURE_AS_PDF] {
+            assert_eq!(colore_del_testo(&h, testo), Some(tema::ROSSO), "«{testo}» non è rosso");
+        }
+        assert_eq!(colore_del_testo(&h, "Salva una copia"), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, "Si può ancora modificare"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, icone::FILE_COPY), Some(tema::MATITA));
+        let definitiva = h.get_by_label("Copia definitiva").rect();
+        assert!(definitiva.contains_rect(rettangolo_del_testo(&h, SPIEGA).unwrap()));
+        h.get_by_label("Copia definitiva").click();
+        h.run_steps(2);
+        assert_eq!(h.state(), &vec![SceltaMenu::Voce(2)]);
     }
 
     #[test]

@@ -7,8 +7,8 @@
 //! altro PDF (dai recenti, da Documents/Tascabile o dalla scelta dei file di Android, l'Intent
 //! della foto della firma) in fondo o dopo una pagina. «Dividi»: per intervalli o ogni N pagine,
 //! i file nuovi in Documents/Tascabile. «Comprimi»: tre livelli su una copia, con la misura prima
-//! e dopo. «Proteggi» con la password (AES-256) e «Togli la protezione»; «Salva pulito» nel menu
-//! riscrive tutto il file senza le revisioni di prima.
+//! e dopo. «Proteggi» con la password (AES-256) e «Togli la protezione». (Il «Salva pulito» del
+//! menu non c'è più dalla 0.9.10: Salva riscrive già tutto il file senza le revisioni di prima.)
 //!
 //! Le modifiche passano da `modifica_pdf` (l'avviso delle firme di P1, annulla e ripeti); i file
 //! nuovi si fanno su un thread di lavoro dai byte di adesso, e il documento aperto non cambia.
@@ -26,7 +26,7 @@ use tascabile_touch::tema::{self, Carattere};
 use tascabile_touch::{BarraAlta, BarraFlottante, CampoTesto, Chip, Dialogo, Peso, Pulsante, PulsanteIcona, RispostaDialogo, icone};
 use tascabile_word::salva;
 
-use crate::pdf_lavoro::{AzioneSalva, Strumento, si_modifica};
+use crate::pdf_lavoro::{Strumento, si_modifica};
 use crate::pdf_ocr::{Lavoro, mostra_barra};
 use crate::{Errore, TascabileApp, home};
 
@@ -52,7 +52,6 @@ pub(crate) const COMPRIMI: &str = "Comprimi";
 pub(crate) const PROTEGGI: &str = "Proteggi";
 pub(crate) const PROTEGGI_CON_PASSWORD: &str = "Proteggi con password";
 pub(crate) const TOGLI_PASSWORD: &str = "Togli la password";
-pub(crate) const SALVA_PULITO: &str = "Salva pulito";
 pub(crate) const PDF_COMPRESSO: &str = "PDF compresso";
 pub(crate) const APRI_LA_COPIA: &str = "Apri la copia";
 const ANNULLA: &str = "Annulla";
@@ -99,8 +98,6 @@ pub(crate) struct StatoPagine {
     pub(crate) sbagliato: bool,
     /// Il dialogo «Togliere la password?».
     togli: bool,
-    /// Il dialogo di «Salva pulito».
-    pulito: bool,
     /// La copia compressa da dire: dove, i byte di prima e di dopo.
     compresso: Option<(PathBuf, usize, usize)>,
     /// La copia definitiva appena fatta, da dire col suo dialogo: dov'è, e «Condividi».
@@ -793,7 +790,7 @@ impl TascabileApp {
         });
     }
 
-    // ---- Proteggi, togli la protezione, Salva pulito ----
+    // ---- Proteggi, togli la protezione ----
 
     /// «Proteggi» nel foglio Strumenti: il foglio con la password, che prende la tastiera.
     pub(crate) fn apri_proteggi_pdf(&mut self) {
@@ -873,14 +870,7 @@ impl TascabileApp {
         }
     }
 
-    /// «Salva pulito» nel menu: prima il dialogo che dice che cosa fa.
-    pub(crate) fn chiedi_salva_pulito_pdf(&mut self) {
-        if let Some(p) = self.pdf.as_mut() {
-            p.pagine.pulito = true;
-        }
-    }
-
-    /// I dialoghi di «Pagine e file»: togliere la password, Salva pulito, la copia compressa.
+    /// I dialoghi di «Pagine e file»: togliere la password, la copia definitiva, la copia compressa.
     fn mostra_dialoghi_pagine(&mut self, ctx: &egui::Context) {
         let Some(p) = self.pdf.as_ref() else { return };
         if p.pagine.togli {
@@ -896,23 +886,6 @@ impl TascabileApp {
                 if r == RispostaDialogo::Pulsante(1) {
                     diagnosi("pdf: protezione tolta");
                     self.modifica_pdf(Modifica::togli_protezione());
-                }
-            }
-            return;
-        }
-        if p.pagine.pulito {
-            let testo = crate::pdf_lavoro::spiega_salva_pulito(p);
-            let r = Dialogo::new(Id::new("salva_pulito"), SALVA_PULITO)
-                .testo(&testo)
-                .pulsante(ANNULLA, Peso::Testo)
-                .pulsante(SALVA_PULITO, Peso::Principale)
-                .mostra(ctx);
-            if let Some(r) = r {
-                if let Some(p) = self.pdf.as_mut() {
-                    p.pagine.pulito = false;
-                }
-                if r == RispostaDialogo::Pulsante(1) {
-                    self.salva_pdf(AzioneSalva::SalvaPulito, None);
                 }
             }
             return;
@@ -1111,7 +1084,6 @@ impl TascabileApp {
         }
         if let Some(p) = self.pdf.as_mut()
             && (std::mem::take(&mut p.pagine.togli)
-                | std::mem::take(&mut p.pagine.pulito)
                 | p.pagine.compresso.take().is_some()
                 | p.pagine.definitiva.take().is_some())
         {

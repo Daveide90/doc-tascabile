@@ -23,8 +23,8 @@ android {
         minSdk = 30
         targetSdk = 35
         // versionName uguale alla versione del workspace (Cargo.toml): lo controlla app/tests/versione.rs.
-        versionCode = 35
-        versionName = "0.9.9"
+        versionCode = 36
+        versionName = "0.9.10"
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 

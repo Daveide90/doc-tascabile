@@ -590,7 +590,7 @@ impl TascabileApp {
     /// «Esporta in Word»: il `.docx` del motore in Documents/Tascabile, fatto sul thread
     /// `pdf-word` dai byte di adesso (con le modifiche non salvate).
     pub(crate) fn esporta_word_pdf(&mut self, ctx: &egui::Context) {
-        if self.word.is_some() {
+        if self.word.is_some() || self.oscura_da_applicare() {
             return;
         }
         let Some(p) = self.pdf.as_ref() else { return };

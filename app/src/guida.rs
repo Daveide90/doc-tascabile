@@ -34,15 +34,18 @@ pub(crate) const PARTI: [(&str, &str); 11] = [
         "PDF",
         "Si legge scorrendo, col pizzico e col doppio tocco; la lente cerca. In fondo i modi: Compila riempie i moduli e firma \
          col dito, Annota evidenzia, sottolinea, scrive note e disegna, Modifica cambia i testi, aggiunge testo e immagini e \
-         oscura per sempre quello che non si deve leggere. In una scansione riconosciuta, Modifica corregge anche il testo \
+         oscura per sempre quello che non si deve leggere: in Oscura il rettangolo si disegna con un dito (con due la \
+         pagina si ingrandisce), poi si sposta, si tira dai due pallini blu o si toglie, e con Applica quello che c'è sotto se ne \
+         va dal file. In una scansione riconosciuta, Modifica corregge anche il testo \
          (un nome, una data): le parole cambiate si ridisegnano nella foto, nel carattere più simile a quello stampato, \
          e la scritta di prima esce dal file. Strumenti ha il resto: le pagine (ordine, rotazione, unione, \
          divisione), la password, i numeri di pagina, la filigrana, Riconosci testo (il testo delle scansioni), Esporta in \
          Word e Scansiona, che fa un PDF dalle foto dei fogli, fatte lì o scelte dalla galleria (anche più d'una): per ogni \
          foto si sistemano i bordi del foglio, trascinando i quattro angoli (e i punti in mezzo ai lati, per un foglio \
          piegato), con Aspetto si sceglie come viene la pagina (Documento, Grigi, Bianco e nero, Originale) e la Gomma \
-         sbianca col dito macchie e ombre. Nel menu «Copia definitiva» fa una copia da mandare: moduli, note e \
-         firme diventano parte della pagina, uguale per tutti. La firma col dito ha tre tratti, stilografica, \
+         sbianca col dito macchie e ombre. Nel menu i salvataggi sono tre: Salva, Salva una copia (un altro file, che si \
+         può ancora modificare) e, in rosso, Copia definitiva: una copia da mandare dove moduli, note e firme diventano \
+         parte della pagina e non si modificano più; il tuo PDF resta com'è. La firma col dito ha tre tratti, stilografica, \
          penna e pennarello, nero o blu.",
     ),
     (

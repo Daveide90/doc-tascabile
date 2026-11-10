@@ -25,6 +25,44 @@ pub struct Voce {
     pub byte: u64,
 }
 
+/// L'ordine dei file in una cartella del navigatore (richiesta dell'autore del 10/11: «i file
+/// devono essere sortabili per ultima modifica, anzi deve essere il default»).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Ordine {
+    /// Dal modificato più di recente; a parità, per nome.
+    #[default]
+    Modifica,
+    /// Per nome, come `elenca`.
+    Nome,
+}
+
+impl Ordine {
+    /// La parola con cui si scrive nel file delle scelte.
+    pub fn testo(self) -> &'static str {
+        match self {
+            Ordine::Modifica => "modifica",
+            Ordine::Nome => "nome",
+        }
+    }
+
+    /// L'ordine scritto in `testo`; una parola che non si conosce è l'ultima modifica.
+    pub fn da_testo(testo: &str) -> Self {
+        if testo.trim() == Ordine::Nome.testo() { Ordine::Nome } else { Ordine::Modifica }
+    }
+}
+
+/// Mette `voci` nell'ordine `ordine`: le cartelle restano prima, per nome; i file dal modificato
+/// più di recente (quelli senza data in fondo; a parità per nome) oppure per nome.
+pub fn ordina(voci: &mut [Voce], ordine: Ordine) {
+    let per_nome = |a: &Voce, b: &Voce| confronta_nomi(&a.nome, &b.nome, !a.cartella);
+    voci.sort_by(|a, b| {
+        b.cartella.cmp(&a.cartella).then_with(|| match ordine {
+            Ordine::Modifica if !a.cartella => b.modificato.cmp(&a.modificato).then_with(|| per_nome(a, b)),
+            _ => per_nome(a, b),
+        })
+    });
+}
+
 /// Che cosa c'è in `cartella`: prima le cartelle, poi i file, in ordine di nome senza maiuscole
 /// né accenti e coi numeri per valore (`confronta_nomi`). Niente nascosti (il nome comincia col
 /// punto) e niente collegamenti rotti. Un errore nel leggere la cartella, anche a metà, torna a
@@ -307,6 +345,33 @@ mod test {
         fs::create_dir(d.join("Alfa")).unwrap();
         file(&d, &["beta.docx", "Bravo.pdf", "alfa.txt"]);
         assert_eq!(nomi(&elenca(&d).unwrap()), ["Alfa", "zeta", "alfa.txt", "beta.docx", "Bravo.pdf"]);
+    }
+
+    /// L'ordine dei file nel navigatore (richiesta dell'autore del 10/11): le cartelle restano
+    /// prima, per nome; i file dal modificato più di recente, e a parità per nome; oppure per
+    /// nome. Un file senza data va in fondo. L'ordine si scrive e si rilegge.
+    #[test]
+    fn i_file_si_ordinano_per_ultima_modifica_o_per_nome_con_le_cartelle_prima() {
+        use std::time::Duration;
+        let d = cartella_di_prova("ordina");
+        fs::create_dir(d.join("zeta")).unwrap();
+        fs::create_dir(d.join("Alfa")).unwrap();
+        file(&d, &["beta.docx", "Bravo.pdf", "alfa.txt", "carlo.pdf"]);
+        for (nome, secondi) in [("beta.docx", 3_000), ("Bravo.pdf", 1_000), ("alfa.txt", 2_000), ("carlo.pdf", 2_000)] {
+            fs::File::options().write(true).open(d.join(nome)).unwrap().set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(secondi)).unwrap();
+        }
+        let mut voci = elenca(&d).unwrap();
+        assert_eq!(Ordine::default(), Ordine::Modifica);
+        ordina(&mut voci, Ordine::Modifica);
+        assert_eq!(nomi(&voci), ["Alfa", "zeta", "beta.docx", "alfa.txt", "carlo.pdf", "Bravo.pdf"]);
+        ordina(&mut voci, Ordine::Nome);
+        assert_eq!(nomi(&voci), ["Alfa", "zeta", "alfa.txt", "beta.docx", "Bravo.pdf", "carlo.pdf"]);
+        voci[2].modificato = None;
+        ordina(&mut voci, Ordine::Modifica);
+        assert_eq!(nomi(&voci), ["Alfa", "zeta", "beta.docx", "carlo.pdf", "Bravo.pdf", "alfa.txt"]);
+        assert_eq!(Ordine::da_testo(Ordine::Nome.testo()), Ordine::Nome);
+        assert_eq!(Ordine::da_testo(" modifica\n"), Ordine::Modifica);
+        assert_eq!(Ordine::da_testo("boh"), Ordine::Modifica);
     }
 
     #[test]

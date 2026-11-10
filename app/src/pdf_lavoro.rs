@@ -337,8 +337,6 @@ pub(crate) enum AzioneSalva {
     /// La copia definitiva (moduli, note, disegni e firme fissati nelle pagine) in
     /// Documents/Tascabile: il documento resta com'era.
     Definitiva,
-    /// Come Salva, ma tutto il file riscritto senza le revisioni di prima (P6).
-    SalvaPulito,
 }
 
 impl AzioneSalva {
@@ -349,7 +347,6 @@ impl AzioneSalva {
             AzioneSalva::SalvaCopia => "salva una copia pdf",
             AzioneSalva::Condividi => "condividi pdf aperto",
             AzioneSalva::Definitiva => "copia definitiva pdf",
-            AzioneSalva::SalvaPulito => "salva pulito pdf",
         }
     }
 }
@@ -423,26 +420,13 @@ fn nome_da_condividere(nome: &str) -> String {
 }
 
 /// Dove va il salvataggio quando non scrive sul file aperto (un PDF arrivato da un'altra app, una
-/// copia scelta): Oscura, Proteggi e Salva pulito lo dicono prima, perché l'originale resta com'era
+/// copia scelta): Oscura e Proteggi lo dicono prima, perché l'originale resta com'era
 /// e chi lo inoltra manda quello (revisione del 31/10, punto 11).
 pub(crate) const IN_UNA_COPIA: &str = "Il salvataggio va in una copia in Documents/Tascabile: l'originale resta com'era.";
 
 /// Il testo di un dialogo, con la frase sulla copia se Salva non scrive sul file aperto.
 pub(crate) fn con_la_copia(testo: &str, p: &PdfAperto) -> String {
     if salva_sul_file(p).is_some() { testo.to_string() } else { format!("{testo} {IN_UNA_COPIA}") }
-}
-
-/// Il testo del dialogo di «Salva pulito»: che cosa fa, quale file ne esce (questo, se si può
-/// scrivere; altrimenti una copia), e il rimando a «Copia definitiva», che è un'altra cosa
-/// (segnalazione dell'autore del 10/11: «le copie pulite o il file definitivo non si capisce la
-/// differenza»).
-pub(crate) fn spiega_salva_pulito(p: &PdfAperto) -> String {
-    let quale = if salva_sul_file(p).is_some() { "Non è una copia: resta questo file, e si può ancora modificare." } else { IN_UNA_COPIA };
-    // Tre capoversi: che cosa fa, quale file ne esce, che cosa invece non è.
-    format!(
-        "Riscrivo tutto il file com'è adesso, senza le versioni di prima: le pagine e i dati tolti non restano nascosti nel PDF.\n\n\
-         {quale}\n\nPer una copia da mandare, con note e firme fissate nella pagina, c'è «Copia definitiva»."
-    )
 }
 
 /// Salva scrive sul file aperto: è un file della memoria del telefono (non arrivato da un'altra
@@ -546,6 +530,10 @@ impl TascabileApp {
         let Some(s) = scelto else { return };
         self.fogli_pdf.strumenti.chiudi();
         diagnosi(format!("pdf: strumento {}", s.nome().to_lowercase()));
+        // Gli strumenti che fanno un altro file dal documento com'è: prima l'oscuramento in sospeso.
+        if matches!(s, Strumento::Unisci | Strumento::Dividi | Strumento::Comprimi | Strumento::EsportaWord) && self.oscura_da_applicare() {
+            return;
+        }
         match s {
             Strumento::Firma => self.apri_firma_pdf(crate::pdf_firma::Dove::DaToccare),
             Strumento::OrganizzaPagine => self.apri_organizza_pdf(),
@@ -657,6 +645,10 @@ impl TascabileApp {
     /// modifiche?») si fa quello se il salvataggio riesce. Un salvataggio già in corso non se ne
     /// prende un altro: si aspetta lui.
     pub(crate) fn salva_pdf(&mut self, azione: AzioneSalva, dopo: Option<crate::Dopo>) {
+        // Coi rettangoli di Oscura non ancora applicati niente esce: nel file il testo c'è ancora.
+        if self.oscura_da_applicare() {
+            return;
+        }
         let radice = self.piattaforma.radice_archivio();
         let cache = self.piattaforma.cartella_cache();
         let Some(p) = self.pdf.as_mut() else { return };
@@ -669,7 +661,7 @@ impl TascabileApp {
         }
         let base = base_del_nome(&p.nome);
         let destino = match azione {
-            AzioneSalva::Salva | AzioneSalva::SalvaPulito => match salva_sul_file(p) {
+            AzioneSalva::Salva => match salva_sul_file(p) {
                 Some(percorso) => Destino::File { percorso, radice, base },
                 None => Destino::Copia { radice, base },
             },
@@ -686,7 +678,6 @@ impl TascabileApp {
         });
         let mandato = match azione {
             AzioneSalva::Definitiva => p.motore.appiattita(scrittura),
-            AzioneSalva::SalvaPulito => p.motore.scrivi_pulito(scrittura),
             _ => p.motore.scrivi(scrittura, azione != AzioneSalva::Condividi),
         };
         if !mandato {
@@ -893,10 +884,8 @@ impl TascabileApp {
             // Scritto sul file aperto: il suo recente prende l'impronta dei byte nuovi.
             self.home.impronta_salvata(chiave, impronta);
         }
-        // Un file nuovo, o ripulito per mandarlo: l'avviso ha «Condividi» (10/11).
+        // Un file nuovo: l'avviso ha «Condividi» (10/11).
         match (s.azione, r.come) {
-            (AzioneSalva::SalvaPulito, Come::SulFile) => self.avvisa_col_condividi("Salvato pulito", &r.percorso),
-            (AzioneSalva::SalvaPulito, _) => self.avvisa_col_condividi(format!("Salvato pulito in Documents/Tascabile: {file}"), &r.percorso),
             (_, Come::SulFile) => self.avviso_breve.avvisa("Salvato"),
             (AzioneSalva::SalvaCopia, _) => self.avvisa_col_condividi(format!("Copia salvata in Documents/Tascabile: {file}"), &r.percorso),
             _ => self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {file}"), &r.percorso),

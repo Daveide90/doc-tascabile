@@ -4,6 +4,15 @@
 
 ## English
 
+### 0.9.10 · 10 November 2026
+
+Three saves instead of four, a redaction you can shape, and the most recent files first.
+
+- **Three saves, one under the other, and the one that cannot be edited afterwards is red.** In the PDF menu: «Salva», «Salva una copia» (it can still be edited) and, in red, «Copia definitiva» (it can no longer be edited). «Salva pulito» is gone: «Salva» already rewrites the whole file without the earlier versions, so it was a duplicate. The sheet of the definitive copy now starts, in red, with what the copy loses: filled forms, notes, highlights, drawings and signatures become part of the page and can no longer be changed or removed there. Your PDF stays as it is.
+- **«Oscura»: pinch to zoom, draw with one finger, then adjust.** With two fingers the page zooms and no rectangle starts; before, the first finger of a pinch began one. The rectangle you have just drawn is selected, with two handles (top left and bottom right): drag it to move it, pull a handle to resize it, «Togli» removes it. A tap on another rectangle selects that one, a tap outside leaves it.
+- **Nothing leaves the app half redacted.** Rectangles that are drawn but not applied are only on the screen: the text is still in the file. While there are any, «Salva», «Salva una copia», «Condividi», «Esporta in Word», «Copia definitiva», «Unisci», «Dividi» and «Comprimi» stop and say why. After «Applica» the text is gone from the saved file, from the definitive copy and from what you share: the tests look for it in the bytes and in the extracted text, and the file has a single revision.
+- **Files sorted by last change.** In a folder the files are listed from the most recently changed, with the folders on top. «Ordina per» has «Ultima modifica» and «Nome»; it also applies to «Tutti i file» and to the search, and the choice is remembered.
+
 ### 0.9.9 · 10 November 2026
 
 Copies you can tell apart, share at once and find again.
@@ -129,6 +138,15 @@ Fixes from a review of the whole app.
 - **Beta.** Word, PDF and slides in one app. Fixes for Italian Word styles, scans, replaced photos, links on text, text recognition and export to Word of scans; slides reviewed; a quick guide in Settings.
 
 ## Italiano
+
+### 0.9.10 · 10 novembre 2026
+
+Tre salvataggi invece di quattro, un oscuramento che si modella, e i file più recenti in cima.
+
+- **Tre salvataggi, uno sotto l'altro, e quello che dopo non si modifica più è rosso.** Nel menu del PDF: «Salva», «Salva una copia» (si può ancora modificare) e, in rosso, «Copia definitiva» (non si può più modificare). «Salva pulito» non c'è più: «Salva» riscrive già tutto il file senza le versioni di prima, quindi era un doppione. Il foglio della copia definitiva comincia, in rosso, da quello che nella copia si perde: moduli compilati, note, evidenziazioni, disegni e firme diventano parte della pagina e lì non si modificano e non si tolgono più. Il tuo PDF resta com'è.
+- **«Oscura»: il pizzico ingrandisce, un dito disegna, poi si sistema.** Con due dita la pagina si ingrandisce e non comincia nessun rettangolo; prima, il primo dito del pizzico ne cominciava uno. Il rettangolo appena disegnato è scelto, con due maniglie (in alto a sinistra e in basso a destra): col dito dentro si sposta, da una maniglia si misura, «Togli» lo toglie. Un tocco su un altro rettangolo sceglie quello, un tocco fuori lo lascia.
+- **Niente esce dall'app oscurato a metà.** I rettangoli disegnati e non applicati sono soltanto sullo schermo: nel file il testo c'è ancora. Finché ce ne sono, «Salva», «Salva una copia», «Condividi», «Esporta in Word», «Copia definitiva», «Unisci», «Dividi» e «Comprimi» si fermano e dicono perché. Dopo «Applica» il testo non c'è più nel file salvato, nella copia definitiva e in quello che si condivide: le prove lo cercano nei byte e nel testo estratto, e il file ha una revisione sola.
+- **I file in ordine di ultima modifica.** In una cartella i file stanno dal modificato più di recente, con le cartelle in cima. «Ordina per» ha «Ultima modifica» e «Nome»; vale anche per «Tutti i file» e per la ricerca, e la scelta resta.
 
 ### 0.9.9 · 10 novembre 2026
 

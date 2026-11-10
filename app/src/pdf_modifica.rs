@@ -12,8 +12,11 @@
 //! con la maniglia (un paragrafo scelto si allarga), e la sua barra ha le azioni (Riscrivi,
 //! Formato, Sostituisci, Togli). Un tocco su un punto vuoto propone Aggiungi testo e Immagine.
 //!
-//! Oscura: rettangoli disegnati col dito, poi «Applica», con l'avviso che quello che c'è sotto si
-//! toglie davvero e non si recupera; il salvataggio dopo riscrive tutto il file.
+//! Oscura: rettangoli disegnati con un dito (con due la pagina si ingrandisce, e il gesto di un
+//! dito si lascia); quello appena disegnato è scelto, con due maniglie (in alto a sinistra e in
+//! basso a destra): si sposta, si misura, si toglie. Poi «Applica», con l'avviso che quello che c'è sotto si toglie davvero e non
+//! si recupera; il salvataggio dopo riscrive tutto il file. Finché i rettangoli non sono
+//! applicati, salvare, condividere ed esportare si fermano e lo dicono.
 //!
 //! Nella diagnosi solo generi e conti: mai un testo, un'immagine, un nome di file.
 
@@ -46,6 +49,14 @@ pub(crate) const OSCURA: &str = "Oscura";
 pub(crate) const OSCURARE: &str = "Oscurare per sempre?";
 pub(crate) const OSCURARE_TESTO: &str = "Quello che sta sotto i rettangoli neri si toglie davvero dal file e non si recupera, nemmeno dalle versioni di prima: al salvataggio il PDF si riscrive tutto. Con Annulla, finché non salvi, torna com'era.";
 pub(crate) const DISEGNA: &str = "Disegna col dito i rettangoli da oscurare";
+/// Col rettangolo scelto, al posto di `DISEGNA`.
+pub(crate) const MODELLA: &str = "Spostalo col dito, o tiralo da un pallino";
+/// Il rettangolo scelto si toglie.
+pub(crate) const TOGLI_OSCURA: &str = TOGLI;
+/// Il dialogo che ferma un salvataggio o un'esportazione coi rettangoli non ancora applicati.
+pub(crate) const PRIMA_APPLICA: &str = "Prima applica l'oscuramento";
+const DA_APPLICARE: &str = "I rettangoli neri che hai disegnato non sono ancora applicati: nel file il testo sotto c'è ancora. \
+     Tocca «Applica» per oscurarlo davvero, o «Lascia stare» per toglierli. Poi salva o manda il file.";
 pub(crate) const CAMBIA_CARATTERE: &str = "La riga cambierà carattere";
 pub(crate) const CAMBIA_CARATTERE_TESTO: &str =
     "Il carattere del PDF non ha tutte le lettere nuove: la riga si scriverà in un carattere standard simile, e la differenza si può vedere.";
@@ -118,6 +129,14 @@ const BORDO: f32 = 6.0;
 /// Il tratteggio leggero degli oggetti e il fondo dell'oggetto che si sposta.
 const TRATTO: Color32 = Color32::from_rgba_unmultiplied_const(0x23, 0x46, 0xA0, 70);
 const FONDO_SPOSTA: Color32 = Color32::from_rgba_unmultiplied_const(35, 70, 160, 30);
+/// Le maniglie del rettangolo di Oscura scelto: fuori dall'angolo di tanti dp (in diagonale), e il
+/// dito le prende fino a tanti dp dal centro. Un bersaglio di 32 dp, poco più di quello delle
+/// altre maniglie (`PRESA_MANIGLIA`) e non di più: un rettangolo nuovo che comincia vicino a quello
+/// scelto deve restare un rettangolo nuovo.
+const FUORI_OSCURA: f32 = 8.0;
+const PRESA_OSCURA: f32 = 16.0;
+/// Un rettangolo di Oscura non diventa più piccolo di tanti pt per lato.
+const MINIMO_OSCURA: f32 = 2.0;
 /// I segni dell'oscuramento prima di applicarlo: il nero e il bordo rosso del motore.
 const NERO: Color32 = Color32::from_rgba_unmultiplied_const(0, 0, 0, 200);
 const ROSSO: Color32 = Color32::from_rgb(0xE3, 0x21, 0x21);
@@ -154,14 +173,78 @@ enum Trascina {
     Misura(Vec2),
 }
 
-/// Oscura: la pagina dei rettangoli (pt), quello che si disegna (da, a, sullo schermo) e se si
-/// chiede la conferma.
+/// Oscura: la pagina dei rettangoli (pt della pagina come si vede), quello scelto (ha le maniglie:
+/// si sposta, si misura, si toglie), quello che il dito sta facendo e se si chiede la conferma.
 #[derive(Debug, Default)]
 pub(crate) struct Oscura {
     pub(crate) pagina: Option<usize>,
     pub(crate) rettangoli: Vec<[f32; 4]>,
-    disegna: Option<(Pos2, Pos2)>,
+    pub(crate) scelto: Option<usize>,
+    gesto: Option<GestoOscura>,
     pub(crate) conferma: bool,
+}
+
+/// Quello che il dito sta facendo in Oscura.
+#[derive(Debug, Clone, Copy)]
+enum GestoOscura {
+    /// Un rettangolo nuovo: da dove il dito si è appoggiato a dov'è adesso (sullo schermo).
+    Nuovo(Pos2, Pos2),
+    /// Il rettangolo `i` che si sposta: com'era (pt) e dove il dito l'ha preso (sullo schermo).
+    Sposta { i: usize, prima: [f32; 4], da: Pos2 },
+    /// Il rettangolo `i` che si misura da una maniglia: com'era (pt), se l'angolo che si muove è
+    /// quello in alto a sinistra (altrimenti quello in basso a destra) e dove il dito ha preso la
+    /// maniglia (sullo schermo).
+    Misura { i: usize, prima: [f32; 4], in_alto: bool, da: Pos2 },
+}
+
+impl Oscura {
+    /// Due dita sullo schermo: il gesto di un dito solo si lascia, e il rettangolo che si
+    /// spostava o si misurava torna com'era.
+    fn lascia_il_gesto(&mut self) {
+        if let Some(GestoOscura::Sposta { i, prima, .. } | GestoOscura::Misura { i, prima, .. }) = self.gesto.take()
+            && let Some(r) = self.rettangoli.get_mut(i)
+        {
+            *r = prima;
+        }
+    }
+
+    /// Il rettangolo più in alto sotto il punto `p` dello schermo: quello scelto per primo, poi
+    /// dall'ultimo disegnato.
+    fn sotto(&self, p: Pos2, sullo_schermo: impl Fn([f32; 4]) -> Option<Rect>) -> Option<usize> {
+        let preso = |i: usize| sullo_schermo(self.rettangoli[i]).is_some_and(|s| s.expand(BORDO).contains(p));
+        self.scelto.filter(|i| *i < self.rettangoli.len() && preso(*i)).or_else(|| (0..self.rettangoli.len()).rev().find(|i| preso(*i)))
+    }
+}
+
+/// Le due maniglie di un rettangolo di Oscura sullo schermo, un poco fuori dagli angoli: in alto
+/// a sinistra e in basso a destra. Bastano per tutti e quattro i lati, e stanno dove un
+/// rettangolo nuovo non comincia quasi mai: con una maniglia anche in basso a sinistra, il
+/// rettangolo della riga sotto tirava quello di sopra invece di nascere.
+pub(crate) fn maniglie_oscura(r: Rect) -> [Pos2; 2] {
+    let f = FUORI_OSCURA * std::f32::consts::FRAC_1_SQRT_2;
+    [r.left_top() + vec2(-f, -f), r.right_bottom() + vec2(f, f)]
+}
+
+/// Il rettangolo `prima` (pt) spostato di `d` pt, tenuto dentro la pagina larga e alta `pagina`.
+fn spostato_oscura(prima: [f32; 4], d: Vec2, pagina: Vec2) -> [f32; 4] {
+    let dx = d.x.min((pagina.x - prima[2]).max(0.0)).max((-prima[0]).min(0.0));
+    let dy = d.y.min((pagina.y - prima[3]).max(0.0)).max((-prima[1]).min(0.0));
+    [prima[0] + dx, prima[1] + dy, prima[2] + dx, prima[3] + dy]
+}
+
+/// Il rettangolo `prima` (pt) con un angolo spostato di `d` pt, quello in alto a sinistra o quello
+/// in basso a destra: l'angolo di fronte resta fermo, quello che si muove non esce dalla pagina
+/// e non scavalca quello fermo.
+fn misurato_oscura(prima: [f32; 4], in_alto: bool, d: Vec2, pagina: Vec2) -> [f32; 4] {
+    let mut r = prima;
+    if in_alto {
+        r[0] = (prima[0] + d.x).min(prima[2] - MINIMO_OSCURA).max(0.0);
+        r[1] = (prima[1] + d.y).min(prima[3] - MINIMO_OSCURA).max(0.0);
+    } else {
+        r[2] = (prima[2] + d.x).min(pagina.x.max(prima[2])).max(prima[0] + MINIMO_OSCURA);
+        r[3] = (prima[3] + d.y).min(pagina.y.max(prima[3])).max(prima[1] + MINIMO_OSCURA);
+    }
+    r
 }
 
 /// Le forme col dito: quella scelta, il colore e lo spessore, quella che si disegna (da, a,
@@ -721,54 +804,121 @@ impl TascabileApp {
     }
 
     /// Oscura: i rettangoli disegnati col dito sulla pagina (neri col bordo rosso), quello che si
-    /// disegna, e la barra con «Lascia stare» e «Applica».
+    /// disegna, e la barra con «Lascia stare», «Togli» e «Applica». Il pizzico resta libero: con
+    /// due dita lo zoom è del lettore e il gesto di un dito si lascia (segnalazione dell'autore
+    /// del 10/11: il primo tocco del pizzico cominciava un rettangolo). Il rettangolo appena
+    /// disegnato è scelto, con due maniglie: col dito dentro si sposta, da una maniglia si
+    /// misura, un tocco sopra un altro sceglie quello, un tocco fuori lo lascia.
     fn mostra_oscura(&mut self, ui: &mut egui::Ui, pagine: Rect, zona: Rect) {
         let ctx = ui.ctx().clone();
         let Some(p) = self.pdf.as_mut() else { return };
         let painter = ui.painter_at(pagine);
-        let risposta = ui.interact(pagine, Id::new("oscura_pdf"), Sense::drag());
+        let risposta = ui.interact(pagine, Id::new("oscura_pdf"), Sense::click_and_drag());
         risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, DISEGNA));
+        let dita = ui.input(|i| i.multi_touch().is_some()) || p.lettore.pizzica();
         let Some(o) = p.modifica.oscura.as_mut() else { return };
+        o.scelto = o.scelto.filter(|i| *i < o.rettangoli.len());
+        if dita {
+            o.lascia_il_gesto();
+        }
+        let lettore = &p.lettore;
+        let sullo_schermo = |pagina: Option<usize>, r: [f32; 4]| pagina.and_then(|q| lettore.sullo_schermo(q, r));
+        // La misura della pagina dei rettangoli (pt) e i dp di un suo pt.
+        let misura = o.pagina.and_then(|q| p.motore.stato().geometrie.get(q)).map_or(Vec2::INFINITY, |g| vec2(g.width, g.height));
+        let k = o.pagina.map_or(1.0, |q| lettore.dp_per_pt(q)).max(1e-3);
         if risposta.drag_started()
+            && !dita
             && let Some(da) = ui.input(|i| i.pointer.press_origin())
         {
-            o.disegna = Some((da, da));
+            let pagina = o.pagina;
+            // Una maniglia del rettangolo scelto, se il dito le è più vicino che al suo centro.
+            let maniglia = o.scelto.and_then(|i| {
+                let s = sullo_schermo(pagina, o.rettangoli[i])?;
+                let [alto, basso] = maniglie_oscura(s).map(|m| m.distance(da));
+                let (in_alto, d) = if alto <= basso { (true, alto) } else { (false, basso) };
+                (d <= PRESA_OSCURA && d < s.center().distance(da)).then_some((i, in_alto))
+            });
+            o.gesto = Some(match (maniglia, o.sotto(da, |r| sullo_schermo(pagina, r))) {
+                (Some((i, in_alto)), _) => GestoOscura::Misura { i, prima: o.rettangoli[i], in_alto, da },
+                (None, Some(i)) => {
+                    o.scelto = Some(i);
+                    GestoOscura::Sposta { i, prima: o.rettangoli[i], da }
+                }
+                (None, None) => GestoOscura::Nuovo(da, da),
+            });
         }
         if risposta.dragged()
-            && let (Some((_, a)), Some(qui)) = (o.disegna.as_mut(), risposta.interact_pointer_pos())
+            && let Some(qui) = risposta.interact_pointer_pos()
         {
-            *a = qui;
-        }
-        if risposta.drag_stopped()
-            && let Some((da, a)) = o.disegna.take()
-            && let (Some((pagina, x)), Some((pagina_b, y))) = (p.lettore.sulla_pagina(da), p.lettore.sulla_pagina(a))
-            && pagina == pagina_b
-            && o.pagina.is_none_or(|q| q == pagina)
-        {
-            let r = [x.x.min(y.x), x.y.min(y.y), x.x.max(y.x), x.y.max(y.y)];
-            if r[2] - r[0] >= 2.0 && r[3] - r[1] >= 2.0 {
-                o.pagina = Some(pagina);
-                o.rettangoli.push(r);
-                diagnosi(format!("pdf: oscura, {} rettangoli", o.rettangoli.len()));
+            match o.gesto.as_mut() {
+                Some(GestoOscura::Nuovo(_, a)) => *a = qui,
+                Some(GestoOscura::Sposta { i, prima, da }) => {
+                    if let Some(r) = o.rettangoli.get_mut(*i) {
+                        *r = spostato_oscura(*prima, (qui - *da) / k, misura);
+                    }
+                }
+                Some(GestoOscura::Misura { i, prima, in_alto, da }) => {
+                    if let Some(r) = o.rettangoli.get_mut(*i) {
+                        *r = misurato_oscura(*prima, *in_alto, (qui - *da) / k, misura);
+                    }
+                }
+                None => {}
             }
         }
-        if let Some(pagina) = o.pagina {
-            for r in &o.rettangoli {
-                if let Some(s) = p.lettore.sullo_schermo(pagina, *r) {
-                    painter.rect(s, 0.0, NERO, Stroke::new(1.5, ROSSO), StrokeKind::Outside);
+        if risposta.drag_stopped() {
+            match o.gesto.take() {
+                Some(GestoOscura::Nuovo(da, a)) => {
+                    if let (Some((pagina, x)), Some((pagina_b, y))) = (lettore.sulla_pagina(da), lettore.sulla_pagina(a))
+                        && pagina == pagina_b
+                        && o.pagina.is_none_or(|q| q == pagina)
+                    {
+                        let r = [x.x.min(y.x), x.y.min(y.y), x.x.max(y.x), x.y.max(y.y)];
+                        if r[2] - r[0] >= MINIMO_OSCURA && r[3] - r[1] >= MINIMO_OSCURA {
+                            o.pagina = Some(pagina);
+                            o.rettangoli.push(r);
+                            o.scelto = Some(o.rettangoli.len() - 1);
+                            diagnosi(format!("pdf: oscura, {} rettangoli", o.rettangoli.len()));
+                        }
+                    }
+                }
+                Some(GestoOscura::Sposta { .. }) => diagnosi("pdf: oscura, rettangolo spostato"),
+                Some(GestoOscura::Misura { .. }) => diagnosi("pdf: oscura, rettangolo misurato"),
+                None => {}
+            }
+        }
+        if risposta.clicked()
+            && !dita
+            && let Some(qui) = risposta.interact_pointer_pos()
+        {
+            let pagina = o.pagina;
+            o.scelto = o.sotto(qui, |r| sullo_schermo(pagina, r));
+        }
+        for (i, r) in o.rettangoli.iter().enumerate() {
+            let Some(s) = sullo_schermo(o.pagina, *r) else { continue };
+            painter.rect(s, 0.0, NERO, Stroke::new(1.5, ROSSO), StrokeKind::Outside);
+            if o.scelto == Some(i) {
+                // Il rettangolo scelto: il bordo blu e le due maniglie.
+                painter.rect_stroke(s.expand(1.5), 0.0, Stroke::new(2.0, tema::BLU), StrokeKind::Outside);
+                for m in maniglie_oscura(s) {
+                    painter.circle(m, MANIGLIA, tema::BLU, Stroke::new(2.0, tema::FOGLIO));
                 }
             }
         }
-        if let Some((da, a)) = o.disegna {
+        if let Some(GestoOscura::Nuovo(da, a)) = o.gesto {
             painter.rect(da_due_punti(da, a), 0.0, NERO, Stroke::new(1.5, ROSSO), StrokeKind::Outside);
         }
-        let pronti = !o.rettangoli.is_empty();
+        let (pronti, scelto) = (!o.rettangoli.is_empty(), o.scelto);
         let sotto = Rect::from_center_size(pos2(zona.center().x, zona.bottom() - 40.0), vec2(1.0, 1.0));
-        let g = painter.layout(DISEGNA.to_string(), Carattere::Testo.font(&ctx, 14.0), tema::FOGLIO, zona.width() - 48.0);
+        let dice = if scelto.is_some() { MODELLA } else { DISEGNA };
+        let g = painter.layout(dice.to_string(), Carattere::Testo.font(&ctx, 14.0), tema::FOGLIO, zona.width() - 48.0);
         let fondo = Rect::from_center_size(pos2(zona.center().x, zona.top() + 28.0), g.size() + vec2(24.0, 14.0));
         painter.rect_filled(fondo, 8.0, tema::INCHIOSTRO);
         painter.galley(fondo.min + vec2(12.0, 7.0), g, tema::FOGLIO);
+        // «Lascia stare», poi «Togli» se un rettangolo è scelto, poi «Applica» se ce ne sono.
         let mut barra = BarraContesto::new().azione(icone::CLOSE, ANNULLA_OSCURA);
+        if scelto.is_some() {
+            barra = barra.azione(icone::DELETE, TOGLI_OSCURA);
+        }
         if pronti {
             barra = barra.azione(icone::CHECK, APPLICA);
         }
@@ -777,6 +927,17 @@ impl TascabileApp {
                 diagnosi("pdf: oscura, lasciato stare");
                 p.modifica.oscura = None;
             }
+            Some(1) if scelto.is_some() => {
+                if let (Some(o), Some(i)) = (p.modifica.oscura.as_mut(), scelto) {
+                    o.rettangoli.remove(i);
+                    o.scelto = None;
+                    o.gesto = None;
+                    if o.rettangoli.is_empty() {
+                        o.pagina = None;
+                    }
+                    diagnosi(format!("pdf: oscura, rettangolo tolto, ne restano {}", o.rettangoli.len()));
+                }
+            }
             Some(_) => {
                 if let Some(o) = p.modifica.oscura.as_mut() {
                     o.conferma = true;
@@ -784,6 +945,18 @@ impl TascabileApp {
             }
             None => {}
         }
+    }
+
+    /// Coi rettangoli di Oscura disegnati e non ancora applicati un salvataggio o un'esportazione
+    /// non parte: sullo schermo sono neri, ma nel file il testo sotto c'è ancora. Lo dice e torna
+    /// vero (10/11: «quando esporto la copia definitiva deve essere irremovibile»).
+    pub(crate) fn oscura_da_applicare(&mut self) -> bool {
+        if !self.pdf.as_ref().and_then(|p| p.modifica.oscura.as_ref()).is_some_and(|o| !o.rettangoli.is_empty()) {
+            return false;
+        }
+        diagnosi("pdf: oscura da applicare, uscita fermata");
+        self.errore = Some(Errore { titolo: PRIMA_APPLICA, testo: DA_APPLICARE.to_string() });
+        true
     }
 
     /// Il testo scritto per un oggetto, un testo nuovo, la filigrana o l'intestazione: va al motore
@@ -1057,6 +1230,13 @@ impl TascabileApp {
         let Some(p) = self.pdf.as_ref() else { return Vec::new() };
         let Some(oggetti) = p.modifica.oggetti.get(&pagina) else { return Vec::new() };
         oggetti.iter().filter_map(|o| Some((o.genere, o.testo.clone(), p.lettore.sullo_schermo(o.pagina, o.rettangolo)?))).collect()
+    }
+
+    /// Per le prove a schermo: quanti rettangoli ha Oscura e quale è scelto, se lo strumento è
+    /// aperto.
+    #[doc(hidden)]
+    pub fn rettangoli_di_oscura_di_prova(&self) -> Option<(usize, Option<usize>)> {
+        self.pdf.as_ref()?.modifica.oscura.as_ref().map(|o| (o.rettangoli.len(), o.scelto))
     }
 
     /// Per le prove a schermo e sul PC: arriva l'immagine `byte` chiesta ad Android.

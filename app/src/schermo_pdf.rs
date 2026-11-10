@@ -53,21 +53,25 @@ pub(crate) const CONDIVIDI: &str = "Condividi";
 /// piatto?»): ora il foglio spiega prima che cosa fa, e il pulsante la crea.
 pub(crate) const COPIA_DEFINITIVA: &str = "Copia definitiva";
 pub(crate) const CREA_DEFINITIVA: &str = "Crea la copia definitiva";
+/// Il foglio della copia definitiva, in tre capoversi: che cosa si perde nella copia (in rosso,
+/// per primo: segnalazione dell'autore del 10/11, «in sostanza i dati li perdi»), che l'originale
+/// resta, e che non è un sigillo.
 pub(crate) const SPIEGA_DEFINITIVA: [&str; 3] = [
-    "Una copia da mandare: moduli compilati, note, evidenziazioni, disegni e firme diventano parte della pagina.",
-    "Chi la riceve la vede uguale su ogni telefono e computer: i campi non si compilano più e le note non si tolgono con un \
-     tocco. Non è un sigillo: chi ha un programma che modifica i PDF può ancora cambiarla.",
+    "Nella copia moduli compilati, note, evidenziazioni, disegni e firme diventano parte della pagina: lì non si modificano e \
+     non si tolgono più.",
     "È un file in più: il tuo PDF resta com'è e si può ancora modificare. La copia va nella memoria del telefono, in \
      Documents/Tascabile, e appena è pronta la puoi condividere.",
+    "Chi la riceve la vede uguale su ogni telefono e computer. Non è un sigillo: chi ha un programma che modifica i PDF può \
+     ancora cambiarla.",
 ];
 /// Sotto la spiegazione, se il PDF ha firme digitali.
 const FIRME_NELLA_DEFINITIVA: &str = "Questo PDF ha firme digitali: nella copia non valgono più.";
-/// Le righe grigie sotto le tre voci del menu che si somigliano (segnalazione dell'autore del
-/// 10/11: «le copie pulite o il file definitivo non si capisce la differenza»): quale file ne
-/// esce, questo o un altro, e a che cosa serve. Ognuna sta su una riga sola.
-pub(crate) const SPIEGA_SALVA_COPIA: &str = "Un altro file, uguale a questo";
-pub(crate) const SPIEGA_SALVA_PULITO: &str = "Questo file, senza i dati tolti";
-pub(crate) const SPIEGA_COPIA_DEFINITIVA: &str = "Da mandare, con tutto fissato";
+/// Le righe sotto le due copie del menu, sulla stessa domanda: dopo, si può ancora modificare?
+/// (Seconda segnalazione dell'autore del 10/11: le righe della 0.9.9, «un altro file, uguale a
+/// questo» e «da mandare, con tutto fissato», «creano ancora più confusione».) Ognuna sta su una
+/// riga sola; quella della copia definitiva è rossa come la sua voce.
+pub(crate) const SPIEGA_SALVA_COPIA: &str = "Si può ancora modificare";
+pub(crate) const SPIEGA_COPIA_DEFINITIVA: &str = "Non si può più modificare";
 /// Il dialogo dopo la copia definitiva: dov'è, e «Condividi» subito.
 pub(crate) const COPIA_PRONTA: &str = "Copia definitiva pronta";
 pub(crate) const CHIUDI: &str = "Chiudi";
@@ -1063,23 +1067,21 @@ impl TascabileApp {
             return;
         }
         let ripeti = self.ripeti_nel_menu_pdf;
-        // «Salva pulito» per i PDF che si modificano e non sono firmati (il motore non riscrive tutto
-        // un firmato).
-        let pulito = self.pdf.as_ref().is_some_and(|p| si_modifica(p.motore.stato()) && !p.motore.stato().protezione.firmato());
         let mut menu = Menu::new(egui::Id::new("menu_pdf"));
         if ripeti {
             menu = menu.voce(icone::REDO, RIPETI_MODIFICA).separatore();
         }
-        // Le tre voci che si somigliano hanno sotto la riga che dice quale file ne esce.
-        let mut menu = menu.primo(icone::SAVE, SALVA).voce_spiegata(icone::FILE_COPY, SALVA_COPIA, SPIEGA_SALVA_COPIA);
-        if pulito {
-            menu = menu.voce_spiegata(icone::DELETE_SWEEP, crate::pdf_pagine::SALVA_PULITO, SPIEGA_SALVA_PULITO);
-        }
+        // I tre salvataggi insieme, uno sotto l'altro: Salva, la copia che si può ancora
+        // modificare e, in rosso, quella che non si modifica più. Sotto un filo, mandare ed
+        // esportare. («Salva pulito» non c'è più dalla 0.9.10: Salva riscrive già tutto il file.)
         let data = self.voce_della_data();
         let scelta = menu
+            .primo(icone::SAVE, SALVA)
+            .voce_spiegata(icone::FILE_COPY, SALVA_COPIA, SPIEGA_SALVA_COPIA)
+            .voce_rossa(icone::PICTURE_AS_PDF, COPIA_DEFINITIVA, SPIEGA_COPIA_DEFINITIVA)
+            .separatore()
             .voce(icone::SHARE, CONDIVIDI)
             .voce(icone::DESCRIPTION, crate::pdf_ocr::ESPORTA_WORD)
-            .voce_spiegata(icone::PICTURE_AS_PDF, COPIA_DEFINITIVA, SPIEGA_COPIA_DEFINITIVA)
             .voce(icone::SCHEDULE, data)
             .separatore()
             .voce(icone::GRID_VIEW, MINIATURE)
@@ -1090,7 +1092,7 @@ impl TascabileApp {
             .mostra(ctx, pos2(zona.right() - MENU_DESTRA, zona.top() + MENU_SOTTO));
         let Some(scelta) = scelta else { return };
         self.menu_pdf = false;
-        // Le voci dopo Ripeti vengono una dopo, se c'è; e così dopo «Salva pulito».
+        // Le voci dopo Ripeti vengono una dopo, se c'è.
         let scelta = match scelta {
             SceltaMenu::Voce(0) if ripeti => {
                 self.ripeti_pdf();
@@ -1099,20 +1101,12 @@ impl TascabileApp {
             SceltaMenu::Voce(i) if ripeti => SceltaMenu::Voce(i - 1),
             s => s,
         };
-        let scelta = match scelta {
-            SceltaMenu::Voce(2) if pulito => {
-                self.chiedi_salva_pulito_pdf();
-                return;
-            }
-            SceltaMenu::Voce(i) if pulito && i > 2 => SceltaMenu::Voce(i - 1),
-            s => s,
-        };
         match scelta {
             SceltaMenu::Voce(0) => self.salva_pdf(AzioneSalva::Salva, None),
             SceltaMenu::Voce(1) => self.salva_pdf(AzioneSalva::SalvaCopia, None),
-            SceltaMenu::Voce(2) => self.condividi_pdf_aperto(),
-            SceltaMenu::Voce(3) => self.esporta_word_pdf(ctx),
-            SceltaMenu::Voce(4) => self.apri_copia_definitiva(),
+            SceltaMenu::Voce(2) => self.apri_copia_definitiva(),
+            SceltaMenu::Voce(3) => self.condividi_pdf_aperto(),
+            SceltaMenu::Voce(4) => self.esporta_word_pdf(ctx),
             SceltaMenu::Voce(5) => self.data_dal_menu(ctx),
             SceltaMenu::Voce(6) => self.apri_miniature(),
             SceltaMenu::Voce(7) => self.apri_vai_a_pagina(),
@@ -1124,6 +1118,9 @@ impl TascabileApp {
 
     /// «Copia definitiva» dal menu: prima il foglio che spiega.
     fn apri_copia_definitiva(&mut self) {
+        if self.oscura_da_applicare() {
+            return;
+        }
         diagnosi("pdf: copia definitiva spiegata");
         self.fogli_pdf.definitiva.apri();
     }
@@ -1141,7 +1138,8 @@ impl TascabileApp {
                     if i > 0 {
                         ui.add_space(10.0);
                     }
-                    ui.label(RichText::new(*p).font(font.clone()).color(tema::INCHIOSTRO));
+                    // Per primo, in rosso, quello che nella copia non si modifica più.
+                    ui.label(RichText::new(*p).font(font.clone()).color(if i == 0 { tema::ROSSO } else { tema::INCHIOSTRO }));
                 }
                 if firmato {
                     ui.add_space(10.0);

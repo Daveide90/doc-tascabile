@@ -12,7 +12,7 @@ mod recenti;
 mod ritrova;
 pub mod temporanei;
 
-pub use cartelle::{Scorciatoia, Voce, cartella_dell_omonimo, cartella_tascabile, elenca, elenca_tutto, lo_stesso_file, nome_contiene, scorciatoie};
+pub use cartelle::{Ordine, Scorciatoia, Voce, cartella_dell_omonimo, cartella_tascabile, elenca, elenca_tutto, lo_stesso_file, nome_contiene, ordina, scorciatoie};
 pub use metadati::senza_metadati;
 pub use nomi::{ErroreRinomina, MASSIMO_CARATTERI_NOME, NOME_DI_RIPIEGO, nome_libero, nome_pulito, rinomina, sposta_senza_sostituire};
 pub use posizioni::{MASSIMO_POSIZIONI, Posizione, Posizioni, impronta};

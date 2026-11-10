@@ -113,7 +113,11 @@ fn telefono_finto(prova: &Path) {
         std::fs::create_dir_all(&c).unwrap();
         for i in 0..quanti {
             let nome = nomi.get(i).map_or_else(|| format!("Scansione {:02}.pdf", i + 1), |n| n.to_string());
-            std::fs::write(c.join(nome), b"").unwrap();
+            std::fs::write(c.join(&nome), b"").unwrap();
+            // L'ora dell'ultima modifica, scritta: i file stanno dal modificato più di recente, e
+            // senza un'ora scritta l'ordine dipenderebbe dall'istante in cui la prova li crea.
+            let modificato = SystemTime::now() - std::time::Duration::from_secs(3_600 * (i as u64 + 1));
+            std::fs::File::options().write(true).open(c.join(&nome)).unwrap().set_modified(modificato).unwrap();
         }
     }
     let adesso = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs();
@@ -576,8 +580,8 @@ fn schermata_telefono() {
 /// simulati: il foglio che spiega (data-spiegazione.png) e l'esito con la prova accanto al file
 /// (data-fissata.png). Poi, dallo stesso menu, il foglio della copia definitiva
 /// (copia-definitiva.png), il dialogo che dice dov'è la copia fatta, con «Condividi»
-/// (copia-definitiva-pronta.png), il dialogo di «Salva pulito» (pdf-salva-pulito.png) e il suo
-/// avviso con «Condividi» (pdf-salvato-pulito.png).
+/// (copia-definitiva-pronta.png) e l'avviso di «Salva una copia» con «Condividi»
+/// (pdf-copia-salvata.png).
 fn schermate_della_data(prova: &Path) {
     use tascabile_platform::RispostaRete;
     let file = prova.join("radice/Download/Contratto da datare.pdf");
@@ -626,19 +630,16 @@ fn schermate_della_data(prova: &Path) {
     assert!(prova.join("radice/Documents/Tascabile/Contratto da datare definitivo.pdf").is_file());
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Chiudi").click();
     passi(&mut h, 12);
-    // «Salva pulito»: il dialogo dice che resta questo file, poi l'avviso con «Condividi».
+    // «Salva una copia»: l'avviso dice dov'è la copia e ha «Condividi».
     h.get_by_label("Menu").click();
     passi(&mut h, 4);
-    h.get_by_role_and_label(egui::accesskit::Role::Button, "Salva pulito").click();
-    passi(&mut h, 12);
-    h.get_by_label_contains("Non è una copia: resta questo file");
-    salva(&mut h, "pdf-salva-pulito");
-    h.get_by_role_and_label(egui::accesskit::Role::Button, "Salva pulito").click();
-    finche(&mut h, 30, "salvato pulito", |a| a.c_e_da_condividere());
+    assert!(h.query_by_label_contains("pulito").is_none(), "«Salva pulito» è ancora nel menu");
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Salva una copia").click();
+    finche(&mut h, 30, "copia salvata", |a| a.c_e_da_condividere());
     passi(&mut h, 6);
-    h.get_by_label("Salvato pulito");
+    h.get_by_label_contains("Copia salvata in Documents/Tascabile");
     h.get_by_role_and_label(egui::accesskit::Role::Button, "Condividi");
-    salva(&mut h, "pdf-salvato-pulito");
+    salva(&mut h, "pdf-copia-salvata");
 }
 
 /// Le Slide (tappa G): la lezione di prova arrivata con «Apri con», col nome di uno dei recenti
@@ -1142,7 +1143,8 @@ fn schermate_della_scansione(prova: &Path) {
 /// riga che si riscrive e la tastiera aperta (l'immagine finisce dove comincia); pdf-sposta.png
 /// con un testo aggiunto spostato col dito, scelto, con la maniglia e la sua barra;
 /// pdf-immagine.png con un'immagine dalla galleria inserita dove si è toccato, scelta;
-/// pdf-oscura.png con i rettangoli disegnati col dito sui dati da oscurare e Applica.
+/// pdf-oscura.png con i rettangoli disegnati col dito sui dati da oscurare (l'ultimo è scelto, con
+/// le maniglie e «Togli») e Applica.
 fn schermate_della_modifica(prova: &Path) {
     use tascabile_pdf::GenereOggetto;
     let file = prova.join("radice/Download/Relazione di dimissione.pdf");
@@ -1225,7 +1227,9 @@ fn schermate_della_modifica(prova: &Path) {
         trascina(&mut h, r.left_top(), r.size());
     }
     passi(&mut h, 4);
+    assert_eq!(h.state().rettangoli_di_oscura_di_prova(), Some((2, Some(1))), "due rettangoli, l'ultimo scelto");
     h.get_by_label("Applica");
+    h.get_by_label("Togli");
     let img = salva(&mut h, "pdf-oscura");
     assert!(pixel_di(&img, [0xE3, 0x21, 0x21]) > 300, "mancano i bordi rossi dei rettangoli da oscurare");
     h.get_by_label("Applica").click();
