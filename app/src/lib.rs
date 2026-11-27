@@ -4,8 +4,6 @@
 #[cfg(target_os = "android")]
 mod android_main;
 mod apertura;
-mod rinomina;
-mod le_mie_firme;
 mod blocco;
 mod dizionario;
 mod fissa_data;
@@ -17,6 +15,7 @@ mod foglio_tabella;
 mod guida;
 mod home;
 mod impostazioni;
+mod le_mie_firme;
 mod pdf_annota;
 mod pdf_compila;
 mod pdf_firma;
@@ -27,6 +26,7 @@ mod pdf_pagine;
 mod pdf_recupero;
 mod quando;
 mod recupero;
+mod rinomina;
 mod schermo_editor;
 mod schermo_foglio;
 mod schermo_pdf;
@@ -43,6 +43,7 @@ use recupero::{Copia, Recupero, Risveglio};
 use tascabile_files::{Recente, Tipo, tipo_da_nome};
 pub use tascabile_platform::Piattaforma;
 use tascabile_platform::{ErroreLettura, Fissa, OpenRequest, TastoCrudo, TipoTastiera, diagnosi, diagnosi_fissa, diagnosi_testo};
+use tascabile_touch::t;
 use tascabile_touch::tema::{self, Carattere};
 use tascabile_touch::{
     AvvisoBreve, BarraAlta, BarraFlottante, BarraVoci, CampoTesto, Dialogo, FoglioDalFondo, Peso, PulsanteIcona, RispostaDialogo, Scheda, icone,
@@ -281,6 +282,14 @@ pub struct TascabileApp {
     recupero: Recupero,
     /// Il contesto di egui, per il risveglio del recupero (dal thread del motore).
     contesto: Arc<OnceLock<egui::Context>>,
+    /// Il tema messo davvero (vero: scuro), e quando si è chiesto l'ultima volta al telefono se è
+    /// in modalità scura (per «Come il telefono»), con la risposta.
+    tema_messo: Option<bool>,
+    telefono_scuro: Option<(Instant, bool)>,
+    /// La lingua messa davvero, e quella del telefono chiesta l'ultima volta (per «Come il
+    /// telefono»), con quando.
+    lingua_messa: Option<tascabile_touch::Lingua>,
+    lingua_del_telefono: Option<(Instant, String)>,
     risveglio: Risveglio,
     /// Quante copie private sono state scritte in questo avvio, per i loro nomi.
     copie_scritte: u64,
@@ -401,7 +410,13 @@ fn concesso(accesso: bool) -> &'static str {
 /// «alle 09:30 del 24/10» nell'ora del telefono, per le copie di recupero.
 fn ora_locale_breve(secondi_utc: u64) -> String {
     let (_, mese, giorno, ora, minuti) = salva::ora_locale(secondi_utc as i64);
-    format!("salvato alle {ora:02}:{minuti:02} del {giorno:02}/{mese:02}")
+    tascabile_touch::tf!(
+        "salvato alle {}:{} del {}/{}",
+        format!("{:02}", ora),
+        format!("{:02}", minuti),
+        format!("{:02}", giorno),
+        format!("{:02}", mese)
+    )
 }
 
 /// Le foto scelte dalla galleria arrivate a chi non le aspettava (le chiede solo la scansione):
@@ -524,8 +539,8 @@ fn tempo(v: Option<f32>) -> String {
 fn conteggio_ricerca(r: Ricerca, vuoto: bool) -> String {
     match (r.conteggio, r.attuale) {
         _ if vuoto => String::new(),
-        (0, _) => "Nessun risultato".to_string(),
-        (n, Some(i)) => format!("{} di {n}", i + 1),
+        (0, _) => t("Nessun risultato").to_string(),
+        (n, Some(i)) => tascabile_touch::tf!("{} di {}", i + 1, n),
         (n, None) => format!("{n}"),
     }
 }
@@ -542,7 +557,7 @@ pub fn prepara(ctx: &egui::Context) {
 /// Il contesto ha già il tema dell'app (`prepara`).
 fn preparato(ctx: &egui::Context) -> bool {
     let chiaro = ctx.options(|o| o.theme_preference == egui::ThemePreference::Light && o.input_options.max_click_duration == 0.5);
-    chiaro && ctx.style_of(egui::Theme::Light).visuals.panel_fill == tema::CARTA
+    chiaro && ctx.style_of(egui::Theme::Light).visuals.panel_fill == tema::carta()
 }
 
 impl TascabileApp {
@@ -567,6 +582,8 @@ impl TascabileApp {
         let rete_timestamp = impostazioni::leggi_rete_timestamp(&piattaforma.cartella_app());
         let impronta_firma = impostazioni::leggi_impronta_firma(&piattaforma.cartella_app());
         let blocco = impostazioni::leggi_blocco(&piattaforma.cartella_app());
+        let tema_scelto = impostazioni::leggi_tema(&piattaforma.cartella_app());
+        let lingua_scelta = impostazioni::leggi_lingua(&piattaforma.cartella_app());
         piattaforma.riservata(riservata);
         diagnosi(format!("modalità riservata: {}", if riservata { "accesa" } else { "spenta" }));
         // Le parole aggiunte al dizionario, nella cartella privata dell'app.
@@ -589,7 +606,9 @@ impl TascabileApp {
             prima_della_diagnosi: Schermata::Home,
             testo_diagnosi: String::new(),
             home,
-            impostazioni: Impostazioni::con_autore(autore, ortografia).con_sicurezza(blocco, riservata, rete_timestamp, impronta_firma),
+            impostazioni: Impostazioni::con_autore(autore, ortografia)
+                .con_sicurezza(blocco, riservata, rete_timestamp, impronta_firma)
+                .con_tema(tema_scelto, lingua_scelta),
             aperto: None,
             checklist: None,
             versioni: Ponte::default(),
@@ -602,6 +621,10 @@ impl TascabileApp {
             pronto_da_condividere: None,
             recupero,
             contesto,
+            tema_messo: None,
+            telefono_scuro: None,
+            lingua_messa: None,
+            lingua_del_telefono: None,
             risveglio,
             copie_scritte: 0,
             ritardo_copia: RITARDO_COPIA,
@@ -1152,7 +1175,7 @@ impl TascabileApp {
         self.avviso_breve.avvisa(match n {
             0 => "Nessun risultato".to_string(),
             1 => "Sostituito 1".to_string(),
-            n => format!("Sostituiti {n}"),
+            n => tascabile_touch::tf!("Sostituiti {}", n),
         });
     }
 
@@ -1412,6 +1435,10 @@ impl TascabileApp {
             diagnosi("indietro: riconosci testo chiuso");
             return;
         }
+        if self.fogli_pdf.ruota.indietro() {
+            diagnosi("indietro: ruota le pagine chiuso");
+            return;
+        }
         if self.fogli_pdf.info.indietro() {
             diagnosi("indietro: informazioni del pdf chiuse");
             return;
@@ -1564,19 +1591,21 @@ impl TascabileApp {
             Err(e) => {
                 let tipo = documento::estensione_nota(&nome).unwrap_or_else(|| "sconosciuto".to_string());
                 Da::ApriCon.scrivi(format!("{}: errore di lettura ({}), tipo {tipo}", Da::ApriCon.etichetta(), e.genere));
-                self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
+                self.errore = Some(Errore::apertura(tascabile_touch::tf!("Non riesco ad aprire il file: {}", e)));
                 return;
             }
         };
         // Lo stesso file nelle cartelle del telefono si cerca solo con l'accesso ai file.
-        let cerca = self.home.accesso().then(|| apertura::CercaStesso { radice: self.piattaforma.radice_archivio(), da_app: home::provenienza(&r.uri) });
+        let cerca =
+            self.home.accesso().then(|| apertura::CercaStesso { radice: self.piattaforma.radice_archivio(), da_app: home::provenienza(&r.uri) });
         let dove = apertura::Dove { nome: nome.clone(), chiave: Some(r.uri.clone()), origine: Origine::Uri { uri: r.uri.clone(), nome } };
         self.avvia_apertura(Da::ApriCon, apertura::Richiesta::ApriCon, apertura::Sorgente::File(file), dove, cerca, None);
     }
 
     /// Un documento toccato nel navigatore.
     fn apri_file(&mut self, percorso: &Path, nome: &str) {
-        let dove = apertura::Dove { nome: nome.to_string(), chiave: percorso.to_str().map(str::to_string), origine: Origine::File(percorso.to_path_buf()) };
+        let dove =
+            apertura::Dove { nome: nome.to_string(), chiave: percorso.to_str().map(str::to_string), origine: Origine::File(percorso.to_path_buf()) };
         self.avvia_apertura(Da::Cartella, apertura::Richiesta::Cartella, apertura::Sorgente::Percorso(percorso.to_path_buf()), dove, None, None);
     }
 
@@ -1652,7 +1681,7 @@ impl TascabileApp {
         scrivi_esito("condividi dai recenti", &tipo, &esito);
         match esito {
             Ok(c) => self.piattaforma.condividi_file(&c.percorso, salva::mime(&c.tipo), "Condividi il documento"),
-            Err(e) => self.errore = Some(Errore { titolo: NON_CONDIVISO, testo: format!("Non riesco a condividere il file: {e}") }),
+            Err(e) => self.errore = Some(Errore { titolo: NON_CONDIVISO, testo: tascabile_touch::tf!("Non riesco a condividere il file: {}", e) }),
         }
     }
 
@@ -1708,6 +1737,46 @@ impl TascabileApp {
                     }
                 }
             }
+            Scelta::Tema => {
+                diagnosi("impostazioni: foglio del tema aperto");
+                self.impostazioni.foglio_tema.apri();
+            }
+            Scelta::TemaScelto(t) => {
+                self.impostazioni.foglio_tema.chiudi();
+                match impostazioni::scrivi_tema(&self.piattaforma.cartella_app(), t) {
+                    Ok(()) => {
+                        diagnosi(format!("impostazioni: tema {}", t.nome().to_lowercase()));
+                        self.impostazioni.tema = t;
+                        // Il telefono si richiede subito.
+                        self.telefono_scuro = None;
+                    }
+                    Err(e) => {
+                        diagnosi(format!("impostazioni: tema non scritto ({:?})", e.kind()));
+                        self.errore = Some(Errore { titolo: NON_SALVATO, testo: "Non riesco a salvare la scelta nelle Impostazioni.".to_string() });
+                    }
+                }
+            }
+            Scelta::Lingua => {
+                diagnosi("impostazioni: foglio della lingua aperto");
+                self.impostazioni.foglio_lingua.apri();
+            }
+            Scelta::LinguaNuova(l) => {
+                self.impostazioni.foglio_lingua.chiudi();
+                match impostazioni::scrivi_lingua(&self.piattaforma.cartella_app(), l) {
+                    Ok(()) => {
+                        diagnosi(format!(
+                            "impostazioni: lingua {}",
+                            if l == impostazioni::SceltaLingua::Telefono { "come il telefono" } else { "scelta" }
+                        ));
+                        self.impostazioni.lingua = l;
+                        self.lingua_del_telefono = None;
+                    }
+                    Err(e) => {
+                        diagnosi(format!("impostazioni: lingua non scritta ({:?})", e.kind()));
+                        self.errore = Some(Errore { titolo: NON_SALVATO, testo: "Non riesco a salvare la scelta nelle Impostazioni.".to_string() });
+                    }
+                }
+            }
             Scelta::Ortografia => {
                 let acceso = !self.impostazioni.ortografia;
                 match impostazioni::scrivi_ortografia(&self.piattaforma.cartella_app(), acceso) {
@@ -1730,7 +1799,68 @@ impl TascabileApp {
         }
     }
 
-    /// Il campo dell'autore prende la tastiera, come la ricerca della Home.
+    /// Il tema: quello scelto nelle Impostazioni o, «Come il telefono», quello del telefono (chiesto
+    /// al più ogni 2 s: il telefono può passare allo scuro la sera con l'app aperta). Se cambia, si
+    /// rimettono i colori di egui e le barre di sistema.
+    fn passo_tema(&mut self, ctx: &egui::Context) {
+        let scelta = self.impostazioni.tema;
+        let telefono = if scelta == impostazioni::SceltaTema::Telefono {
+            let adesso = Instant::now();
+            match self.telefono_scuro {
+                Some((quando, scuro)) if adesso.duration_since(quando) < Duration::from_secs(2) => scuro,
+                _ => {
+                    let scuro = self.piattaforma.sistema_scuro();
+                    self.telefono_scuro = Some((adesso, scuro));
+                    scuro
+                }
+            }
+        } else {
+            false
+        };
+        let scuro = scelta.scuro(telefono);
+        if self.tema_messo == Some(scuro) && tema::e_scuro() == scuro {
+            return;
+        }
+        tema::imposta_scuro(scuro);
+        tema::aggiorna_stile(ctx);
+        self.piattaforma.tema_di_sistema(scuro);
+        diagnosi(format!("tema: {} ({})", if scuro { "scuro" } else { "chiaro" }, scelta.nome().to_lowercase()));
+        self.tema_messo = Some(scuro);
+        ctx.request_repaint();
+    }
+
+    /// La lingua: quella scelta nelle Impostazioni o, «Come il telefono», quella del telefono
+    /// (chiesta al più ogni 5 s). Se cambia, si ridisegna tutto nella lingua nuova.
+    fn passo_lingua(&mut self, ctx: &egui::Context) {
+        let scelta = self.impostazioni.lingua;
+        let telefono = if scelta == impostazioni::SceltaLingua::Telefono {
+            let adesso = Instant::now();
+            match &self.lingua_del_telefono {
+                Some((quando, l)) if adesso.duration_since(*quando) < Duration::from_secs(5) => l.clone(),
+                _ => {
+                    let l = self.piattaforma.lingua_di_sistema();
+                    self.lingua_del_telefono = Some((adesso, l.clone()));
+                    l
+                }
+            }
+        } else {
+            String::new()
+        };
+        let lingua = scelta.lingua(&telefono);
+        if self.lingua_messa == Some(lingua) && tascabile_touch::lingua::attiva() == lingua {
+            return;
+        }
+        tascabile_touch::lingua::imposta(lingua);
+        diagnosi(format!(
+            "lingua: {} ({})",
+            lingua.codice(),
+            if scelta == impostazioni::SceltaLingua::Telefono { "come il telefono" } else { "scelta" }
+        ));
+        self.lingua_messa = Some(lingua);
+        ctx.request_repaint();
+    }
+
+    /// Il campo dell'autore prende la tastiera, come la ricerca della Home.    /// Il campo dell'autore prende la tastiera, come la ricerca della Home.
     fn fuoco_al_campo_autore(&mut self) {
         let dopo = self.versioni.versione();
         let st = self.impostazioni.campo_autore.prendi_fuoco(dopo);
@@ -1833,7 +1963,7 @@ impl TascabileApp {
         let r = match esito {
             Ok(r) => r,
             Err(err) => {
-                self.errore = Some(Errore { titolo: NON_SALVATO, testo: format!("Non riesco a salvare: {err}") });
+                self.errore = Some(Errore { titolo: NON_SALVATO, testo: tascabile_touch::tf!("Non riesco a salvare: {}", err) });
                 return false;
             }
         };
@@ -1855,7 +1985,14 @@ impl TascabileApp {
             match r.percorso.to_str() {
                 Some(chiave) => {
                     let impronta = impronta.take();
-                    self.home.ricorda(Recente { chiave: chiave.to_string(), tipo: tipo_da_nome(&nome), nome, aperto_alle: adesso(), pagine: None, impronta })
+                    self.home.ricorda(Recente {
+                        chiave: chiave.to_string(),
+                        tipo: tipo_da_nome(&nome),
+                        nome,
+                        aperto_alle: adesso(),
+                        pagine: None,
+                        impronta,
+                    })
                 }
                 None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
             }
@@ -1873,12 +2010,14 @@ impl TascabileApp {
         }
         match r.come {
             salva::Come::SulFile => self.avviso_breve.avvisa("Salvato"),
-            salva::Come::ComeDocx => self.avviso_breve.avvisa(format!("Salvato come documento Word nella stessa cartella: {}", file_di(&r))),
-            salva::Come::Copia if comando == Comando::SalvaCopia => {
-                self.avvisa_col_condividi(format!("Copia salvata in Documents/Tascabile: {}", file_di(&r)), &r.percorso);
+            salva::Come::ComeDocx => {
+                self.avviso_breve.avvisa(tascabile_touch::tf!("Salvato come documento Word nella stessa cartella: {}", file_di(&r)))
             }
-            salva::Come::Copia => self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {}", file_di(&r)), &r.percorso),
-            salva::Come::Pdf => self.avvisa_col_condividi(format!("PDF pronto in Documents/Tascabile: {}", file_di(&r)), &r.percorso),
+            salva::Come::Copia if comando == Comando::SalvaCopia => {
+                self.avvisa_col_condividi(tascabile_touch::tf!("Copia salvata in Documents/Tascabile: {}", file_di(&r)), &r.percorso);
+            }
+            salva::Come::Copia => self.avvisa_col_condividi(tascabile_touch::tf!("Salvato in Documents/Tascabile: {}", file_di(&r)), &r.percorso),
+            salva::Come::Pdf => self.avvisa_col_condividi(tascabile_touch::tf!("PDF pronto in Documents/Tascabile: {}", file_di(&r)), &r.percorso),
             // Il foglio di condivisione del sistema è già l'esito.
             salva::Come::Condivisione => self.piattaforma.condividi_file(&r.percorso, salva::mime(&r.tipo), "Condividi il documento"),
         }
@@ -1916,7 +2055,7 @@ impl TascabileApp {
                 let titolo = if r.tipo == "pdf" { "Condividi il PDF" } else { "Condividi il documento" };
                 self.piattaforma.condividi_file(&r.percorso, salva::mime(&r.tipo), titolo);
             }
-            Err(e) => self.errore = Some(Errore { titolo: NON_CONDIVISO, testo: format!("Non riesco a condividere il file: {e}") }),
+            Err(e) => self.errore = Some(Errore { titolo: NON_CONDIVISO, testo: tascabile_touch::tf!("Non riesco a condividere il file: {}", e) }),
         }
     }
 
@@ -2140,6 +2279,8 @@ impl TascabileApp {
     /// Tutto ciò che non disegna: tocchi per la diagnosi, fuoco, «Apri con» e tastiera.
     pub fn passo_logica(&mut self, ctx: &egui::Context) {
         let _ = self.contesto.set(ctx.clone());
+        self.passo_tema(ctx);
+        self.passo_lingua(ctx);
         self.dita_nella_diagnosi(ctx);
         self.ritrova_il_fuoco(ctx);
         self.passo_blocco(ctx);
@@ -2303,7 +2444,7 @@ impl TascabileApp {
         }
         // App bloccata: solo la schermata del blocco, color carta, niente fogli né avvisi.
         if self.blocco.bloccata {
-            ui.painter().rect_filled(ui.ctx().viewport_rect(), 0.0, tema::CARTA);
+            ui.painter().rect_filled(ui.ctx().viewport_rect(), 0.0, tema::carta());
             self.mostra_bloccata(ui);
             return;
         }
@@ -2311,7 +2452,7 @@ impl TascabileApp {
             self.indietro();
         }
         // Tutto lo schermo color carta, anche sotto la barra di stato e quella di navigazione.
-        ui.painter().rect_filled(ui.ctx().viewport_rect(), 0.0, tema::CARTA);
+        ui.painter().rect_filled(ui.ctx().viewport_rect(), 0.0, tema::carta());
         // egui dà alla Ui radice tutto lo schermo: si resta dentro la zona libera da barre e tastiera.
         let zona = ui.ctx().content_rect();
         ui.scope_builder(egui::UiBuilder::new().max_rect(zona), |ui| match self.schermata {
@@ -2406,16 +2547,16 @@ impl TascabileApp {
             egui::Frame::NONE.inner_margin(egui::Margin { left: 22, right: 22, top: 4, bottom: 8 }).show(ui, |ui| {
                 ui.label(
                     egui::RichText::new(
-                        "Il registro degli eventi dell'app: tempi, tocchi, tastiera, file aperti. Non contiene il testo dei documenti né i nomi dei file.",
+                        t("Il registro degli eventi dell'app: tempi, tocchi, tastiera, file aperti. Non contiene il testo dei documenti né i nomi dei file."),
                     )
                     .font(Carattere::Testo.font(ui.ctx(), 14.0))
-                    .color(tema::MATITA),
+                    .color(tema::matita()),
                 );
             });
             egui::Frame::NONE.inner_margin(egui::Margin::symmetric(tema::MARGINE as i8, 0)).show(ui, |ui| {
                 Scheda::new().margine(egui::Margin::same(12)).show(ui, |ui| {
                     egui::ScrollArea::vertical().scroll_source(egui::scroll_area::ScrollSource::ALL).auto_shrink([false, false]).show(ui, |ui| {
-                        ui.add(egui::Label::new(egui::RichText::new(&self.testo_diagnosi).monospace().size(11.0).color(tema::INCHIOSTRO)).wrap());
+                        ui.add(egui::Label::new(egui::RichText::new(&self.testo_diagnosi).monospace().size(11.0).color(tema::inchiostro())).wrap());
                     });
                 });
             });
@@ -2457,12 +2598,15 @@ impl TascabileApp {
         // Il nome come nella Home, senza l'estensione.
         let nome = p.fonte.nome();
         let nome = home::nome_da_mostrare(&nome, tipo_da_nome(&nome));
-        let mut testo =
-            format!("L'app si è chiusa con modifiche non salvate a «{nome}» ({}). Riaprile, oppure scartale.", ora_locale_breve(p.fonte.quando()));
+        let mut testo = tascabile_touch::tf!(
+            "L'app si è chiusa con modifiche non salvate a «{}» ({}). Riaprile, oppure scartale.",
+            nome,
+            ora_locale_breve(p.fonte.quando())
+        );
         match quante {
             0 | 1 => {}
-            2 => testo.push_str(" Poi ce n'è un'altra."),
-            _ => testo.push_str(&format!(" Poi ce ne sono altre {}.", quante - 1)),
+            2 => testo.push_str(&format!(" {}", t("Poi ce n'è un'altra."))),
+            _ => testo.push_str(&format!(" {}", tascabile_touch::tf!("Poi ce ne sono altre {}.", quante - 1))),
         }
         let risposta = Dialogo::new(egui::Id::new("lavoro_da_recuperare"), "Lavoro da recuperare")
             .testo(&testo)
@@ -2706,7 +2850,8 @@ mod test {
         dalle_impostazioni(&mut altra, impostazioni::RISERVATA);
         assert!(!altra.state().piattaforma.riservata_accesa() && !impostazioni::leggi_riservata(&d.join("app")));
         let diag = diagnosi_della_prova();
-        for riga in ["] impostazioni: modalità riservata accesa\n", "] modalità riservata: accesa\n", "] impostazioni: modalità riservata spenta\n"] {
+        for riga in ["] impostazioni: modalità riservata accesa\n", "] modalità riservata: accesa\n", "] impostazioni: modalità riservata spenta\n"]
+        {
             assert!(diag.contains(riga), "manca «{riga}»:\n{diag}");
         }
     }
@@ -3878,6 +4023,45 @@ mod test {
     fn misura_della_pagina(h: &Telefono, pagina: usize) -> (f32, f32) {
         let m = h.state().pdf.as_ref().unwrap().motore.stato().misure[pagina];
         (m.larghezza, m.altezza)
+    }
+
+    /// «Ruota le pagine» dal menu del lettore (0.10.0, richiesta dell'autore del 26/11: «dai la
+    /// possibilità di ruotare i pdf che delle volte li inviano storti»): questa pagina a destra,
+    /// due volte (capovolta, il foglio resta aperto), poi tutte a sinistra; Annulla torna indietro.
+    /// C'è anche negli Strumenti.
+    #[test]
+    fn ruota_le_pagine_dal_menu_questa_e_tutte() {
+        let mut h = telefono_col_pdf("pdf-ruota-menu", tascabile_pdf::prova::modulo());
+        assert_eq!(misura_della_pagina(&h, 0), (595.0, 842.0));
+        tocca(&mut h, schermo_pdf::MENU);
+        h.run_steps(2);
+        tocca(&mut h, pdf_pagine::RUOTA_LE_PAGINE);
+        h.run_steps(6);
+        assert!(h.state().fogli_pdf.ruota.aperto());
+        h.get_by_label_contains("Questa pagina è la 1 di 3");
+        tocca(&mut h, pdf_pagine::QUESTA_A_DESTRA);
+        aspetta_il_motore(&mut h);
+        assert_eq!(misura_della_pagina(&h, 0), (842.0, 595.0), "la prima pagina non è girata");
+        assert_eq!(misura_della_pagina(&h, 1), (595.0, 842.0), "è girata anche la seconda");
+        assert!(h.state().fogli_pdf.ruota.aperto(), "il foglio si è chiuso dopo il primo tocco");
+        tocca(&mut h, pdf_pagine::QUESTA_A_DESTRA);
+        aspetta_il_motore(&mut h);
+        assert_eq!(misura_della_pagina(&h, 0), (595.0, 842.0), "due tocchi: la pagina è capovolta, alta come prima");
+        tocca(&mut h, pdf_pagine::TUTTE_A_SINISTRA);
+        aspetta_il_motore(&mut h);
+        for pagina in 0..3 {
+            assert_eq!(misura_della_pagina(&h, pagina), (842.0, 595.0), "pagina {}", pagina + 1);
+        }
+        assert_eq!(pagina_corrente(&h), 0, "la rotazione ha portato via dalla pagina");
+        indietro(&mut h);
+        assert!(!h.state().fogli_pdf.ruota.aperto());
+        h.state_mut().annulla_pdf();
+        aspetta_il_motore(&mut h);
+        assert_eq!(misura_della_pagina(&h, 1), (595.0, 842.0), "Annulla non ha rimesso le pagine");
+        // Negli Strumenti, accanto a «Organizza pagine».
+        dagli_strumenti(&mut h, pdf_pagine::RUOTA_LE_PAGINE);
+        h.run_steps(6);
+        assert!(h.state().fogli_pdf.ruota.aperto());
     }
 
     /// Il giro completo: una rotazione dal foglio Strumenti, Annulla e Ripeti nella barra alta con
@@ -5379,9 +5563,12 @@ mod test {
         assert_eq!(segni(&h).len(), 2, "la seconda firma non si è posata sopra la prima");
         assert!(h.state().pdf.as_ref().unwrap().compila.firma.da_toccare.is_none());
         // La terza sopra un campo di testo: anche lì la firma, non la scrittura nel campo.
-        let campo = h.state().pdf.as_ref().unwrap().motore.stato().campi.iter().find(|c| c.genere == tascabile_pdf::GenereCampo::Testo).unwrap().posti[0].clone();
+        let campo =
+            h.state().pdf.as_ref().unwrap().motore.stato().campi.iter().find(|c| c.genere == tascabile_pdf::GenereCampo::Testo).unwrap().posti[0]
+                .clone();
         let r = campo.rettangolo;
-        let sul_campo = h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(campo.pagina, [r[0] + 4.0, r[1] + 2.0, r[0] + 4.0, r[1] + 2.0]).unwrap().center();
+        let sul_campo =
+            h.state().pdf.as_ref().unwrap().lettore.sullo_schermo(campo.pagina, [r[0] + 4.0, r[1] + 2.0, r[0] + 4.0, r[1] + 2.0]).unwrap().center();
         dagli_strumenti(&mut h, pdf_firma::FIRMA);
         h.run_steps(6);
         tocca(&mut h, pdf_firma::METTI_LA_FIRMA);
@@ -6250,7 +6437,9 @@ mod test {
         std::fs::write(dir.join("radice/hello-world.txt.ots"), tascabile_prova_data::prova::ESEMPIO_OTS).unwrap();
         use tascabile_platform::RispostaRete;
         let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
-        let chiusa = |h: &Telefono| matches!(h.state().piattaforma.rete().chiedi("https://blockstream.info/api/blocks/tip/height", None), RispostaRete::Collegamento);
+        let chiusa = |h: &Telefono| {
+            matches!(h.state().piattaforma.rete().chiedi("https://blockstream.info/api/blocks/tip/height", None), RispostaRete::Collegamento)
+        };
         assert!(chiusa(&h), "la rete deve partire chiusa");
         h.state_mut().apri_file(&percorso, "hello-world.txt");
         aspetta_l_apertura(&mut h);
@@ -6285,7 +6474,12 @@ mod test {
         h.get_by_label(fissa_data::RETE_SPENTA);
         assert!(h.query_by_label(fissa_data::CONTROLLARE).is_none());
         let d = diagnosi_della_prova();
-        for riga in ["] data: niente rete, controllo lasciato\n", "] data: consenso alla rete per il controllo\n", "] data: rete spenta nelle Impostazioni\n", "] rete: chiusa, nessun consenso\n"] {
+        for riga in [
+            "] data: niente rete, controllo lasciato\n",
+            "] data: consenso alla rete per il controllo\n",
+            "] data: rete spenta nelle Impostazioni\n",
+            "] rete: chiusa, nessun consenso\n",
+        ] {
             assert!(d.contains(riga), "manca «{riga}»:\n{d}");
         }
     }
@@ -6316,6 +6510,207 @@ mod test {
         assert!(!h.state().data_in_corso());
     }
 
+    /// Audit B1: annullare un timestamp in corso chiude subito il cancello di rete, ferma le
+    /// richieste successive agli esploratori e non crea né riscrive il file `.ots`.
+    #[test]
+    fn audit_b1_annullare_un_timestamp_chiude_la_rete_e_non_scrive_il_file() {
+        use std::sync::{Arc, Condvar, Mutex};
+        use tascabile_platform::RispostaRete;
+        use tascabile_prova_data::prova::{BLOCCO_358391, ESEMPIO_OTS, ESEMPIO_TXT, HASH_358391, risposta_in_attesa};
+
+        // (A) Controllo con esploratori: dopo Indietro il cancello è chiuso e `/header` non parte.
+        let (piattaforma, dir) = piattaforma_di_prova("audit-b1-controlla");
+        let percorso = dir.join("radice/hello-world.txt");
+        std::fs::write(&percorso, ESEMPIO_TXT).unwrap();
+        std::fs::write(dir.join("radice/hello-world.txt.ots"), ESEMPIO_OTS).unwrap();
+        let chiamate: Arc<Mutex<Vec<String>>> = Arc::default();
+        let sblocca = Arc::new((Mutex::new(false), Condvar::new()));
+        let (chiamate_rete, sblocca_rete) = (chiamate.clone(), sblocca.clone());
+        piattaforma.simula_rete(move |indirizzo, _| {
+            if indirizzo.ends_with("/cancello") {
+                return RispostaRete::Ok(b"aperta".to_vec());
+            }
+            chiamate_rete.lock().unwrap().push(indirizzo.to_string());
+            if indirizzo.ends_with("/block-height/358391") {
+                let (l, cv) = &*sblocca_rete;
+                let _ = cv.wait_timeout_while(l.lock().unwrap(), Duration::from_secs(10), |aperto| !*aperto);
+                RispostaRete::Ok(HASH_358391.as_bytes().to_vec())
+            } else if indirizzo.ends_with(&format!("/block/{HASH_358391}/header")) {
+                RispostaRete::Ok(BLOCCO_358391.as_bytes().to_vec())
+            } else {
+                RispostaRete::Collegamento
+            }
+        });
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&percorso, "hello-world.txt");
+        aspetta_l_apertura(&mut h);
+        h.run_steps(4);
+        tocca(&mut h, schermo_editor::MENU);
+        h.run_steps(2);
+        tocca(&mut h, fissa_data::CONTROLLA_IL_TIMESTAMP);
+        tocca(&mut h, fissa_data::CONTROLLA);
+        finche(&mut h, "richiesta blocco", |_| chiamate.lock().unwrap().iter().any(|u| u.ends_with("/block-height/358391")));
+        indietro(&mut h);
+        let cancello_chiuso =
+            matches!(h.state().piattaforma.rete().chiedi("https://blockstream.info/api/cancello", None), RispostaRete::Collegamento);
+        let (l, cv) = &*sblocca;
+        *l.lock().unwrap() = true;
+        cv.notify_all();
+        aspetta_la_data(&mut h);
+        assert!(cancello_chiuso, "dopo l'annullamento il cancello di rete deve chiudersi subito");
+        let registrate = chiamate.lock().unwrap().clone();
+        assert!(!registrate.iter().any(|u| u.contains("/header")), "dopo l'annullamento non deve partire /header: {registrate:?}");
+        assert!(h.query_by_label(fissa_data::TIMESTAMP_CONFERMATO).is_none());
+
+        // (B) Creazione di un timestamp: annullato mentre le 4 POST sono in volo, il `.ots` non si crea.
+        let (piattaforma, dir) = piattaforma_di_prova("audit-b1-fissa");
+        let percorso = dir.join("radice/Contratto.pdf");
+        std::fs::write(&percorso, tascabile_pdf::prova::pdf(&[tascabile_pdf::prova::Pagina::bianca(595.0, 842.0)])).unwrap();
+        let chiamate: Arc<Mutex<Vec<String>>> = Arc::default();
+        let sblocca = Arc::new((Mutex::new(false), Condvar::new()));
+        let (chiamate_rete, sblocca_rete) = (chiamate.clone(), sblocca.clone());
+        let attesa = risposta_in_attesa("https://alice.btc.calendar.opentimestamps.org");
+        piattaforma.simula_rete(move |indirizzo, corpo| {
+            if corpo.is_some() && indirizzo.ends_with("/digest") {
+                chiamate_rete.lock().unwrap().push(indirizzo.to_string());
+                let (l, cv) = &*sblocca_rete;
+                let _ = cv.wait_timeout_while(l.lock().unwrap(), Duration::from_secs(10), |aperto| !*aperto);
+                RispostaRete::Ok(attesa.clone())
+            } else {
+                RispostaRete::Collegamento
+            }
+        });
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&percorso, "Contratto.pdf");
+        aspetta_il_lettore(&mut h);
+        tocca(&mut h, schermo_pdf::MENU);
+        h.run_steps(2);
+        tocca(&mut h, fissa_data::TIMESTAMP_CON_BLOCKCHAIN);
+        h.run_steps(12);
+        tocca(&mut h, fissa_data::CREA_IL_TIMESTAMP);
+        finche(&mut h, "richieste digest", |_| {
+            chiamate.lock().unwrap().iter().filter(|u| u.ends_with("/digest")).count() == tascabile_prova_data::server::AGGREGATORI.len()
+        });
+        indietro(&mut h);
+        let (l, cv) = &*sblocca;
+        *l.lock().unwrap() = true;
+        cv.notify_all();
+        aspetta_la_data(&mut h);
+        assert!(!dir.join("radice/Contratto.pdf.ots").exists(), "dopo l'annullamento il .ots non va creato accanto al file");
+        assert!(
+            !dir.join("radice/Documents/Tascabile/Contratto.pdf.ots").exists(),
+            "dopo l'annullamento il .ots non va creato in Documents/Tascabile"
+        );
+        assert!(h.query_by_label(fissa_data::TIMESTAMP_CREATO).is_none());
+
+        // (C) Controllo con aggiornamento dal calendario: annullato, il `.ots` sul disco non cambia.
+        let (piattaforma, dir) = piattaforma_di_prova("audit-b1-riscrive");
+        let testo = b"contenuto di prova per annullamento\n";
+        let percorso = dir.join("radice/nota.txt");
+        let ots_path = dir.join("radice/nota.txt.ots");
+        std::fs::write(&percorso, testo).unwrap();
+        let (mut p, mandato) = tascabile_prova_data::Prova::nuova(testo, [7u8; 16]);
+        p.albero
+            .trova_mut(&mandato)
+            .unwrap()
+            .aggiungi(tascabile_prova_data::Attestazione::InAttesa("https://alice.btc.calendar.opentimestamps.org".into()));
+        let ots_iniziale = p.scrivi().unwrap();
+        std::fs::write(&ots_path, &ots_iniziale).unwrap();
+        let chiamate: Arc<Mutex<Vec<String>>> = Arc::default();
+        let sblocca = Arc::new((Mutex::new(false), Condvar::new()));
+        let (chiamate_rete, sblocca_rete) = (chiamate.clone(), sblocca.clone());
+        let seguito = risposta_in_attesa("https://bob.btc.calendar.opentimestamps.org");
+        piattaforma.simula_rete(move |indirizzo, _| {
+            if indirizzo.contains("/timestamp/") {
+                chiamate_rete.lock().unwrap().push(indirizzo.to_string());
+                let (l, cv) = &*sblocca_rete;
+                let _ = cv.wait_timeout_while(l.lock().unwrap(), Duration::from_secs(10), |aperto| !*aperto);
+                RispostaRete::Ok(seguito.clone())
+            } else {
+                RispostaRete::Collegamento
+            }
+        });
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&percorso, "nota.txt");
+        aspetta_l_apertura(&mut h);
+        h.run_steps(4);
+        tocca(&mut h, schermo_editor::MENU);
+        h.run_steps(2);
+        tocca(&mut h, fissa_data::CONTROLLA_IL_TIMESTAMP);
+        tocca(&mut h, fissa_data::CONTROLLA);
+        finche(&mut h, "richiesta calendario", |_| chiamate.lock().unwrap().iter().any(|u| u.contains("/timestamp/")));
+        indietro(&mut h);
+        let (l, cv) = &*sblocca;
+        *l.lock().unwrap() = true;
+        cv.notify_all();
+        aspetta_la_data(&mut h);
+        assert_eq!(std::fs::read(&ots_path).unwrap(), ots_iniziale, "dopo l'annullamento il .ots non va riscritto");
+    }
+
+    /// Audit B2: una prova `.ots` in Documents/Tascabile si associa al documento solo se l'impronta
+    /// coincide; un omonimo con contenuto diverso (o un `.ots` rovinato) mostra ancora «Timestamp con
+    /// blockchain» nel menu.
+    #[test]
+    fn audit_b2_un_omonimo_in_documents_tascabile_non_nasconde_timestamp() {
+        use tascabile_prova_data::prova::{ESEMPIO_OTS, ESEMPIO_TXT};
+
+        let (piattaforma, dir) = piattaforma_di_prova("audit-b2-omonimo");
+        rete_dei_server(&piattaforma);
+        let tascabile = dir.join("radice/Documents/Tascabile");
+        let scaricati = dir.join("radice/Download");
+        let rovinata_dir = dir.join("radice/Download/rovinata");
+        let uguale_dir = dir.join("radice/Download/uguale");
+        std::fs::create_dir_all(&tascabile).unwrap();
+        std::fs::create_dir_all(&rovinata_dir).unwrap();
+        std::fs::create_dir_all(&uguale_dir).unwrap();
+
+        let ots_tascabile = tascabile.join("hello-world.txt.ots");
+        std::fs::write(&ots_tascabile, ESEMPIO_OTS).unwrap();
+        let diverso = scaricati.join("hello-world.txt");
+        std::fs::write(&diverso, b"un altro file con lo stesso nome\n").unwrap();
+
+        let mut h = telefono(TascabileApp::new(piattaforma, Instant::now()));
+        h.state_mut().apri_file(&diverso, "hello-world.txt");
+        aspetta_l_apertura(&mut h);
+        h.run_steps(4);
+        tocca(&mut h, schermo_editor::MENU);
+        h.run_steps(2);
+        assert!(
+            h.query_by_label(fissa_data::TIMESTAMP_CON_BLOCKCHAIN).is_some(),
+            "un file mai timbrato deve poter creare il timestamp anche se in Documents/Tascabile c'è un omonimo"
+        );
+        assert!(h.query_by_label(fissa_data::CONTROLLA_IL_TIMESTAMP).is_none(), "la prova dell'omonimo non appartiene a questo file");
+        indietro(&mut h);
+
+        // Anche un file non valido con lo stesso nome in Documents/Tascabile non deve bloccare il menu.
+        std::fs::write(&ots_tascabile, b"non una prova").unwrap();
+        let altro = rovinata_dir.join("hello-world.txt");
+        std::fs::write(&altro, b"un altro file ancora\n").unwrap();
+        h.state_mut().apri_file(&altro, "hello-world.txt");
+        aspetta_l_apertura(&mut h);
+        h.run_steps(4);
+        tocca(&mut h, schermo_editor::MENU);
+        h.run_steps(2);
+        assert!(h.query_by_label(fissa_data::TIMESTAMP_CON_BLOCKCHAIN).is_some());
+        assert!(h.query_by_label(fissa_data::CONTROLLA_IL_TIMESTAMP).is_none());
+        indietro(&mut h);
+
+        // Controllo positivo: se l'impronta del documento coincide, la prova in Documents/Tascabile si trova e si conferma.
+        std::fs::write(&ots_tascabile, ESEMPIO_OTS).unwrap();
+        let uguale = uguale_dir.join("hello-world.txt");
+        std::fs::write(&uguale, ESEMPIO_TXT).unwrap();
+        h.state_mut().apri_file(&uguale, "hello-world.txt");
+        aspetta_l_apertura(&mut h);
+        h.run_steps(4);
+        tocca(&mut h, schermo_editor::MENU);
+        h.run_steps(2);
+        tocca(&mut h, fissa_data::CONTROLLA_IL_TIMESTAMP);
+        tocca(&mut h, fissa_data::CONTROLLA);
+        aspetta_la_data(&mut h);
+        h.get_by_label(fissa_data::TIMESTAMP_CONFERMATO);
+        assert_eq!(std::fs::read(&ots_tascabile).unwrap(), ESEMPIO_OTS);
+    }
+
     /// Esporta in Word di una scansione riconosciuta: un .docx coi paragrafi del testo, da
     /// modificare. Prima le parole dell'OCR andavano in caselle sopra l'immagine e si leggevano a
     /// pezzi («ci / tt / à»; analisi del 27/10, pagine I6).
@@ -6340,7 +6735,11 @@ mod test {
         h.get_by_label_contains("solo il testo riconosciuto");
         // Il Word nuovo si condivide subito dall'avviso (10/11).
         tocca(&mut h, CONDIVIDI_SUBITO);
-        assert!(condiviso_uguale(&dir, "Verbale Zanzibar.docx", &dir.join("radice/Documents/Tascabile/Verbale Zanzibar.docx")), "{:?}", i_condivisi(&dir));
+        assert!(
+            condiviso_uguale(&dir, "Verbale Zanzibar.docx", &dir.join("radice/Documents/Tascabile/Verbale Zanzibar.docx")),
+            "{:?}",
+            i_condivisi(&dir)
+        );
         let docx = std::fs::read(dir.join("radice/Documents/Tascabile/Verbale Zanzibar.docx")).expect("il .docx");
         let s = tascabile_word::documento::apri_byte("Verbale Zanzibar.docx", &docx).expect("si apre");
         let testo = s.doc.plain_text(wordcraft_engine::doc::StoryRef::Body);
@@ -6678,7 +7077,7 @@ mod test {
         // A 412 dp niente è cambiato: il margine dentro il chip è quello di sempre, 14 dp per lato.
         let ctx = largo.ctx.clone();
         let font = Carattere::Grassetto.font(&ctx, 14.0);
-        let testo = ctx.fonts_mut(|f| f.layout_no_wrap("Documenti".to_string(), font, egui::Color32::PLACEHOLDER).size().x);
+        let testo = ctx.fonts_mut(|f| f.layout_no_wrap(t("Documenti").to_string(), font, egui::Color32::PLACEHOLDER).size().x);
         assert!((largo_di(&largo, "Documenti") - (testo + 28.0)).abs() < 0.6, "{} e {}", largo_di(&largo, "Documenti"), testo + 28.0);
     }
 
@@ -6711,7 +7110,7 @@ mod test {
         let h = telefono(app_di_prova("tema"));
         let ctx = h.ctx.clone();
         assert_eq!(ctx.theme(), egui::Theme::Light);
-        assert_eq!(ctx.global_style().visuals.panel_fill, tema::CARTA);
+        assert_eq!(ctx.global_style().visuals.panel_fill, tema::carta());
         assert!(Carattere::Titolo.pronto(&ctx) && Carattere::Icona.pronto(&ctx));
         assert!(preparato(&ctx));
         let testa = testa_della_diagnosi();
@@ -6911,7 +7310,13 @@ mod test {
         assert_eq!(editor(h.state()).nome, "Verbale archiviato.docx");
         assert!(matches!(&editor(h.state()).origine, Origine::File(p) if *p == archiviato));
         let diag = diagnosi_della_prova();
-        for riga in ["] rinomina: foglio aperto\n", "] rinomina: nome già preso\n", "] rinomina: fatto\n", "] indietro: rinomina chiuso\n", "] rinomina: anche il documento aperto\n"] {
+        for riga in [
+            "] rinomina: foglio aperto\n",
+            "] rinomina: nome già preso\n",
+            "] rinomina: fatto\n",
+            "] indietro: rinomina chiuso\n",
+            "] rinomina: anche il documento aperto\n",
+        ] {
             assert!(diag.contains(riga), "manca «{riga}»:\n{diag}");
         }
         assert!(!diag.contains("Verbale") && !diag.contains("Recente 0"), "{diag}");
@@ -7856,7 +8261,9 @@ mod test {
         // «Fatto» corregge subito, senza domande: il testo resta della scansione, invisibile
         // sopra la foto rifatta, e si corregge ancora.
         correggi_con(&mut h, "Dieci giorni fa");
-        finche(&mut h, "il paragrafo corretto", |h| oggetti_pdf(h, 0).iter().any(|o| o.genere == GenereOggetto::Scansione && o.testo == "Dieci giorni fa"));
+        finche(&mut h, "il paragrafo corretto", |h| {
+            oggetti_pdf(h, 0).iter().any(|o| o.genere == GenereOggetto::Scansione && o.testo == "Dieci giorni fa")
+        });
         assert!(scansione(&h).is_none());
         assert!(!oggetti_pdf(&h, 0).iter().any(|o| o.genere == GenereOggetto::Testo), "un testo che si vede sopra la foto");
         assert!(h.state().errore.is_none());
@@ -8334,7 +8741,7 @@ mod test {
         // Il dialogo del tema: titolo in Fraunces, il messaggio, «Ho capito», sopra il velo scuro.
         assert_eq!(famiglia_del_testo(&h, NON_SI_APRE), Some(Carattere::Titolo.famiglia()));
         h.get_by_label_contains("Non riesco ad aprire il file: ");
-        assert!(!riempiti(&h, tema::VELO_SCURO).is_empty());
+        assert!(!riempiti(&h, tema::velo_scuro()).is_empty());
         // Indietro lo chiude e resta nella cartella; «Ho capito» anche.
         indietro(&mut h);
         assert!(h.query_by_label(NON_SI_APRE).is_none() && h.state().errore.is_none());
@@ -8355,9 +8762,9 @@ mod test {
         let avviso = h.get_by_label("Salvato").rect();
         let barra = h.get_by_role_and_label(Role::Button, "Grassetto").rect();
         assert!(avviso.bottom() <= barra.top() - 8.0 && avviso.top() > 600.0, "{avviso:?} {barra:?}");
-        assert!(riempiti(&h, tema::SCURO).iter().any(|r| r.contains_rect(avviso)));
+        assert!(riempiti(&h, tema::scuro()).iter().any(|r| r.contains_rect(avviso)));
         // Non si prende i tocchi: sotto, la pagina e la barra restano usabili.
-        assert_eq!(colore_del_testo(&h, "Salvato"), Some(tema::FOGLIO));
+        assert_eq!(colore_del_testo(&h, "Salvato"), Some(tema::foglio()));
         tocca(&mut h, schermo_editor::MENU);
         tocca(&mut h, "Esporta in PDF");
         h.get_by_label("PDF pronto in Documents/Tascabile: Verbale.pdf");
@@ -8580,7 +8987,10 @@ mod test {
         // Le righe di questa prova: il registro di tutte, con le altre in parallelo, le spinge fuori.
         let d = diagnosi_della_prova();
         assert!(d.contains("] recenti: file non trovato, accesso ai file no, impronta assente, lasciato nei recenti\n"), "{d}");
-        assert!(d.contains("] recenti: file non trovato, accesso ai file sì, impronta assente, lasciato nei recenti\n") && !d.contains("Zanzibar"), "{d}");
+        assert!(
+            d.contains("] recenti: file non trovato, accesso ai file sì, impronta assente, lasciato nei recenti\n") && !d.contains("Zanzibar"),
+            "{d}"
+        );
     }
 
     /// Segnalazione dell'autore del 7/11: «ogni tanto non mi fa aprire i file perché dice che non
@@ -9374,8 +9784,9 @@ mod test {
             let voce = h.get_by_role_and_label(Role::Button, foglio_revisioni::TRACCIA).rect();
             let ctx = h.ctx.clone();
             let font = Carattere::Grassetto.font(&ctx, 16.0);
-            let scritto = ctx.fonts_mut(|f| f.layout_no_wrap(foglio_revisioni::TRACCIA.to_string(), font, egui::Color32::PLACEHOLDER).size().x);
-            let spazio = tascabile_touch::Voce::new(tascabile_touch::Tipo::Word, foglio_revisioni::TRACCIA).interruttore(true).spazio_del_testo(voce.width());
+            let scritto = ctx.fonts_mut(|f| f.layout_no_wrap(t(foglio_revisioni::TRACCIA).to_string(), font, egui::Color32::PLACEHOLDER).size().x);
+            let spazio =
+                tascabile_touch::Voce::new(tascabile_touch::Tipo::Word, foglio_revisioni::TRACCIA).interruttore(true).spazio_del_testo(voce.width());
             assert!(scritto <= spazio, "{nome}: «{}» è largo {scritto} dp e ha {spazio} dp", foglio_revisioni::TRACCIA);
             tutti_visibili(
                 &h,
@@ -9543,7 +9954,7 @@ mod test {
 
     /// Il cursore del documento sullo schermo: il rettangolo blu sottile.
     fn cursore_a_schermo(h: &Telefono) -> Option<egui::Rect> {
-        riempiti(h, tema::BLU).into_iter().find(|r| r.width() < 3.0)
+        riempiti(h, tema::blu()).into_iter().find(|r| r.width() < 3.0)
     }
 
     #[test]
@@ -9796,7 +10207,7 @@ mod test {
         tocca(&mut h, "Indice");
         h.run_steps(15);
         h.get_by_label("Nessun titolo");
-        assert_eq!(colore_del_testo(&h, icone::TOC), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, icone::TOC), Some(tema::matita()));
     }
 
     #[test]
@@ -10650,7 +11061,9 @@ mod test {
     /// sotto un filo. Su ogni telefono, anche con «Ripeti» in cima.
     #[test]
     fn il_menu_del_pdf_ha_tre_salvataggi_insieme_e_la_copia_definitiva_in_rosso() {
-        for (nome, misura, densita) in [("412", egui::vec2(412.0, 915.0), 2.625), ("372", egui::vec2(372.0, 827.0), 3.0), ("360", egui::vec2(360.0, 760.0), 3.0)] {
+        for (nome, misura, densita) in
+            [("412", egui::vec2(412.0, 915.0), 2.625), ("372", egui::vec2(372.0, 827.0), 3.0), ("360", egui::vec2(360.0, 760.0), 3.0)]
+        {
             let (mut h, _dir, _) = telefono_con_la_lettera(&format!("menu-copie-{nome}"), misura, densita);
             // Una modifica annullata: sui telefoni stretti «Ripeti» va nel menu, che è il più lungo.
             ruota_dagli_strumenti(&mut h);
@@ -10667,7 +11080,10 @@ mod test {
                 assert!(riga.contains_rect(testo), "{nome}: «{spiega}» fuori dalla voce «{voce}»: {riga:?} {testo:?}");
                 assert!(testo.height() < 20.0, "{nome}: «{spiega}» è andata a capo: {testo:?}");
             }
-            assert_eq!((schermo_pdf::SPIEGA_SALVA_COPIA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA), ("Si può ancora modificare", "Non si può più modificare"));
+            assert_eq!(
+                (schermo_pdf::SPIEGA_SALVA_COPIA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA),
+                ("Si può ancora modificare", "Non si può più modificare")
+            );
             // I tre salvataggi uno sotto l'altro, senza un filo in mezzo; Condividi dopo un filo.
             let riga = |h: &Telefono, voce: &str| h.get_by_role_and_label(Role::Button, voce).rect();
             let (salva, copia, definitiva, condividi) = (
@@ -10676,14 +11092,17 @@ mod test {
                 riga(&h, schermo_pdf::COPIA_DEFINITIVA),
                 riga(&h, schermo_pdf::CONDIVIDI),
             );
-            assert!((copia.top() - salva.bottom()).abs() < 0.5 && (definitiva.top() - copia.bottom()).abs() < 0.5, "{nome}: {salva:?} {copia:?} {definitiva:?}");
+            assert!(
+                (copia.top() - salva.bottom()).abs() < 0.5 && (definitiva.top() - copia.bottom()).abs() < 0.5,
+                "{nome}: {salva:?} {copia:?} {definitiva:?}"
+            );
             assert!(condividi.top() - definitiva.bottom() >= 12.0, "{nome}: manca il filo sotto i salvataggi: {definitiva:?} {condividi:?}");
             // La copia definitiva in rosso: etichetta, icona e riga sotto. Le altre com'erano.
             for testo in [schermo_pdf::COPIA_DEFINITIVA, schermo_pdf::SPIEGA_COPIA_DEFINITIVA, icone::PICTURE_AS_PDF] {
-                assert_eq!(colore_del_testo(&h, testo), Some(tema::ROSSO), "{nome}: «{testo}» non è rosso");
+                assert_eq!(colore_del_testo(&h, testo), Some(tema::rosso()), "{nome}: «{testo}» non è rosso");
             }
-            assert_eq!(colore_del_testo(&h, pdf_lavoro::SALVA_COPIA), Some(tema::INCHIOSTRO));
-            assert_eq!(colore_del_testo(&h, schermo_pdf::SPIEGA_SALVA_COPIA), Some(tema::MATITA));
+            assert_eq!(colore_del_testo(&h, pdf_lavoro::SALVA_COPIA), Some(tema::inchiostro()));
+            assert_eq!(colore_del_testo(&h, schermo_pdf::SPIEGA_SALVA_COPIA), Some(tema::matita()));
             let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, misura);
             for voce in [pdf_lavoro::SALVA, schermo_pdf::INFORMAZIONI] {
                 let r = h.get_by_role_and_label(Role::Button, voce).rect();
@@ -10709,7 +11128,7 @@ mod test {
         let perde = h.get_by_label_contains("non si modificano e non si tolgono più").rect();
         let in_piu = h.get_by_label_contains("È un file in più").rect();
         assert!(perde.bottom() <= in_piu.top(), "la conseguenza viene dopo: {perde:?} {in_piu:?}");
-        assert_eq!(colore_del_testo(&h, schermo_pdf::SPIEGA_DEFINITIVA[0]), Some(tema::ROSSO));
+        assert_eq!(colore_del_testo(&h, schermo_pdf::SPIEGA_DEFINITIVA[0]), Some(tema::rosso()));
         h.get_by_label_contains("Documents/Tascabile");
         tocca(&mut h, schermo_pdf::CREA_DEFINITIVA);
         aspetta_il_motore(&mut h);
@@ -10828,7 +11247,8 @@ mod test {
             let r = h.get_by_role_and_label(Role::Button, b).rect();
             assert!(schermo.contains_rect(r), "«{b}» esce dallo schermo: {r:?}");
         }
-        let (modifica, nome) = (h.get_by_role_and_label(Role::Button, home::ORDINE_MODIFICA).rect(), h.get_by_role_and_label(Role::Button, home::ORDINE_NOME).rect());
+        let (modifica, nome) =
+            (h.get_by_role_and_label(Role::Button, home::ORDINE_MODIFICA).rect(), h.get_by_role_and_label(Role::Button, home::ORDINE_NOME).rect());
         assert!((modifica.center().y - nome.center().y).abs() < 1.0, "le due scelte dell'ordine non sono sulla stessa riga");
         // Uscendo e tornando l'ordine resta; e un'app riaperta lo rilegge.
         tocca(&mut h, home::ORDINE_NOME);
@@ -10972,7 +11392,10 @@ mod test {
         assert_eq!(oscura(&h).rettangoli.len(), 1, "la maniglia ha disegnato un altro rettangolo");
         let misurato = oscura(&h).rettangoli[0];
         assert!((misurato[0] - spostato[0]).abs() < 0.01 && (misurato[1] - spostato[1]).abs() < 0.01, "l'angolo fermo si è mosso");
-        assert!((misurato[2] - spostato[2] - 40.0 / k).abs() < 0.5 && (misurato[3] - spostato[3] - 20.0 / k).abs() < 0.5, "{spostato:?} → {misurato:?}");
+        assert!(
+            (misurato[2] - spostato[2] - 40.0 / k).abs() < 0.5 && (misurato[3] - spostato[3] - 20.0 / k).abs() < 0.5,
+            "{spostato:?} → {misurato:?}"
+        );
         // Dalla maniglia in alto a sinistra si tirano gli altri due lati; l'angolo in basso a destra resta fermo.
         let maniglia = pdf_modifica::maniglie_oscura(primo_rettangolo(&h))[0];
         trascina_col_dito(&mut h, maniglia, egui::vec2(-20.0, -10.0));

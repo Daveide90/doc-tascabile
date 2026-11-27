@@ -43,6 +43,7 @@ use crate::pdf_recupero::CopiaDelPdf;
 use crate::recupero::CopiaPdf;
 use crate::schermo_editor::{DOPO, PRIMA, riga_informazione};
 use crate::{Da, Dopo, Errore, Fuoco, Schermata, TascabileApp, adesso, home};
+use tascabile_touch::t;
 
 /// Le etichette dei pulsanti della barra alta (per l'accessibilità e per le prove).
 pub(crate) const INDIETRO: &str = "Indietro";
@@ -157,7 +158,7 @@ fn decodifica_percento(pezzo: &str) -> Option<String> {
 
 /// «PDF · 3 pagine», «PDF · 1 pagina».
 pub(crate) fn sottotitolo(pagine: usize) -> String {
-    if pagine == 1 { "PDF · 1 pagina".to_string() } else { format!("PDF · {pagine} pagine") }
+    if pagine == 1 { "PDF · 1 pagina".to_string() } else { tascabile_touch::tf!("PDF · {} pagine", pagine) }
 }
 
 /// «2 di 15», «Cerco…» mentre si leggono le pagine senza ancora un risultato, «Nessun
@@ -168,7 +169,7 @@ pub(crate) fn conteggio_pdf(c: Option<Conteggio>, vuoto: bool) -> String {
         None => String::new(),
         Some(Conteggio { totale: 0, finita: false, .. }) => "Cerco…".to_string(),
         Some(Conteggio { totale: 0, .. }) => "Nessun risultato".to_string(),
-        Some(Conteggio { attuale: Some(i), totale, .. }) => format!("{} di {totale}", i + 1),
+        Some(Conteggio { attuale: Some(i), totale, .. }) => tascabile_touch::tf!("{} di {}", i + 1, totale),
         Some(Conteggio { totale, .. }) => totale.to_string(),
     }
 }
@@ -275,6 +276,8 @@ pub(crate) struct FogliPdf {
     pub(crate) numeri: FoglioDalFondo,
     /// «Riconosci testo»: tutte le pagine o questa (P8).
     pub(crate) riconosci: FoglioDalFondo,
+    /// «Ruota le pagine» (0.10.0): questa pagina o tutte, a destra o a sinistra.
+    pub(crate) ruota: FoglioDalFondo,
     /// Il modo Annota: la nota col suo testo, il formato dell'annotazione scelta (P5); il modo
     /// Modifica: dove porta un link.
     pub(crate) nota: FoglioDalFondo,
@@ -309,6 +312,7 @@ impl FogliPdf {
             filigrana: FoglioDalFondo::new(egui::Id::new("foglio_filigrana_pdf")),
             numeri: FoglioDalFondo::new(egui::Id::new("foglio_numeri_pdf")),
             riconosci: FoglioDalFondo::new(egui::Id::new("foglio_riconosci_pdf")),
+            ruota: FoglioDalFondo::new(egui::Id::new("foglio_ruota_pdf")),
             nota: FoglioDalFondo::new(egui::Id::new("foglio_nota_pdf")),
             annotazione: FoglioDalFondo::new(egui::Id::new("foglio_annotazione_pdf")),
             link: FoglioDalFondo::new(egui::Id::new("foglio_link_pdf")),
@@ -336,6 +340,7 @@ impl FogliPdf {
         self.filigrana.chiudi();
         self.numeri.chiudi();
         self.riconosci.chiudi();
+        self.ruota.chiudi();
         self.nota.chiudi();
         self.annotazione.chiudi();
         self.link.chiudi();
@@ -545,7 +550,14 @@ impl TascabileApp {
                 self.vai(Schermata::Pdf);
                 self.controlla_i_calcoli_pdf();
                 match a.chiave {
-                    Some(chiave) => self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Pdf, aperto_alle: adesso(), pagine: Some(pagine), impronta: None }),
+                    Some(chiave) => self.home.ricorda(Recente {
+                        chiave,
+                        nome: a.nome,
+                        tipo: Tipo::Pdf,
+                        aperto_alle: adesso(),
+                        pagine: Some(pagine),
+                        impronta: None,
+                    }),
                     // Una copia di recupero non è un file dell'utente: niente recenti.
                     None if a.da == Da::Recupero => {}
                     None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
@@ -716,35 +728,33 @@ impl TascabileApp {
             let (sotto, salvato) = if stato.modificato || p.copia.recuperato {
                 // Prima quanti campi restano: se non ci sta tutto, si taglia la fine.
                 match campi.filter(|_| p.modo == ModoPdf::Compila) {
-                    Some(c) => (
-                        format!(
-                            "{} · non salvato",
-                            c.replace(" campi da compilare", " da compilare").replace(" campo da compilare", " da compilare")
-                        ),
-                        false,
-                    ),
+                    Some(_) => {
+                        let n = tascabile_pdf::da_compilare(&stato.campi);
+                        let breve = if n == 0 { t("tutto compilato").to_string() } else { tascabile_touch::tf!("{} da compilare", n) };
+                        (tascabile_touch::tf!("{} · non salvato", breve), false)
+                    }
                     None => (MODIFICHE_NON_SALVATE.to_string(), false),
                 }
             } else if p.salvato {
                 let dove = p.chiave.as_deref().map(|c| self.home.dove(c)).unwrap_or_default();
-                (format!("Salvato · {dove}"), true)
+                (tascabile_touch::tf!("Salvato · {}", dove), true)
             } else {
                 // Le firme ancora valide si dicono: modificarlo le renderebbe non valide.
                 let firme = if stato.protezione.sola_lettura() {
-                    " · solo lettura"
+                    format!(" · {}", t("solo lettura"))
                 } else if stato.protezione.firmato() {
-                    " · firmato"
+                    format!(" · {}", t("firmato"))
                 } else {
-                    ""
+                    String::new()
                 };
                 let campi = campi.map(|c| format!(" · {c}")).unwrap_or_default();
                 (format!("{}{firme}{campi}", sottotitolo(p.lettore.pagine())), false)
             };
             let r = ui
                 .scope_builder(UiBuilder::new().max_rect(barra), |ui| {
-                    let mut b = BarraAlta::new(&nome).indietro(INDIETRO).sottotitolo(&sotto);
+                    let mut b = BarraAlta::nome_proprio(&nome).indietro(INDIETRO).sottotitolo(&sotto);
                     if salvato {
-                        b = b.stato(icone::CHECK_CIRCLE, tema::VERDE);
+                        b = b.stato(icone::CHECK_CIRCLE, tema::verde());
                     }
                     if storia {
                         b = b.azione(PulsanteIcona::new(icone::UNDO, ANNULLA_MODIFICA).spento(!annulla));
@@ -870,7 +880,7 @@ impl TascabileApp {
         let conteggio = conteggio_pdf(conto, campo.testo().is_empty());
         let ci_sono = conto.is_some_and(|c| c.totale > 0);
         let barra = ui.max_rect();
-        ui.painter().rect_filled(barra, 0.0, tema::CARTA);
+        ui.painter().rect_filled(barra, 0.0, tema::carta());
         let posto =
             |destra: f32| Rect::from_min_size(pos2(destra - tema::PULSANTE, barra.center().y - tema::PULSANTE / 2.0), Vec2::splat(tema::PULSANTE));
         let chiudi = posto(barra.right() - 4.0);
@@ -1043,7 +1053,7 @@ impl TascabileApp {
     /// Il dialogo di un link esterno: l'indirizzo e dove si apre; «Apri» lo manda al browser.
     pub(crate) fn mostra_link_esterno(&mut self, ctx: &egui::Context) {
         let Some(indirizzo) = self.pdf.as_ref().and_then(|p| p.link_esterno.clone()) else { return };
-        let testo = format!("{}\n\nSi apre fuori da Tascabile, nel browser o nell'app della posta.", accorciato(&indirizzo));
+        let testo = tascabile_touch::tf!("{}\n\nSi apre fuori da Tascabile, nel browser o nell'app della posta.", accorciato(&indirizzo));
         let risposta = Dialogo::new(egui::Id::new("link_esterno"), APRIRE_IL_LINK)
             .testo(&testo)
             .pulsante(ANNULLA, Peso::Testo)
@@ -1060,8 +1070,8 @@ impl TascabileApp {
     }
 
     /// Il menu del lettore, come quello dell'Editor: Salva, Salva una copia, Condividi, Esporta in
-    /// Word, Copia definitiva, il timestamp; Miniature, Vai a pagina, Indice; Informazioni sul
-    /// documento. Su un telefono stretto, in cima, Ripeti quando all'apertura c'era da ripetere.
+    /// Word, Copia definitiva, il timestamp; Miniature, Vai a pagina, Indice, Ruota le pagine;
+    /// Informazioni sul documento. Su un telefono stretto, in cima, Ripeti quando all'apertura c'era da ripetere.
     fn mostra_menu_pdf(&mut self, ctx: &egui::Context, zona: Rect) {
         if !self.menu_pdf {
             return;
@@ -1087,6 +1097,7 @@ impl TascabileApp {
             .voce(icone::GRID_VIEW, MINIATURE)
             .voce(icone::NUMBERS, VAI_A_PAGINA)
             .voce(icone::TOC, INDICE)
+            .voce(icone::ROTATE_RIGHT, crate::pdf_pagine::RUOTA_LE_PAGINE)
             .separatore()
             .voce(icone::INFO, INFORMAZIONI)
             .mostra(ctx, pos2(zona.right() - MENU_DESTRA, zona.top() + MENU_SOTTO));
@@ -1111,7 +1122,8 @@ impl TascabileApp {
             SceltaMenu::Voce(6) => self.apri_miniature(),
             SceltaMenu::Voce(7) => self.apri_vai_a_pagina(),
             SceltaMenu::Voce(8) => self.apri_indice_pdf(),
-            SceltaMenu::Voce(9) => self.apri_informazioni_pdf(),
+            SceltaMenu::Voce(9) => self.apri_ruota_pdf(),
+            SceltaMenu::Voce(10) => self.apri_informazioni_pdf(),
             _ => {}
         }
     }
@@ -1139,11 +1151,11 @@ impl TascabileApp {
                         ui.add_space(10.0);
                     }
                     // Per primo, in rosso, quello che nella copia non si modifica più.
-                    ui.label(RichText::new(*p).font(font.clone()).color(if i == 0 { tema::ROSSO } else { tema::INCHIOSTRO }));
+                    ui.label(RichText::new(t(p)).font(font.clone()).color(if i == 0 { tema::rosso() } else { tema::inchiostro() }));
                 }
                 if firmato {
                     ui.add_space(10.0);
-                    ui.label(RichText::new(FIRME_NELLA_DEFINITIVA).font(font.clone()).color(tema::ROSSO));
+                    ui.label(RichText::new(t(FIRME_NELLA_DEFINITIVA)).font(font.clone()).color(tema::rosso()));
                 }
                 ui.add_space(16.0);
                 let crea = ui.add(Pulsante::new(CREA_DEFINITIVA, Peso::Principale).icona(icone::TASK_ALT)).clicked();
@@ -1163,7 +1175,7 @@ impl TascabileApp {
         let Some(p) = self.pdf.as_ref() else { return };
         let info = p.motore.stato().informazioni.clone();
         let cartella = match p.chiave.as_deref() {
-            Some(c) if home::e_uri(c) => format!("Arrivato {}, non è salvato nel telefono", self.home.dove(c)),
+            Some(c) if home::e_uri(c) => tascabile_touch::tf!("Arrivato {}, non è salvato nel telefono", self.home.dove(c)),
             Some(c) => self.home.dove(c),
             None => "Non si sa".to_string(),
         };
@@ -1249,7 +1261,7 @@ impl TascabileApp {
     /// Un tocco fuori non lo chiude: si perderebbe quello che si è scritto.
     pub(crate) fn mostra_password_pdf(&mut self, ctx: &egui::Context) {
         let Some(p) = self.password_pdf.as_ref() else { return };
-        let testo = format!("«{}» si apre con una password.", home::nome_da_mostrare(&p.nome, Tipo::Pdf));
+        let testo = tascabile_touch::tf!("«{}» si apre con una password.", home::nome_da_mostrare(&p.nome, Tipo::Pdf));
         let (risposta, tocchi) = Dialogo::new(egui::Id::new("password_pdf"), PDF_PROTETTO)
             .testo(&testo)
             .pulsante(ANNULLA, Peso::Testo)
@@ -1258,7 +1270,7 @@ impl TascabileApp {
                 let r = p.campo.mostra_segreto(ui, VUOTO_PASSWORD, p.visibile);
                 if p.sbagliata {
                     ui.add_space(8.0);
-                    ui.label(RichText::new(PASSWORD_SBAGLIATA).font(Carattere::Grassetto.font(ui.ctx(), 15.0)).color(tema::ROSSO));
+                    ui.label(RichText::new(t(PASSWORD_SBAGLIATA)).font(Carattere::Grassetto.font(ui.ctx(), 15.0)).color(tema::rosso()));
                 }
                 // Con gli 8 del dialogo, 20 dp prima dei pulsanti.
                 ui.add_space(12.0);
@@ -1371,9 +1383,9 @@ impl TascabileApp {
                 if altri {
                     ui.add_space(8.0);
                     ui.label(
-                        RichText::new("Il PDF ha altri segnalibri, che qui non compaiono.")
+                        RichText::new(t("Il PDF ha altri segnalibri, che qui non compaiono."))
                             .font(Carattere::Testo.font(ctx, 14.0))
-                            .color(tema::MATITA),
+                            .color(tema::matita()),
                     );
                 }
                 scelto
@@ -1393,6 +1405,7 @@ impl TascabileApp {
         }
         self.mostra_foglio_vai(ctx);
         self.mostra_foglio_info_pdf(ctx);
+        self.mostra_ruota_pdf(ctx);
         self.mostra_foglio_definitiva(ctx);
         self.mostra_foglio_strumenti_pdf(ctx);
         self.mostra_fogli_compila(ctx);
@@ -1410,11 +1423,11 @@ impl TascabileApp {
         match self.pdf.as_ref() {
             Some(p) => {
                 let sotto = if p.vai_sbagliato {
-                    format!("Scrivi un numero da 1 a {pagine}.")
+                    tascabile_touch::tf!("Scrivi un numero da 1 a {}.", pagine)
                 } else {
-                    format!("Il PDF ha {}.", sottotitolo(pagine).replace("PDF · ", ""))
+                    tascabile_touch::tf!("Il PDF ha {}.", sottotitolo(pagine).replace("PDF · ", ""))
                 };
-                let colore = if p.vai_sbagliato { tema::ROSSO } else { tema::MATITA };
+                let colore = if p.vai_sbagliato { tema::rosso() } else { tema::matita() };
                 self.fogli_pdf.vai.mostra(ctx, VAI_A_PAGINA, |ui| {
                     ui.spacing_mut().item_spacing = vec2(tema::SPAZIO, 0.0);
                     ui.horizontal(|ui| {
@@ -1463,12 +1476,12 @@ impl TascabileApp {
                 return;
             }
             let font = Carattere::Grassetto.font(ui.ctx(), 15.0);
-            let g = ui.painter().layout_no_wrap(APRO.to_string(), font, egui::Color32::WHITE);
+            let g = ui.painter().layout_no_wrap(t(APRO).to_string(), font, tema::sull_indicatore());
             let pillola = Rect::from_center_size(zona.center(), vec2(g.size().x + 32.0, 44.0));
-            ui.painter().rect_filled(pillola, 22.0, tema::INDICATORE);
+            ui.painter().rect_filled(pillola, 22.0, tema::indicatore());
             ui.painter().galley(pillola.center() - g.size() / 2.0, g, egui::Color32::PLACEHOLDER);
             ui.interact(pillola, egui::Id::new("apertura_pdf_testo"), egui::Sense::hover())
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, APRO));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t(APRO)));
         });
     }
 }
@@ -1480,32 +1493,32 @@ impl TascabileApp {
 fn riga_segnalibro(ui: &mut egui::Ui, s: &Segnalibro, ultima: bool) -> egui::Response {
     let ctx = ui.ctx().clone();
     let (carattere, misura, colore) = match s.livello {
-        0 => (Carattere::Grassetto, 16.0, tema::INCHIOSTRO),
-        1 => (Carattere::Testo, 16.0, tema::INCHIOSTRO),
-        _ => (Carattere::Testo, 15.0, tema::MATITA),
+        0 => (Carattere::Grassetto, 16.0, tema::inchiostro()),
+        1 => (Carattere::Testo, 16.0, tema::inchiostro()),
+        _ => (Carattere::Testo, 15.0, tema::matita()),
     };
     let largo = ui.available_width();
     let rientro = 4.0 + RIENTRO * s.livello.min(4) as f32;
-    let numero = s.pagina.map(|p| ui.painter().layout_no_wrap((p + 1).to_string(), Carattere::Testo.font(&ctx, 14.0), tema::MATITA));
+    let numero = s.pagina.map(|p| ui.painter().layout_no_wrap((p + 1).to_string(), Carattere::Testo.font(&ctx, 14.0), tema::matita()));
     let spazio_numero = numero.as_ref().map_or(0.0, |g| g.size().x + 16.0);
     let mut job = egui::text::LayoutJob::single_section(s.titolo.clone(), egui::TextFormat::simple(carattere.font(&ctx, misura), colore));
     job.wrap = egui::text::TextWrapping::truncate_at_width((largo - rientro - 8.0 - spazio_numero).max(24.0));
     let g = ui.painter().layout_job(job);
     let (rect, r) = ui.allocate_exact_size(vec2(largo, tema::PULSANTE.max(g.size().y + 16.0)), egui::Sense::click());
     let etichetta = match s.pagina {
-        Some(p) => format!("{}, pagina {}", s.titolo, p + 1),
+        Some(p) => tascabile_touch::tf!("{}, pagina {}", s.titolo, p + 1),
         None => s.titolo.clone(),
     };
-    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, s.pagina.is_some(), &etichetta));
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, s.pagina.is_some(), tascabile_touch::t(&etichetta)));
     if r.is_pointer_button_down_on() {
-        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::PREMUTO);
+        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::premuto());
     }
     ui.painter().galley(pos2(rect.left() + rientro, rect.center().y - g.size().y / 2.0), g, colore);
     if let Some(n) = numero {
-        ui.painter().galley(pos2(rect.right() - 8.0 - n.size().x, rect.center().y - n.size().y / 2.0), n, tema::MATITA);
+        ui.painter().galley(pos2(rect.right() - 8.0 - n.size().x, rect.center().y - n.size().y / 2.0), n, tema::matita());
     }
     if !ultima {
-        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::FILO);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::filo());
     }
     r
 }
@@ -1516,14 +1529,16 @@ fn indice_vuoto(ui: &mut egui::Ui) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
-        ui.label(RichText::new(icone::TOC).font(Carattere::Icona.font(&ctx, tema::ICONA)).color(tema::MATITA));
-        ui.label(RichText::new("Nessun segnalibro").font(Carattere::Grassetto.font(&ctx, 16.0)).color(tema::INCHIOSTRO));
+        ui.label(RichText::new(icone::TOC).font(Carattere::Icona.font(&ctx, tema::ICONA)).color(tema::matita()));
+        ui.label(RichText::new(t("Nessun segnalibro")).font(Carattere::Grassetto.font(&ctx, 16.0)).color(tema::inchiostro()));
     });
     ui.add_space(6.0);
     ui.label(
-        RichText::new("Questo PDF non ha un indice: chi l'ha creato non ci ha messo i segnalibri. Per spostarti usa le miniature o «Vai a pagina».")
-            .font(Carattere::Testo.font(&ctx, 15.0))
-            .color(tema::MATITA),
+        RichText::new(t(
+            "Questo PDF non ha un indice: chi l'ha creato non ci ha messo i segnalibri. Per spostarti usa le miniature o «Vai a pagina».",
+        ))
+        .font(Carattere::Testo.font(&ctx, 15.0))
+        .color(tema::matita()),
     );
     ui.add_space(8.0);
 }
@@ -1576,7 +1591,7 @@ fn righe_informazioni(info: Option<&(Informazioni, String)>, a_mano: usize) -> V
     righe.extend(i.autore.clone().map(|a| ("Autore", a)));
     righe.push(("Firme digitali", i.firme.descrizione()));
     if a_mano > 0 {
-        righe.push((FIRME_A_MANO, if a_mano == 1 { "1 firma".to_string() } else { format!("{a_mano} firme") }));
+        righe.push((FIRME_A_MANO, if a_mano == 1 { "1 firma".to_string() } else { tascabile_touch::tf!("{} firme", a_mano) }));
     }
     righe.push(("Cartella", cartella.clone()));
     righe

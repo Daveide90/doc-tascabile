@@ -12,7 +12,9 @@ use std::time::{Duration, Instant, SystemTime};
 #[cfg(target_os = "android")]
 mod android;
 #[cfg(target_os = "android")]
-pub use android::{Piattaforma, Rete, ricevi_foto_firma, ricevi_impronta, ricevi_insets, ricevi_nuovo_intent, ricevi_schermo_esterno, ricevi_stato_ime};
+pub use android::{
+    Piattaforma, Rete, ricevi_foto_firma, ricevi_impronta, ricevi_insets, ricevi_nuovo_intent, ricevi_schermo_esterno, ricevi_stato_ime,
+};
 
 #[cfg(not(target_os = "android"))]
 mod desktop;

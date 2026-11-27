@@ -113,7 +113,7 @@ pub fn nome_dal_testo(doc: &Document) -> Option<String> {
 pub fn nome_di_ripiego_adesso() -> String {
     let adesso = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
     let (anno, mese, giorno, ora, minuti) = ora_locale(adesso);
-    format!("{NOME_DI_RIPIEGO} {giorno:02}-{mese:02}-{anno} {ora:02}.{minuti:02}")
+    format!("{} {giorno:02}-{mese:02}-{anno} {ora:02}.{minuti:02}", tascabile_touch::t(NOME_DI_RIPIEGO))
 }
 
 /// Anno, mese, giorno, ora e minuti locali di un istante (secondi UTC), con `localtime_r`, che su

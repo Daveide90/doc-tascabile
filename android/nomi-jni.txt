@@ -22,6 +22,9 @@ Lit/tascabile/app/MainActivity; tascabilePaste ()Ljava/lang/String;
 Lit/tascabile/app/MainActivity; tascabileApriIndirizzo (Ljava/lang/String;)V
 Lit/tascabile/app/MainActivity; tascabilePresentazione (Z)V
 Lit/tascabile/app/MainActivity; tascabileRiservata (Z)V
+Lit/tascabile/app/MainActivity; tascabileSistemaScuro ()Z
+Lit/tascabile/app/MainActivity; tascabileLingua ()Ljava/lang/String;
+Lit/tascabile/app/MainActivity; tascabileTema (Z)V
 Lit/tascabile/app/MainActivity; tascabileProietta ([BII)V
 Lit/tascabile/app/MainActivity; tascabileRete (Ljava/lang/String;[B)[B
 Lit/tascabile/app/MainActivity; tascabileConsentiRete (Z)V

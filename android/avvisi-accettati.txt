@@ -3,3 +3,5 @@
 # si ferma per ogni avviso che non è qui. Rapporti: un documento interno di lavoro
 # e un documento interno di lavoro.
 RUSTSEC-2023-0071 rsa 0.10 (attacco Marvin, si ricava la chiave privata dai tempi): la usa solo pdfcraft-sign con una chiave privata, e l'app non firma con chiavi private, legge soltanto le firme digitali.
+RUSTSEC-2026-0592 url 2.5.8 (stack overflow in Url::origin() con URL blob: annidati): url arriva solo da pdfcraft-engine, che non chiama mai Url::origin() (cercato nel sorgente del motore e dell'app il 26/11/2026); un link di un PDF non passa da lì. Da togliere quando il lock avrà url 2.5.9.
+RUSTSEC-2026-0486 rustix 1.1.5 (funzioni xattr con buffer vuoto, «unsound»): rustix non è nella build Android (cargo tree --target aarch64-linux-android non lo trova), sta solo nelle dipendenze Wayland e X11 della versione per PC, e nessuna di queste chiama le funzioni xattr.

@@ -7,7 +7,7 @@
 use eframe::egui::{self, RichText};
 use tascabile_platform::diagnosi;
 use tascabile_touch::tema::{self, Carattere};
-use tascabile_touch::{CampoTesto, Chip, Peso, Pulsante, Tipo, Voce, etichetta_sezione, icone};
+use tascabile_touch::{CampoTesto, Chip, Peso, Pulsante, Tipo, Voce, etichetta_sezione, icone, t};
 use tascabile_word::pagina::{Formato, IntestazioneEPie, Margini, NumeriPagina, info_pagina, intestazione_e_pie};
 use tascabile_word::vista::Modo;
 
@@ -65,19 +65,19 @@ enum NelleIntestazioni {
 fn riassunto(i: &IntestazioneEPie) -> String {
     let mut parti = Vec::new();
     if !i.intestazione.is_empty() {
-        parti.push("intestazione".to_string());
+        parti.push(t("intestazione").to_string());
     }
     if !i.pie.is_empty() {
-        parti.push("piè di pagina".to_string());
+        parti.push(t("piè di pagina").to_string());
     }
     let dove = match i.numeri {
         NumeriPagina::Nessuno => None,
-        NumeriPagina::AlCentro => Some("al centro"),
-        NumeriPagina::ADestra => Some("a destra"),
-        NumeriPagina::ASinistra => Some("a sinistra"),
+        NumeriPagina::AlCentro => Some(t("al centro")),
+        NumeriPagina::ADestra => Some(t("a destra")),
+        NumeriPagina::ASinistra => Some(t("a sinistra")),
     };
     if let Some(dove) = dove {
-        parti.push(if i.di_totale { format!("N di M {dove}") } else { format!("numeri {dove}") });
+        parti.push(if i.di_totale { tascabile_touch::tf!("N di M {}", dove) } else { tascabile_touch::tf!("numeri {}", dove) });
     }
     if parti.is_empty() {
         return "Nessuna".to_string();
@@ -155,7 +155,7 @@ impl TascabileApp {
                 ui.label(
                     RichText::new(format!("{} × {} cm", cm(info.larghezza_cm), cm(info.altezza_cm)))
                         .font(Carattere::Testo.font(ui.ctx(), 13.0))
-                        .color(tema::MATITA),
+                        .color(tema::matita()),
                 );
                 etichetta_sezione(ui, "Orientamento");
                 if let Some(o) = chip(ui, &[(false, VERTICALE), (true, ORIZZONTALE)], |o| info.orizzontale == o) {
@@ -213,7 +213,7 @@ impl TascabileApp {
                 let mut scelto = None;
                 ui.spacing_mut().item_spacing.y = 6.0;
                 let nota = |ui: &mut egui::Ui, testo: &str| {
-                    ui.label(RichText::new(testo).font(Carattere::Testo.font(ui.ctx(), 13.0)).color(tema::MATITA));
+                    ui.label(RichText::new(testo).font(Carattere::Testo.font(ui.ctx(), 13.0)).color(tema::matita()));
                 };
                 etichetta_sezione(ui, "Intestazione");
                 if c.intestazione_ricca {

@@ -29,8 +29,8 @@ use eframe::egui::{self, Color32, Id, Order, Pos2, Rect, Sense, Stroke, UiBuilde
 use tascabile_files::cartella_tascabile;
 use tascabile_pdf::ocr::{EsitoOcr, LavoroOcr};
 use tascabile_pdf::scansione::{
-    Angoli, Aspetto, Cancellatura, ErroreScansione, Formato, FotoScansionata, Lati, PaginaScansionata, Ritocchi, angoli_buoni, crea_pdf,
-    fai_pagina, lati_curvi, lati_dritti, prepara_foto,
+    Angoli, Aspetto, Cancellatura, ErroreScansione, Formato, FotoScansionata, Lati, PaginaScansionata, Ritocchi, angoli_buoni, crea_pdf, fai_pagina,
+    lati_curvi, lati_dritti, prepara_foto,
 };
 use tascabile_pdf::{ErroreFoto, Pdf};
 use tascabile_platform::{EsitoFoto, FonteFoto, MASSIMO_PAGINE_SCELTE, diagnosi};
@@ -39,6 +39,7 @@ use tascabile_touch::{BarraAlta, BarraVoci, Chip, Dialogo, Peso, Pulsante, Pulsa
 use tascabile_word::salva;
 
 use crate::{Errore, TascabileApp};
+use tascabile_touch::t;
 
 pub(crate) const TUTTE_LE_PAGINE: &str = "Tutte le pagine";
 pub(crate) const QUESTA_PAGINA: &str = "Questa pagina";
@@ -195,7 +196,7 @@ impl<T: Send + 'static> Lavoro<T> {
         if totale == 0 {
             return ("Preparo il riconoscimento".into(), 0.0);
         }
-        (format!("Pagina {} di {totale}", (fatte + 1).min(totale)), fatte as f32 / totale as f32)
+        (tascabile_touch::tf!("Pagina {} di {}", (fatte + 1).min(totale), totale), fatte as f32 / totale as f32)
     }
 }
 
@@ -211,9 +212,9 @@ pub(crate) fn mostra_barra(ctx: &egui::Context, id: &str, titolo: &str, testo: &
     let (testo, frazione) = if fermato { ("Mi fermo", 1.0) } else { (testo, frazione) };
     let (risposta, _) = Dialogo::new(Id::new(id), titolo).testo(testo).pulsante(ANNULLA, Peso::Testo).mostra_con(ctx, |ui| {
         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 8.0), Sense::hover());
-        ui.painter().rect_filled(r, 4.0, tema::FILO);
+        ui.painter().rect_filled(r, 4.0, tema::filo());
         let pieno = Rect::from_min_max(r.min, pos2(r.left() + r.width() * frazione.clamp(0.0, 1.0), r.bottom()));
-        ui.painter().rect_filled(pieno, 4.0, tema::BLU);
+        ui.painter().rect_filled(pieno, 4.0, tema::blu());
         ui.add_space(6.0);
     });
     ctx.request_repaint_after(std::time::Duration::from_millis(200));
@@ -222,7 +223,7 @@ pub(crate) fn mostra_barra(ctx: &egui::Context, id: &str, titolo: &str, testo: &
 
 /// Quante pagine, per i messaggi: «1 pagina», «3 pagine».
 fn pagine(n: usize) -> String {
-    if n == 1 { "1 pagina".into() } else { format!("{n} pagine") }
+    if n == 1 { tascabile_touch::t("1 pagina").into() } else { tascabile_touch::tf!("{} pagine", n) }
 }
 
 /// Il lato lungo della foto nella schermata dei bordi (e nella lente): basta per vedere gli angoli,
@@ -494,9 +495,9 @@ impl TascabileApp {
                 }
                 ui.add_space(6.0);
                 ui.label(
-                    egui::RichText::new(format!("In italiano, sul telefono: niente va in rete. {} in tutto.", pagine(pagine_tutte)))
+                    egui::RichText::new(tascabile_touch::tf!("In italiano, sul telefono: niente va in rete. {} in tutto.", pagine(pagine_tutte)))
                         .font(Carattere::Testo.font(ui.ctx(), 14.0))
-                        .color(tema::MATITA),
+                        .color(tema::matita()),
                 );
                 ui.add_space(6.0);
                 scelta
@@ -577,8 +578,13 @@ impl TascabileApp {
         match e.modifica() {
             Some(m) => {
                 self.modifica_pdf(m);
-                let gia = if e.con_testo > 0 { format!("; {} avevano già il testo", pagine(e.con_testo)) } else { String::new() };
-                self.avviso_breve.avvisa(format!("Testo riconosciuto: {} parole in {}{gia}. Ora si cerca e si copia.", e.parole(), pagine(lette)));
+                let gia = if e.con_testo > 0 { tascabile_touch::tf!("; {} avevano già il testo", pagine(e.con_testo)) } else { String::new() };
+                self.avviso_breve.avvisa(tascabile_touch::tf!(
+                    "Testo riconosciuto: {} parole in {}{}. Ora si cerca e si copia.",
+                    e.parole(),
+                    pagine(lette),
+                    gia
+                ));
             }
             None if e.con_testo > 0 && lette == 0 => {
                 self.avviso_breve.avvisa(if e.con_testo == 1 { "La pagina ha già il suo testo." } else { "Le pagine hanno già il loro testo." })
@@ -630,7 +636,7 @@ impl TascabileApp {
                 let protetto = self.pdf.as_ref().is_some_and(|p| p.motore.stato().cifrato);
                 let senza = if protetto { ", senza la password del PDF" } else { "" };
                 let solo = if riconosciuto { ", solo il testo riconosciuto" } else { "" };
-                self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {nome}{senza}{solo}"), &percorso);
+                self.avvisa_col_condividi(tascabile_touch::tf!("Salvato in Documents/Tascabile: {}{}{}", nome, senza, solo), &percorso);
             }
             Some(Err(genere)) => {
                 diagnosi(format!("pdf: word non esportato ({genere})"));
@@ -644,7 +650,7 @@ impl TascabileApp {
     /// adesso, ma prima «Salvare le modifiche?» se ne ha, come Indietro: il PDF di prima non esce
     /// senza le sue modifiche e la sua copia di recupero. Con Annulla la scansione resta dov'è.
     pub(crate) fn apri_la_scansione(&mut self, percorso: std::path::PathBuf, nome: String) {
-        self.avvisa_col_condividi(format!("Scansione salvata in Documents/Tascabile: {nome}"), &percorso);
+        self.avvisa_col_condividi(tascabile_touch::tf!("Scansione salvata in Documents/Tascabile: {}", nome), &percorso);
         self.chiudi_poi(crate::Dopo::ApriFile(percorso, nome));
     }
 
@@ -971,13 +977,20 @@ impl TascabileApp {
                     s.coda = file.into();
                     if scelte > arrivate {
                         let avviso = if scelte > MASSIMO_PAGINE_SCELTE && arrivate == MASSIMO_PAGINE_SCELTE {
-                            format!(
-                                "Ho preso le prime {MASSIMO_PAGINE_SCELTE} delle {scelte} foto scelte: le altre si aggiungono dopo, con Galleria."
+                            tascabile_touch::tf!(
+                                "Ho preso le prime {} delle {} foto scelte: le altre si aggiungono dopo, con Galleria.",
+                                MASSIMO_PAGINE_SCELTE,
+                                scelte
                             )
                         } else if scelte > MASSIMO_PAGINE_SCELTE {
-                            format!("Ho preso {arrivate} delle {scelte} foto scelte: al più {MASSIMO_PAGINE_SCELTE}, e qualcuna non si è letta.")
+                            tascabile_touch::tf!(
+                                "Ho preso {} delle {} foto scelte: al più {}, e qualcuna non si è letta.",
+                                arrivate,
+                                scelte,
+                                MASSIMO_PAGINE_SCELTE
+                            )
                         } else {
-                            format!("{} delle foto scelte non si sono lette: ho preso le altre {arrivate}.", scelte - arrivate)
+                            tascabile_touch::tf!("{} delle foto scelte non si sono lette: ho preso le altre {}.", scelte - arrivate, arrivate)
                         };
                         self.avviso_breve.avvisa(avviso);
                     }
@@ -1109,7 +1122,14 @@ impl TascabileApp {
         let pagine: Vec<PaginaScansionata> = s.pagine.iter().map(|(p, _)| p.clone()).collect();
         let cartella = cartella_tascabile(&self.piattaforma.radice_archivio());
         let (anno, mese, giorno, ora, minuti) = salva::ora_locale(crate::adesso() as i64);
-        let base = format!("Scansione {giorno:02}-{mese:02}-{anno} {ora:02}.{minuti:02}");
+        let base = tascabile_touch::tf!(
+            "Scansione {}-{}-{} {}.{}",
+            format!("{:02}", giorno),
+            format!("{:02}", mese),
+            anno,
+            format!("{:02}", ora),
+            format!("{:02}", minuti)
+        );
         let modelli = modelli_se_servono(&self.piattaforma);
         diagnosi(format!("scansione: crea il pdf di {}", pagine_diagnosi(pagine.len())));
         let creazione = Lavoro::avvia("scansione-pdf", ctx, move |avanti| {
@@ -1172,11 +1192,12 @@ impl TascabileApp {
         egui::Area::new(Id::new("scansione")).order(Order::Foreground).fixed_pos(schermo.min).constrain(false).show(ctx, |ui| {
             ui.set_min_size(schermo.size());
             let _ = ui.interact(schermo, Id::new("scansione_fondo"), Sense::click_and_drag());
-            ui.painter().rect_filled(schermo, 0.0, tema::CARTA);
+            ui.painter().rect_filled(schermo, 0.0, tema::carta());
             let barra = Rect::from_min_size(schermo.min, vec2(schermo.width(), tema::BARRA_ALTA));
             // Quante pagine, sotto il titolo: accanto, con Crea PDF a 372 dp diventava «2 pagi…».
             let quante = pagine(s.pagine.len());
-            let occupata = s.preparazione.is_some() || s.lavorazione.is_some() || s.attende_foto.is_some() || s.creazione.is_some() || s.gomma.is_some();
+            let occupata =
+                s.preparazione.is_some() || s.lavorazione.is_some() || s.attende_foto.is_some() || s.creazione.is_some() || s.gomma.is_some();
             let mut alta = BarraAlta::new(SCANSIONE).indietro(CHIUDI);
             if !s.pagine.is_empty() {
                 alta = alta.sottotitolo(&quante).principale(Pulsante::new(CREA_PDF, Peso::Principale).icona(icone::CHECK).spento(occupata));
@@ -1218,7 +1239,7 @@ impl TascabileApp {
             };
             let zona = Rect::from_min_max(zona_pagine.min, pos2(zona_pagine.right(), zona_pagine.bottom() - striscia));
             let riga = |ui: &egui::Ui, testo: &str| {
-                ui.painter().text(zona.center(), egui::Align2::CENTER_CENTER, testo, Carattere::Testo.font(ui.ctx(), 16.0), tema::MATITA);
+                ui.painter().text(zona.center(), egui::Align2::CENTER_CENTER, testo, Carattere::Testo.font(ui.ctx(), 16.0), tema::matita());
             };
             // La pagina che si fa per una foto nuova si aspetta; una pagina che si rifà si vede
             // ancora com'era, velata.
@@ -1240,15 +1261,17 @@ impl TascabileApp {
                         misura = vec2(zona.width(), zona.width() / proporzione);
                     }
                     let foglio = Rect::from_center_size(zona.center(), misura);
-                    ui.painter().rect_filled(foglio.expand(1.0), 2.0, tema::FILO);
+                    ui.painter().rect_filled(foglio.expand(1.0), 2.0, tema::filo());
                     ui.painter().image(t.id(), foglio, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                     // La gomma: il dito sulla pagina lascia il bianco; le passate si vedono subito,
                     // e la pagina si rifà con «Fatto».
                     if let Some(g) = &s.gomma {
                         let raggio = RAGGI_GOMMA[g.misura.min(2)];
                         let gesto = ui.interact(foglio, Id::new("scansione_gomma"), Sense::click_and_drag());
-                        gesto.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, SPIEGA_GOMMA));
-                        let nella_pagina = |d: Pos2| [((d.x - foglio.left()) / foglio.width()).clamp(0.0, 1.0), ((d.y - foglio.top()) / foglio.height()).clamp(0.0, 1.0)];
+                        gesto.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(SPIEGA_GOMMA)));
+                        let nella_pagina = |d: Pos2| {
+                            [((d.x - foglio.left()) / foglio.width()).clamp(0.0, 1.0), ((d.y - foglio.top()) / foglio.height()).clamp(0.0, 1.0)]
+                        };
                         let frazione = raggio / foglio.width().max(1.0);
                         if let Some(d) = gesto.interact_pointer_pos() {
                             if gesto.clicked() {
@@ -1262,29 +1285,37 @@ impl TascabileApp {
                         }
                         let a_schermo = |p: &[f32; 2]| pos2(foglio.left() + p[0] * foglio.width(), foglio.top() + p[1] * foglio.height());
                         let painter = ui.painter_at(foglio);
-                        let passate = g.passate.iter().map(|c| (c.punti.as_slice(), c.raggio * foglio.width())).chain(std::iter::once((g.tratto.as_slice(), raggio)));
+                        let passate = g
+                            .passate
+                            .iter()
+                            .map(|c| (c.punti.as_slice(), c.raggio * foglio.width()))
+                            .chain(std::iter::once((g.tratto.as_slice(), raggio)));
                         for (punti, r) in passate {
                             let punti: Vec<Pos2> = punti.iter().map(a_schermo).collect();
                             for p in &punti {
-                                painter.circle_filled(*p, r, tema::FOGLIO);
+                                painter.circle_filled(*p, r, tema::pagina::FOGLIO);
                             }
                             if punti.len() > 1 {
-                                painter.add(egui::Shape::line(punti, Stroke::new(2.0 * r, tema::FOGLIO)));
+                                painter.add(egui::Shape::line(punti, Stroke::new(2.0 * r, tema::pagina::FOGLIO)));
                             }
                         }
-                        let spiega = ui.painter().layout_no_wrap(SPIEGA_GOMMA.into(), Carattere::Testo.font(ui.ctx(), 13.0), tema::INCHIOSTRO);
+                        let spiega = ui.painter().layout_no_wrap(
+                            tascabile_touch::t(SPIEGA_GOMMA).into(),
+                            Carattere::Testo.font(ui.ctx(), 13.0),
+                            tema::pagina::INCHIOSTRO,
+                        );
                         let pillola = Rect::from_center_size(pos2(foglio.center().x, foglio.top() + 18.0), spiega.size() + vec2(20.0, 10.0));
                         ui.painter().rect_filled(pillola, 12.0, Color32::from_white_alpha(230));
-                        ui.painter().galley(pillola.center() - spiega.size() / 2.0, spiega, tema::INCHIOSTRO);
+                        ui.painter().galley(pillola.center() - spiega.size() / 2.0, spiega, tema::pagina::INCHIOSTRO);
                     }
                     if s.lavorazione.is_some() {
                         ui.painter().rect_filled(foglio, 2.0, Color32::from_white_alpha(150));
                         ui.painter().text(
                             foglio.center(),
                             egui::Align2::CENTER_CENTER,
-                            "Preparo la pagina",
+                            tascabile_touch::t("Preparo la pagina"),
                             Carattere::Grassetto.font(ui.ctx(), 16.0),
-                            tema::INCHIOSTRO,
+                            tema::pagina::INCHIOSTRO,
                         );
                         ui.ctx().request_repaint_after(std::time::Duration::from_millis(150));
                     }
@@ -1297,12 +1328,12 @@ impl TascabileApp {
                         egui::Align2::CENTER_CENTER,
                         icone::DOCUMENT_SCANNER,
                         Carattere::Icona.font(&ctx, 56.0),
-                        tema::MATITA,
+                        tema::matita(),
                     );
                     let testo = Rect::from_center_size(zona.center() + vec2(0.0, 30.0), vec2(zona.width().min(320.0), 80.0));
                     ui.scope_builder(UiBuilder::new().max_rect(testo), |ui| {
                         ui.vertical_centered(|ui| {
-                            ui.label(egui::RichText::new(PER_COMINCIARE).font(Carattere::Testo.font(ui.ctx(), 15.0)).color(tema::MATITA));
+                            ui.label(egui::RichText::new(t(PER_COMINCIARE)).font(Carattere::Testo.font(ui.ctx(), 15.0)).color(tema::matita()));
                         });
                     });
                 }
@@ -1325,15 +1356,16 @@ impl TascabileApp {
                                 for (i, (p, t)) in s.pagine.iter().enumerate() {
                                     let largo = alto * p.larghezza as f32 / p.altezza.max(1) as f32;
                                     let (r, risposta) = ui.allocate_exact_size(vec2(largo, alto), Sense::click());
-                                    let nome = format!("Pagina {}", i + 1);
-                                    risposta.widget_info(|| WidgetInfo::selected(WidgetType::Button, true, i == s.corrente, &nome));
+                                    let nome = tascabile_touch::tf!("Pagina {}", i + 1);
+                                    risposta
+                                        .widget_info(|| WidgetInfo::selected(WidgetType::Button, true, i == s.corrente, tascabile_touch::t(&nome)));
                                     if risposta.clicked() && !occupata {
                                         tocco = Some(Tocco::Pagina(i));
                                     }
                                     if i == s.corrente && s.porta_in_vista {
                                         risposta.scroll_to_me(Some(egui::Align::Center));
                                     }
-                                    let bordo = if i == s.corrente { Stroke::new(2.5, tema::BLU) } else { Stroke::new(1.0, tema::FILO) };
+                                    let bordo = if i == s.corrente { Stroke::new(2.5, tema::blu()) } else { Stroke::new(1.0, tema::filo()) };
                                     if let Some(t) = t {
                                         ui.painter().image(t.id(), r, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                                     }
@@ -1343,7 +1375,7 @@ impl TascabileApp {
                                         egui::Align2::CENTER_CENTER,
                                         format!("{}", i + 1),
                                         Carattere::Testo.font(ui.ctx(), 12.0),
-                                        tema::MATITA,
+                                        tema::matita(),
                                     );
                                 }
                                 ui.add_space(3.0);
@@ -1402,7 +1434,7 @@ impl TascabileApp {
                 && let Some((p, _)) = s.pagine.get(s.corrente)
             {
                 let velo = ui.interact(schermo, Id::new("scansione_aspetti_velo"), Sense::click());
-                ui.painter().rect_filled(schermo, 0.0, tema::VELO_SCURO);
+                ui.painter().rect_filled(schermo, 0.0, tema::velo_scuro());
                 let largo = schermo.width().min(480.0);
                 let alto_riga = 64.0;
                 // La lineetta e il titolo, le righe, il margine in fondo.
@@ -1411,18 +1443,19 @@ impl TascabileApp {
                 let pannello = Rect::from_min_size(pos2(schermo.center().x - largo / 2.0, schermo.bottom() - alto), vec2(largo, alto));
                 let _ = ui.interact(pannello, Id::new("scansione_aspetti_foglio"), Sense::click());
                 let raggio = tema::RAGGIO_FOGLIO;
-                ui.painter().rect_filled(pannello, egui::CornerRadius { nw: raggio, ne: raggio, sw: 0, se: 0 }, tema::FOGLIO);
+                ui.painter().rect_filled(pannello, egui::CornerRadius { nw: raggio, ne: raggio, sw: 0, se: 0 }, tema::foglio());
                 let ctx = ui.ctx().clone();
                 ui.painter().rect_filled(
                     Rect::from_center_size(pos2(pannello.center().x, pannello.top() + 12.0), vec2(36.0, 4.0)),
                     2.0,
-                    tema::LINEETTA,
+                    tema::lineetta(),
                 );
                 let riga_titolo = Rect::from_min_size(pannello.left_top() + vec2(18.0, 24.0), vec2(largo - 36.0, tema::PULSANTE));
-                let titolo = ui.painter().layout_no_wrap(ASPETTO_DELLA_PAGINA.to_string(), Carattere::Titolo.font(&ctx, 23.0), tema::INCHIOSTRO);
+                let titolo = ui.painter().layout_no_wrap(t(ASPETTO_DELLA_PAGINA).to_string(), Carattere::Titolo.font(&ctx, 23.0), tema::inchiostro());
                 let posto_titolo = Rect::from_min_size(pos2(riga_titolo.left(), riga_titolo.center().y - titolo.size().y / 2.0), titolo.size());
-                ui.painter().galley(posto_titolo.min, titolo, tema::INCHIOSTRO);
-                ui.allocate_rect(posto_titolo, Sense::hover()).widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, ASPETTO_DELLA_PAGINA));
+                ui.painter().galley(posto_titolo.min, titolo, tema::inchiostro());
+                ui.allocate_rect(posto_titolo, Sense::hover())
+                    .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(ASPETTO_DELLA_PAGINA)));
                 if Carattere::Icona.pronto(&ctx) {
                     let x = Rect::from_min_size(pos2(riga_titolo.right() - tema::PULSANTE, riga_titolo.top()), vec2(tema::PULSANTE, tema::PULSANTE));
                     if ui.put(x, PulsanteIcona::new(icone::CLOSE, CHIUDI_ASPETTO)).clicked() {
@@ -1433,37 +1466,38 @@ impl TascabileApp {
                     let posto = Rect::from_min_size(pannello.left_top() + vec2(8.0, testa + i as f32 * alto_riga), vec2(largo - 16.0, alto_riga));
                     let r = ui.interact(posto, Id::new(("scansione_aspetto", i)), Sense::click());
                     let scelto = p.aspetto == a;
-                    r.widget_info(|| WidgetInfo::selected(WidgetType::Button, true, scelto, a.nome()));
+                    r.widget_info(|| WidgetInfo::selected(WidgetType::Button, true, scelto, tascabile_touch::t(a.nome())));
                     if r.is_pointer_button_down_on() {
-                        ui.painter().rect_filled(posto, 12.0, tema::PREMUTO);
+                        ui.painter().rect_filled(posto, 12.0, tema::premuto());
                     }
                     let (icona, spiega) = spiega_aspetto(a);
-                    let colore = if scelto { tema::BLU } else { tema::INCHIOSTRO };
+                    let colore = if scelto { tema::blu() } else { tema::inchiostro() };
                     // L'icona dal margine del titolo, il testo dopo.
                     ui.painter().text(
                         posto.left_center() + vec2(10.0 + tema::ICONA / 2.0, 0.0),
                         egui::Align2::CENTER_CENTER,
                         icona,
                         Carattere::Icona.font(&ctx, tema::ICONA),
-                        if scelto { tema::BLU } else { tema::MATITA },
+                        if scelto { tema::blu() } else { tema::matita() },
                     );
                     let testo = 10.0 + tema::ICONA + 16.0;
                     let dentro = posto.width() - testo - 40.0;
-                    let nome = ui.painter().layout_no_wrap(a.nome().to_string(), Carattere::Grassetto.font(&ctx, 16.0), colore);
-                    let sotto = ui.painter().layout(spiega.to_string(), Carattere::Testo.font(&ctx, 13.0), tema::MATITA, dentro);
+                    let nome = ui.painter().layout_no_wrap(tascabile_touch::t(a.nome()).to_string(), Carattere::Grassetto.font(&ctx, 16.0), colore);
+                    let sotto =
+                        ui.painter().layout(tascabile_touch::t(spiega).to_string(), Carattere::Testo.font(&ctx, 13.0), tema::matita(), dentro);
                     let cima = posto.center().y - (nome.size().y + 2.0 + sotto.size().y) / 2.0;
                     let dove = pos2(posto.left() + testo, cima + nome.size().y + 2.0);
                     ui.allocate_rect(Rect::from_min_size(dove, sotto.size()), Sense::hover())
-                        .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, spiega));
+                        .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(spiega)));
                     ui.painter().galley(pos2(posto.left() + testo, cima), nome.clone(), colore);
-                    ui.painter().galley(dove, sotto, tema::MATITA);
+                    ui.painter().galley(dove, sotto, tema::matita());
                     if scelto {
                         ui.painter().text(
                             posto.right_center() - vec2(24.0, 0.0),
                             egui::Align2::CENTER_CENTER,
                             icone::CHECK,
                             Carattere::Icona.font(&ctx, tema::ICONA),
-                            tema::BLU,
+                            tema::blu(),
                         );
                     }
                     if r.clicked() {
@@ -1488,7 +1522,7 @@ impl TascabileApp {
         {
             let testo = match s.pagine.len() {
                 1 => "La pagina fotografata non è ancora in un PDF.".to_string(),
-                n => format!("Le {n} pagine fotografate non sono ancora in un PDF."),
+                n => tascabile_touch::tf!("Le {} pagine fotografate non sono ancora in un PDF.", n),
             };
             let r = Dialogo::new(Id::new("scansione_buttare"), BUTTARE)
                 .testo(&testo)
@@ -1513,7 +1547,7 @@ impl TascabileApp {
         }
         // «Togliere la pagina?»: Annulla resta, Togli la pagina la toglie.
         if let Some(i) = self.scansione.as_ref().and_then(|s| s.togli) {
-            let titolo = format!("Togliere la pagina {}?", i + 1);
+            let titolo = tascabile_touch::tf!("Togliere la pagina {}?", i + 1);
             let r = Dialogo::new(Id::new("scansione_togli"), &titolo)
                 .testo("Si toglie dalla scansione: per rimetterla, rifai la foto o sceglila dalla galleria.")
                 .pulsante(ANNULLA_SCANSIONE, Peso::Testo)
@@ -1636,14 +1670,14 @@ impl TascabileApp {
         egui::Area::new(Id::new("scansione_bordi")).order(Order::Foreground).fixed_pos(schermo.min).constrain(false).show(ctx, |ui| {
             ui.set_min_size(schermo.size());
             let _ = ui.interact(schermo, Id::new("scansione_bordi_fondo"), Sense::click_and_drag());
-            ui.painter().rect_filled(schermo, 0.0, tema::CARTA);
+            ui.painter().rect_filled(schermo, 0.0, tema::carta());
             let barra = Rect::from_min_size(schermo.min, vec2(schermo.width(), tema::BARRA_ALTA));
             let titolo = match b.posizione {
-                Some((n, di)) if di > 1 => format!("{SISTEMA_I_BORDI} · {n} di {di}"),
-                _ => SISTEMA_I_BORDI.to_string(),
+                Some((n, di)) if di > 1 => format!("{} · {}", t(SISTEMA_I_BORDI), tascabile_touch::tf!("{} di {}", n, di)),
+                _ => t(SISTEMA_I_BORDI).to_string(),
             };
             let lascia = if altre > 0 { LASCIA_LE_FOTO } else { LASCIA_LA_FOTO };
-            let r = ui.scope_builder(UiBuilder::new().max_rect(barra), |ui| BarraAlta::new(&titolo).indietro(lascia).mostra(ui)).inner;
+            let r = ui.scope_builder(UiBuilder::new().max_rect(barra), |ui| BarraAlta::nome_proprio(&titolo).indietro(lascia).mostra(ui)).inner;
             if r.indietro {
                 tocco = Some(Tocco::Lascia);
             }
@@ -1707,7 +1741,7 @@ impl TascabileApp {
                 b.preso = None;
             }
             let buoni = angoli_buoni(&b.angoli, b.foto.larghezza, b.foto.altezza);
-            let colore = if buoni { tema::BLU } else { tema::ROSSO };
+            let colore = if buoni { tema::blu() } else { tema::rosso() };
             let q = b.angoli.map(a_schermo);
             let m = b.lati.map(a_schermo);
             // Il lato `k`, da un angolo al dopo, passa dal suo punto in mezzo (curva di secondo grado).
@@ -1734,14 +1768,15 @@ impl TascabileApp {
                 }
             }
             ui.painter().add(egui::Shape::mesh(velo));
-            let contorno: Vec<Pos2> = (0..4).flat_map(|k| (0..PASSI).map(move |j| (k, j as f32 / PASSI as f32))).map(|(k, t)| sul_lato(k, t)).collect();
+            let contorno: Vec<Pos2> =
+                (0..4).flat_map(|k| (0..PASSI).map(move |j| (k, j as f32 / PASSI as f32))).map(|(k, t)| sul_lato(k, t)).collect();
             ui.painter().add(egui::Shape::closed_line(contorno, Stroke::new(2.5, colore)));
             for (k, c) in m.iter().enumerate() {
                 let preso = b.preso.is_some_and(|(j, _)| j == k + 4);
                 let raggio = if preso { 12.0 } else { 8.0 };
                 ui.painter().circle(*c, raggio, Color32::from_white_alpha(if preso { 120 } else { 220 }), Stroke::new(2.5, colore));
                 let r = ui.allocate_rect(Rect::from_center_size(*c, vec2(2.0 * raggio, 2.0 * raggio)), Sense::hover());
-                r.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, LATI[k]));
+                r.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(LATI[k])));
             }
             for (i, c) in q.iter().enumerate() {
                 let preso = b.preso.is_some_and(|(j, _)| j == i);
@@ -1749,7 +1784,7 @@ impl TascabileApp {
                 ui.painter().circle(*c, raggio, Color32::from_white_alpha(if preso { 120 } else { 220 }), Stroke::new(3.0, colore));
                 // Per l'accessibilità e per le prove: dove sta ogni angolo.
                 let r = ui.allocate_rect(Rect::from_center_size(*c, vec2(2.0 * raggio, 2.0 * raggio)), Sense::hover());
-                r.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, ANGOLI[i]));
+                r.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(ANGOLI[i])));
             }
             if let (Some((i, _)), Some(d)) = (b.preso, dito) {
                 lente(ui.painter(), b, i, d, schermo, colore);
@@ -1764,6 +1799,7 @@ impl TascabileApp {
             } else {
                 SPIEGA_BORDI
             };
+            let testo = t(testo);
             let fatto_si = buoni && !pagina_di_prima;
             let (spiegazione, formati, tutta, rifai, fatto) = if orizzontale {
                 let alto = tema::PULSANTE_LARGO;
@@ -1783,15 +1819,18 @@ impl TascabileApp {
             };
             // Il formato del foglio: la pagina ne prende le proporzioni e il PDF la misura.
             ui.scope_builder(UiBuilder::new().max_rect(formati.shrink2(vec2(0.0, 4.0))), |ui| {
-                egui::ScrollArea::horizontal().id_salt("formati_del_foglio").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
-                    ui.horizontal_centered(|ui| {
-                        for f in Formato::TUTTI {
-                            if ui.add(Chip::new(f.nome()).acceso(f == b.formato)).clicked() {
-                                tocco = Some(Tocco::Formato(f));
+                egui::ScrollArea::horizontal()
+                    .id_salt("formati_del_foglio")
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .show(ui, |ui| {
+                        ui.horizontal_centered(|ui| {
+                            for f in Formato::TUTTI {
+                                if ui.add(Chip::new(f.nome()).acceso(f == b.formato)).clicked() {
+                                    tocco = Some(Tocco::Formato(f));
+                                }
                             }
-                        }
+                        });
                     });
-                });
             });
             ui.scope_builder(UiBuilder::new().max_rect(spiegazione), |ui| {
                 let allinea = if orizzontale {
@@ -1801,9 +1840,9 @@ impl TascabileApp {
                 };
                 ui.with_layout(allinea, |ui| {
                     ui.label(egui::RichText::new(testo).font(Carattere::Testo.font(ui.ctx(), 14.0)).color(if buoni {
-                        tema::MATITA
+                        tema::matita()
                     } else {
-                        tema::ROSSO
+                        tema::rosso()
                     }));
                 });
             });

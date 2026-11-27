@@ -27,13 +27,13 @@ const FASCIA_PX: f32 = 1024.0;
 /// Fasce nuove disegnate al massimo in un frame: le altre al frame dopo.
 const NUOVE_PER_FRAME: usize = 2;
 /// Il cursore, le gocce delle maniglie e la sottolineatura della parola in composizione.
-const BLU: egui::Color32 = tema::BLU;
+const BLU: egui::Color32 = tema::pagina::BLU;
 /// Con la maniglia a meno di tanto (dp) dal bordo della vista, la pagina scorre da sola.
 const BORDO_SCORRIMENTO: f32 = 48.0;
 /// Di quanto scorre in un frame, in dp.
 const PASSO_SCORRIMENTO: f32 = 8.0;
 /// Il colore tenue della selezione, sotto il testo (`.sel` nei bozzetti), con gli angoli appena tondi.
-pub(crate) const SELEZIONE: egui::Color32 = tema::SELEZIONE;
+pub(crate) const SELEZIONE: egui::Color32 = tema::pagina::SELEZIONE;
 const RAGGIO_SELEZIONE: f32 = 2.0;
 /// Quanto si allarga attorno al cursore il rettangolo da tenere a schermo.
 const ATTORNO_AL_CURSORE: f32 = 32.0;
@@ -1157,7 +1157,7 @@ impl Vista {
             self.scorrimento = viewport.min.to_vec2();
             self.origine = rect.min + viewport.min.to_vec2();
             let painter = ui.painter();
-            painter.rect_filled(rect, 0.0, tema::CARTA);
+            painter.rect_filled(rect, 0.0, tema::carta());
             let sinistra = rect.min.x + MARGINE_PAGINE;
             let mut nuove = 0;
             let mut tenute = Vec::new();
@@ -1405,7 +1405,7 @@ mod test {
         /// Il cursore a schermo: il rettangolo blu sottile (le gocce delle maniglie sono larghe).
         fn cursore(&self) -> Option<egui::Rect> {
             self.forme.iter().find_map(|f| match &f.shape {
-                egui::Shape::Rect(r) if r.fill == tema::BLU && r.rect.width() < 3.0 => Some(r.rect),
+                egui::Shape::Rect(r) if r.fill == tema::blu() && r.rect.width() < 3.0 => Some(r.rect),
                 _ => None,
             })
         }
@@ -1524,13 +1524,13 @@ mod test {
         /// Le gocce blu delle maniglie.
         fn gocce(&self) -> usize {
             let goccia = egui::Vec2::splat(tascabile_touch::GOCCIA);
-            self.forme.iter().filter(|f| matches!(&f.shape, egui::Shape::Rect(r) if r.fill == tema::BLU && r.rect.size() == goccia)).count()
+            self.forme.iter().filter(|f| matches!(&f.shape, egui::Shape::Rect(r) if r.fill == tema::blu() && r.rect.size() == goccia)).count()
         }
 
         /// La goccia del cursore (il poligono blu con la punta in alto): la sua punta.
         fn goccia_cursore(&self) -> Option<egui::Pos2> {
             let mut gocce = self.forme.iter().filter_map(|f| match &f.shape {
-                egui::Shape::Path(p) if p.fill == tema::BLU && p.closed => p.points.first().copied(),
+                egui::Shape::Path(p) if p.fill == tema::blu() && p.closed => p.points.first().copied(),
                 _ => None,
             });
             let prima = gocce.next();
@@ -1779,11 +1779,11 @@ mod test {
         s.run("select.range", &json!({ "anchor": Pos::body(0, 5), "focus": Pos::body(0, 10) })).unwrap();
         let f = tel.calma(&mut v, &mut s);
         // Il fondo blu tenue del bozzetto, con gli angoli appena tondi, e le due gocce blu.
-        assert_eq!(f.rettangoli_di(tema::SELEZIONE), 1);
+        assert_eq!(f.rettangoli_di(tema::selezione()), 1);
         assert!(
             f.forme
                 .iter()
-                .any(|f| matches!(&f.shape, egui::Shape::Rect(r) if r.fill == tema::SELEZIONE && r.corner_radius == egui::CornerRadius::same(2))),
+                .any(|f| matches!(&f.shape, egui::Shape::Rect(r) if r.fill == tema::selezione() && r.corner_radius == egui::CornerRadius::same(2))),
             "angoli della selezione"
         );
         assert_eq!(f.gocce(), 2);
@@ -1794,7 +1794,7 @@ mod test {
             assert!(testi.iter().any(|t| t == b), "manca «{b}» in {testi:?}");
         }
         assert!(testi.iter().any(|t| t == tascabile_touch::icone::CONTENT_COPY), "manca l'icona di Copia in {testi:?}");
-        assert_eq!(f.rettangoli_di(tema::SCURO), 1, "la barra scura");
+        assert_eq!(f.rettangoli_di(tema::scuro()), 1, "la barra scura");
         // Un cursore dopo una pressione lunga su uno spazio: solo Incolla e Seleziona tutto.
         s.run("caret.set", &json!({ "pos": Pos::body(0, 4) })).unwrap();
         v.barra_al_cursore(Pos::body(0, 4));
@@ -2028,7 +2028,7 @@ mod test {
                 })
                 .collect()
         };
-        assert!(rettangoli(tema::CARTA).iter().any(|r| r.width() >= 412.0 && r.height() >= 800.0), "manca il fondo carta");
+        assert!(rettangoli(tema::carta()).iter().any(|r| r.width() >= 412.0 && r.height() >= 800.0), "manca il fondo carta");
         let fogli: Vec<egui::Rect> = rettangoli(egui::Color32::WHITE).into_iter().filter(|r| (r.width() - 380.0).abs() < 0.5).collect();
         assert!(!fogli.is_empty());
         assert_eq!((fogli[0].left(), fogli[0].top()), (MARGINE_PAGINE, CIMA_PAGINE));
@@ -2164,7 +2164,7 @@ mod test {
             .forme
             .iter()
             .find_map(|f| match &f.shape {
-                egui::Shape::Rect(r) if r.fill == tema::SCURO => Some(r.rect),
+                egui::Shape::Rect(r) if r.fill == tema::scuro() => Some(r.rect),
                 _ => None,
             })
             .expect("la barra della selezione");
@@ -2193,7 +2193,7 @@ mod test {
             });
             out.textures_delta.clear();
             barra = out.shapes.iter().find_map(|c| match &c.shape {
-                egui::Shape::Rect(r) if r.fill == tema::SCURO => Some(r.rect),
+                egui::Shape::Rect(r) if r.fill == tema::scuro() => Some(r.rect),
                 _ => None,
             });
         }
@@ -2497,7 +2497,7 @@ mod test {
     /// Il riquadro dell'immagine scelta: il rettangolo blu del contorno (largo più di una goccia).
     fn riquadro(f: &Frame) -> Option<egui::Rect> {
         f.forme.iter().find_map(|f| match &f.shape {
-            egui::Shape::Rect(r) if r.stroke.color == tema::BLU && r.stroke.width == tascabile_touch::RIQUADRO => Some(r.rect),
+            egui::Shape::Rect(r) if r.stroke.color == tema::blu() && r.stroke.width == tascabile_touch::RIQUADRO => Some(r.rect),
             _ => None,
         })
     }

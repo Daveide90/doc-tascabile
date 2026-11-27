@@ -268,11 +268,11 @@ pub struct EsitoGriglia {
 fn dipingi_spunta(painter: &egui::Painter, ctx: &egui::Context, pagina: Rect, scelta: bool) {
     let centro = pagina.right_top() + vec2(-14.0, 14.0);
     if scelta {
-        painter.circle_filled(centro, 11.0, tema::BLU);
+        painter.circle_filled(centro, 11.0, tema::pagina::BLU);
         let g = painter.layout_no_wrap(icone::CHECK.to_string(), Carattere::Icona.font(ctx, 16.0), Color32::WHITE);
         painter.galley(centro - g.size() / 2.0, g, Color32::PLACEHOLDER);
     } else {
-        painter.circle(centro, 10.0, Color32::WHITE.gamma_multiply(0.9), Stroke::new(1.5, tema::MATITA));
+        painter.circle(centro, 10.0, Color32::WHITE.gamma_multiply(0.9), Stroke::new(1.5, tema::pagina::MATITA));
     }
 }
 
@@ -811,7 +811,7 @@ impl Lettore {
         if self.ultimo_movimento.is_none() {
             self.ultimo_movimento = Some(adesso);
         }
-        ui.painter().rect_filled(rect, 0.0, tema::TAVOLO);
+        ui.painter().rect_filled(rect, 0.0, tema::tavolo());
         self.zona = rect;
         let vista = rect.size();
         // Il telefono girato: l'impaginazione si rifà con l'altra larghezza, ma lo scorrimento è in
@@ -1112,7 +1112,7 @@ impl Lettore {
         let evidenza: Vec<(Rect, Color32)> = sel
             .rettangoli(&testo)
             .iter()
-            .map(|&[x0, y0, x1, y1]| (Rect::from_min_max(a_schermo(x0, y0), a_schermo(x1, y1)), tema::SELEZIONE))
+            .map(|&[x0, y0, x1, y1]| (Rect::from_min_max(a_schermo(x0, y0), a_schermo(x1, y1)), tema::pagina::SELEZIONE))
             .collect();
         for (r, colore) in &evidenza {
             ui.painter().rect_filled(*r, 2.0, *colore);
@@ -1120,7 +1120,7 @@ impl Lettore {
         let Some((a, b)) = sel.bordi(&testo) else { return };
         let bordo =
             |b: BordoPt| tascabile_touch::Bordo { x: a_schermo(b.x, 0.0).x, cima: a_schermo(0.0, b.cima).y, fondo: a_schermo(0.0, b.fondo).y };
-        match self.maniglie.mostra(ui, self.id.with("maniglie"), bordo(a), bordo(b), tema::BLU) {
+        match self.maniglie.mostra(ui, self.id.with("maniglie"), bordo(a), bordo(b), tema::pagina::BLU) {
             Some(Trascinamento::Sposta { maniglia, punto, .. }) => {
                 self.punto_lente = Some(punto);
                 let pt = (punto - a_schermo(0.0, 0.0)) / imp.dp_per_pt(sel.pagina).max(1e-3);
@@ -1139,7 +1139,7 @@ impl Lettore {
         if self.maniglie.trascinata().is_some() {
             if let Some(punto) = self.punto_lente {
                 let vista = ui.clip_rect();
-                lente_con(ui.painter(), vista, punto, tema::FOGLIO, &[], immagini, &evidenza);
+                lente_con(ui.painter(), vista, punto, tema::pagina::FOGLIO, &[], immagini, &evidenza);
                 let passo = if punto.y > vista.max.y - BORDO_SCORRIMENTO {
                     -PASSO_SCORRIMENTO
                 } else if punto.y < vista.min.y + BORDO_SCORRIMENTO {
@@ -1270,30 +1270,30 @@ impl Lettore {
                 }
                 let numero = Rect::from_min_size(pos2(cella.left(), cella.bottom()), vec2(cella_w, NUMERO_MINIATURA));
                 let risposta = ui.interact(cella.union(numero), Id::new("miniatura").with(p), Sense::click());
-                let etichetta = format!("Pagina {}", p + 1);
+                let etichetta = tascabile_touch::tf!("Pagina {}", p + 1);
                 let scelta = org.as_ref().is_some_and(|o| o.scelte.contains(&p));
                 if organizza {
-                    risposta.widget_info(|| WidgetInfo::selected(WidgetType::Checkbox, true, scelta, &etichetta));
+                    risposta.widget_info(|| WidgetInfo::selected(WidgetType::Checkbox, true, scelta, tascabile_touch::t(&etichetta)));
                 } else {
-                    risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &etichetta));
+                    risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(&etichetta)));
                 }
                 let presa = org.as_ref().and_then(|o| o.presa.as_ref()).is_some_and(|pr| pr.pagine.contains(&p));
                 let painter = ui.painter();
                 tema::dipingi_ombra(painter, pagina, 0, &tema::OMBRA_PAGINA);
-                painter.rect_filled(pagina, 0.0, tema::FOGLIO);
+                painter.rect_filled(pagina, 0.0, tema::pagina::FOGLIO);
                 if let Some(im) = self.miniature.get(&p).or_else(|| self.intere.get(&p)) {
                     painter.image(im.tex.id(), pagina, uv, Color32::WHITE);
                 }
                 if presa {
                     // La pagina presa lascia il suo posto velato: è sotto il dito.
-                    painter.rect_filled(pagina, 0.0, tema::CARTA.gamma_multiply(0.75));
+                    painter.rect_filled(pagina, 0.0, tema::carta().gamma_multiply(0.75));
                 } else if risposta.is_pointer_button_down_on() && !tiene {
-                    painter.rect_filled(pagina, 0.0, tema::SELEZIONE);
+                    painter.rect_filled(pagina, 0.0, tema::selezione());
                 }
                 let evidenziata = if organizza { scelta } else { p == corrente };
-                let (colore, carattere) = if evidenziata { (tema::BLU, Carattere::Grassetto) } else { (tema::MATITA, Carattere::Testo) };
+                let (colore, carattere) = if evidenziata { (tema::blu(), Carattere::Grassetto) } else { (tema::matita(), Carattere::Testo) };
                 if evidenziata {
-                    painter.rect_stroke(pagina, 2.0, Stroke::new(2.5, tema::BLU), StrokeKind::Outside);
+                    painter.rect_stroke(pagina, 2.0, Stroke::new(2.5, tema::blu()), StrokeKind::Outside);
                 }
                 if organizza {
                     dipingi_spunta(painter, &ctx, pagina, scelta);
@@ -1341,7 +1341,7 @@ impl Lettore {
                     let cella = cella_di(n - 1);
                     Rect::from_center_size(pos2(cella.right() + SPAZIO_MINIATURE / 2.0, cella.center().y), vec2(4.0, cella_h))
                 };
-                ui.painter().rect_filled(segno, 2.0, tema::BLU);
+                ui.painter().rect_filled(segno, 2.0, tema::blu());
                 // La pagina presa sotto il dito, sopra tutto, col numero delle pagine se sono più.
                 let sopra = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, self.id.with("pagina presa")));
                 let prima_presa = presa.pagine[0];
@@ -1349,15 +1349,15 @@ impl Lettore {
                 let k = (cella_w * 0.9 / m.larghezza.max(1.0)).min(cella_h * 0.9 / m.altezza.max(1.0));
                 let foglio = Rect::from_center_size(d - vec2(0.0, cella_h * 0.35), vec2(m.larghezza.max(1.0) * k, m.altezza.max(1.0) * k));
                 tema::dipingi_ombra(&sopra, foglio, 0, &tema::OMBRA_FLOTTANTE);
-                sopra.rect_filled(foglio, 0.0, tema::FOGLIO);
+                sopra.rect_filled(foglio, 0.0, tema::pagina::FOGLIO);
                 if let Some(im) = self.miniature.get(&prima_presa).or_else(|| self.intere.get(&prima_presa)) {
                     sopra.image(im.tex.id(), foglio, uv, Color32::WHITE);
                 }
-                sopra.rect_stroke(foglio, 2.0, Stroke::new(2.5, tema::BLU), StrokeKind::Outside);
+                sopra.rect_stroke(foglio, 2.0, Stroke::new(2.5, tema::blu()), StrokeKind::Outside);
                 if presa.pagine.len() > 1 {
                     let tondo = Rect::from_center_size(foglio.right_top(), vec2(28.0, 28.0));
-                    sopra.circle_filled(tondo.center(), 14.0, tema::BLU);
-                    let g = sopra.layout_no_wrap(presa.pagine.len().to_string(), Carattere::Grassetto.font(&ctx, 14.0), Color32::WHITE);
+                    sopra.circle_filled(tondo.center(), 14.0, tema::blu());
+                    let g = sopra.layout_no_wrap(presa.pagine.len().to_string(), Carattere::Grassetto.font(&ctx, 14.0), tema::foglio());
                     sopra.galley(tondo.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
                 }
                 // Vicino ai bordi la griglia scorre da sola.
@@ -1583,7 +1583,7 @@ impl Lettore {
             let spostamento = pos2(sul_pixel(esatta.left()), sul_pixel(esatta.top())) - esatta.min;
             let pagina = esatta.translate(spostamento);
             tema::dipingi_ombra(painter, pagina, 0, &tema::OMBRA_PAGINA);
-            painter.rect_filled(pagina, 0.0, tema::FOGLIO);
+            painter.rect_filled(pagina, 0.0, tema::pagina::FOGLIO);
             let dentro = painter.with_clip_rect(pagina.intersect(painter.clip_rect()));
             let posto = |im: &Immagine| imp.posto_dei_pixel(p, im.scala, im.px).translate(origine.to_vec2() + spostamento);
             let immagini = self
@@ -1602,7 +1602,7 @@ impl Lettore {
             if let Some(r) = &self.ricerca {
                 let k = imp.dp_per_pt(p);
                 for (i, righe) in r.risultati(p).iter().enumerate() {
-                    let colore = if r.attuale() == Some((p, i)) { tema::TROVATO_ATTUALE } else { tema::TROVATO };
+                    let colore = if r.attuale() == Some((p, i)) { tema::pagina::TROVATO_ATTUALE } else { tema::pagina::TROVATO };
                     for &[x0, y0, x1, y1] in righe {
                         let riga = Rect::from_min_max(pagina.min + vec2(x0, y0) * k, pagina.min + vec2(x1, y1) * k).expand(1.0);
                         dentro.rect_filled(riga, 2.0, colore);
@@ -1716,14 +1716,15 @@ impl Lettore {
         let corrente = imp.corrente(Rect::from_min_size(self.scorrimento.to_pos2(), rect.size()));
         let testo = format!("{} / {n}", corrente + 1);
         let font = Carattere::Grassetto.font(ui.ctx(), 13.0);
-        let g = ui.painter().layout_no_wrap(testo.clone(), font, Color32::WHITE.gamma_multiply(alfa));
+        let g = ui.painter().layout_no_wrap(testo.clone(), font, tema::sull_indicatore().gamma_multiply(alfa));
         // `.numero-pag`: 5 dp sopra e sotto, 12 ai lati, angoli da 14.
         let misura = vec2(g.size().x + 24.0, (g.size().y + 10.0).max(28.0));
         let centro = pos2(rect.center().x, rect.top() + rect.height() * 2.0 / 3.0);
         let pillola = Rect::from_center_size(centro, misura);
-        ui.painter().rect_filled(pillola, misura.y / 2.0, tema::INDICATORE.gamma_multiply(alfa));
+        ui.painter().rect_filled(pillola, misura.y / 2.0, tema::indicatore().gamma_multiply(alfa));
         ui.painter().galley(pillola.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
-        ui.interact(pillola, self.id.with("pagina"), Sense::hover()).widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, &testo));
+        ui.interact(pillola, self.id.with("pagina"), Sense::hover())
+            .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(&testo)));
     }
 }
 
@@ -2011,9 +2012,9 @@ mod test {
         // La vista è andata al primo risultato, nella quarta pagina.
         let f = tel.passa(&mut l, 0.1);
         assert_eq!(l.pagina_corrente(), 3);
-        let attuale = rettangoli(&f, tema::TROVATO_ATTUALE);
+        let attuale = rettangoli(&f, tema::pagina::TROVATO_ATTUALE);
         // Gli altri sullo schermo: la quinta pagina comincia sotto.
-        let altri: Vec<Rect> = rettangoli(&f, tema::TROVATO).into_iter().filter(|r| r.top() < 851.0).collect();
+        let altri: Vec<Rect> = rettangoli(&f, tema::pagina::TROVATO).into_iter().filter(|r| r.top() < 851.0).collect();
         assert_eq!((attuale.len(), altri.len()), (1, 1), "{attuale:?} {altri:?}");
         // Il risultato attuale sta sopra l'altro, entrambi sullo schermo.
         assert!(attuale[0].top() < altri[0].top() && attuale[0].top() > 0.0 && altri[0].bottom() < 851.0);
@@ -2023,7 +2024,7 @@ mod test {
         tel.passa(&mut l, 0.1);
         assert_eq!(l.conteggio().unwrap().attuale, Some(2));
         let f = tel.passo(&mut l, vec![]);
-        let attuale = rettangoli(&f, tema::TROVATO_ATTUALE);
+        let attuale = rettangoli(&f, tema::pagina::TROVATO_ATTUALE);
         assert_eq!(attuale.len(), 1);
         assert!(attuale[0].top() > 0.0 && attuale[0].bottom() < 851.0, "{attuale:?}");
         // La stessa parola con l'accento non ricomincia; una vuota chiude.
@@ -2032,7 +2033,7 @@ mod test {
         l.cerca("");
         assert_eq!(l.conteggio(), None);
         let f = tel.passo(&mut l, vec![]);
-        assert!(rettangoli(&f, tema::TROVATO).is_empty() && rettangoli(&f, tema::TROVATO_ATTUALE).is_empty());
+        assert!(rettangoli(&f, tema::pagina::TROVATO).is_empty() && rettangoli(&f, tema::pagina::TROVATO_ATTUALE).is_empty());
         // Una seconda ricerca usa i testi già letti, senza chiederli di nuovo.
         let letti = l.conti().testi;
         l.cerca("forse");
@@ -2300,23 +2301,23 @@ mod test {
         assert_eq!(esiti.iter().filter_map(|e| e.selezionati).collect::<Vec<_>>(), [3]);
         let f = tel.passa(&mut l, 0.1);
         // La selezione azzurra, le due gocce blu, la barra scura con Copia e Tutto sopra la parola.
-        assert_eq!(rettangoli(&f, tema::SELEZIONE).len(), 1);
-        assert_eq!(rettangoli(&f, tema::BLU).len(), 2);
+        assert_eq!(rettangoli(&f, tema::selezione()).len(), 1);
+        assert_eq!(rettangoli(&f, tema::blu()).len(), 2);
         let testi = f.testi();
         assert!(testi.iter().any(|t| t == COPIA) && testi.iter().any(|t| t == TUTTO), "{testi:?}");
-        let sel = rettangoli(&f, tema::SELEZIONE)[0];
+        let sel = rettangoli(&f, tema::selezione())[0];
         assert!(posto_del_testo(&f, COPIA).unwrap().bottom() < sel.top(), "la barra sopra la selezione");
         // «Tutto»: il testo della pagina; «Copia» lo dà a chi usa il lettore e chiude.
         let e = tocca(&mut tel, &mut l, posto_del_testo(&f, TUTTO).unwrap().center());
         assert!(e.tutta && e.selezionati == Some("Ciao bel mondo\nseconda riga".chars().count()));
         assert_eq!(l.testo_selezionato().as_deref(), Some("Ciao bel mondo\nseconda riga"));
         let f = tel.passa(&mut l, 0.1);
-        assert_eq!(rettangoli(&f, tema::SELEZIONE).len(), 2);
+        assert_eq!(rettangoli(&f, tema::selezione()).len(), 2);
         let e = tocca(&mut tel, &mut l, posto_del_testo(&f, COPIA).unwrap().center());
         assert_eq!(e.copia.as_deref(), Some("Ciao bel mondo\nseconda riga"));
         assert!(!l.ha_selezione());
         let f = tel.passa(&mut l, 0.1);
-        assert!(rettangoli(&f, tema::SELEZIONE).is_empty() && !f.testi().iter().any(|t| t == COPIA));
+        assert!(rettangoli(&f, tema::selezione()).is_empty() && !f.testi().iter().any(|t| t == COPIA));
     }
 
     #[test]
@@ -2337,7 +2338,7 @@ mod test {
         let testi = f.testi();
         assert!(testi.iter().any(|t| t == "Evidenzia") && !testi.iter().any(|t| t == COPIA), "{testi:?}");
         // Un colore: la selezione resta; un'azione: le righe scelte, e la selezione si chiude.
-        let sel = rettangoli(&f, tema::SELEZIONE)[0];
+        let sel = rettangoli(&f, tema::selezione())[0];
         let evidenzia = posto_del_testo(&f, "Evidenzia").unwrap();
         let rosso = pos2(evidenzia.right() + 10.0, evidenzia.bottom() + 26.0);
         let mut visti = Vec::new();

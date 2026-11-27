@@ -57,6 +57,7 @@ impl FoglioDalFondo {
         if !self.aperto {
             return None;
         }
+        let titolo = crate::lingua::t(titolo);
         let zona = ctx.content_rect();
         let id_altezza = self.id.with("altezza");
         let altezza = ctx.data(|d| d.get_temp::<f32>(id_altezza)).unwrap_or(zona.height() / 2.0);
@@ -71,7 +72,7 @@ impl FoglioDalFondo {
             .constrain(false);
         let raggio = tema::RAGGIO_FOGLIO;
         let frame = Frame::new()
-            .fill(tema::FOGLIO)
+            .fill(tema::foglio())
             .corner_radius(CornerRadius { nw: raggio, ne: raggio, sw: 0, se: 0 })
             .shadow(tema::OMBRA_FOGLIO[0])
             .inner_margin(MARGINE);
@@ -79,18 +80,18 @@ impl FoglioDalFondo {
         // Senza i caratteri del tema la X sarebbe un quadratino: si chiude toccando fuori.
         let con_la_x = Carattere::Icona.pronto(ctx);
         let mut chiudi = false;
-        let risposta = Modal::new(self.id).area(area).frame(frame).backdrop_color(tema::VELO_SCURO).show(ctx, |ui| {
+        let risposta = Modal::new(self.id).area(area).frame(frame).backdrop_color(tema::velo_scuro()).show(ctx, |ui| {
             let lampeggio = ui.visuals().text_cursor.blink;
             ui.style_mut().visuals = tema::visuals();
             ui.style_mut().visuals.text_cursor.blink = lampeggio;
             ui.set_width(largo);
             // La lineetta in cima (`.maniglia`).
             let (r, _) = ui.allocate_exact_size(vec2(largo, 4.0), Sense::hover());
-            ui.painter().rect_filled(egui::Rect::from_center_size(r.center(), vec2(36.0, 4.0)), 2.0, tema::LINEETTA);
+            ui.painter().rect_filled(egui::Rect::from_center_size(r.center(), vec2(36.0, 4.0)), 2.0, tema::lineetta());
             ui.add_space(10.0 - ui.spacing().item_spacing.y);
             ui.horizontal(|ui| {
                 ui.set_min_height(tema::PULSANTE);
-                ui.label(RichText::new(titolo).font(Carattere::Titolo.font(ui.ctx(), 23.0)).color(tema::INCHIOSTRO));
+                ui.label(RichText::new(titolo).font(Carattere::Titolo.font(ui.ctx(), 23.0)).color(tema::inchiostro()));
                 if con_la_x {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         chiudi = ui.add(PulsanteIcona::new(icone::CLOSE, "Chiudi")).clicked();
@@ -311,11 +312,11 @@ mod test {
         );
         h.run_steps(4);
         assert_eq!(famiglia_del_testo(&h, "Formato"), Some(tema::Carattere::Titolo.famiglia()));
-        let lineette = riempiti(&h, tema::LINEETTA);
+        let lineette = riempiti(&h, tema::lineetta());
         assert_eq!(lineette.len(), 1, "{lineette:?}");
         assert_eq!(lineette[0].size(), egui::vec2(36.0, 4.0));
         assert!((lineette[0].center().x - SCHERMO.x / 2.0).abs() < 0.5);
-        assert_eq!(riempiti(&h, tema::VELO_SCURO).len(), 1, "il velo sullo schermo");
+        assert_eq!(riempiti(&h, tema::velo_scuro()).len(), 1, "il velo sullo schermo");
         let titolo = h.get_by_label("Formato").rect();
         let chiudi = h.get_by_label("Chiudi").rect();
         assert_eq!(chiudi.right(), SCHERMO.x - tema::MARGINE_LARGO);
@@ -325,7 +326,7 @@ mod test {
         let fondo = crate::prova::forme(&h)
             .into_iter()
             .find_map(|s| match s {
-                egui::Shape::Rect(r) if r.fill == tema::FOGLIO && r.rect.contains_rect(titolo) => Some(r),
+                egui::Shape::Rect(r) if r.fill == tema::foglio() && r.rect.contains_rect(titolo) => Some(r),
                 _ => None,
             })
             .expect("il foglio");
@@ -356,7 +357,7 @@ mod test {
             (foglio, None),
         );
         h.run_steps(3);
-        assert_eq!(h.state().1, Some(crate::tema::INCHIOSTRO));
+        assert_eq!(h.state().1, Some(crate::tema::inchiostro()));
     }
 
     #[test]

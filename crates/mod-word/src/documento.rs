@@ -107,9 +107,9 @@ pub fn apri_byte(nome: &str, byte: &[u8]) -> Result<Session, ErroreApertura> {
     std::thread::scope(|ambito| {
         let lettore = std::thread::Builder::new().name("word-lettura".into()).stack_size(STACK_DEL_LETTORE).spawn_scoped(ambito, leggi);
         match lettore {
-            Ok(lettore) => lettore
-                .join()
-                .unwrap_or_else(|_| Err(errore("panico del lettore", "Il lettore del documento si è fermato con un errore interno."))),
+            Ok(lettore) => {
+                lettore.join().unwrap_or_else(|_| Err(errore("panico del lettore", "Il lettore del documento si è fermato con un errore interno.")))
+            }
             Err(_) => Err(errore("thread non partito", "Il telefono non ha memoria per aprire il documento.")),
         }
     })
@@ -142,7 +142,18 @@ fn rimetti_i_font(doc: &mut wordcraft_engine::doc::Document, originale: &[u8]) {
 
 /// Documento vuoto, A4, in italiano.
 pub fn nuovo() -> Session {
-    let regione = Region::from_tag("it-IT");
+    nuovo_in(tascabile_touch::lingua::attiva())
+}
+
+/// Un documento nuovo nella lingua `lingua` (quella del testo, per l'ortografia e la sillabazione
+/// del motore): italiano, inglese britannico (A4, giorno prima del mese), spagnolo di Spagna.
+pub fn nuovo_in(lingua: tascabile_touch::Lingua) -> Session {
+    let tag = match lingua {
+        tascabile_touch::Lingua::Italiano => "it-IT",
+        tascabile_touch::Lingua::Inglese => "en-GB",
+        tascabile_touch::Lingua::Spagnolo => "es-ES",
+    };
+    let regione = Region::from_tag(tag);
     let mut s = Session::new(wordcraft_engine::blank_document(&regione));
     prepara(&mut s, regione);
     s

@@ -13,6 +13,7 @@ use tascabile_touch::{BarraScorrevole, CampoTesto, Menu, Peso, Pulsante, SceltaM
 use tascabile_word::immagine::{ErroreImmagine, ImmaginePronta, InfoImmagine, Intorno, Lato, MASSIMO_FILE, immagine_scelta, prepara};
 
 use crate::{QualeCampo, Schermata, TascabileApp};
+use tascabile_touch::t;
 
 /// La voce del foglio «Inserisci» e le due righe della sua pagina.
 pub(crate) const IMMAGINE: &str = "Immagine";
@@ -227,9 +228,9 @@ impl TascabileApp {
         self.foglio_descrizione.mostra(ctx, DESCRIZIONE, |ui| {
             ui.spacing_mut().item_spacing.y = 12.0;
             ui.label(
-                RichText::new("Che cosa mostra l'immagine, in una frase: la leggono i lettori dello schermo e resta nel file.")
+                RichText::new(t("Che cosa mostra l'immagine, in una frase: la leggono i lettori dello schermo e resta nel file."))
                     .font(Carattere::Testo.font(ui.ctx(), 15.0))
-                    .color(tema::MATITA),
+                    .color(tema::matita()),
             );
             tocco = campo.mostra(ui, VUOTO_DESCRIZIONE).clicked();
             let largo = ui.available_width();

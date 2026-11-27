@@ -459,7 +459,13 @@ impl std::fmt::Debug for PaginaScansionata {
 /// La pagina dalla foto `foto` con gli `angoli`, i `ritocchi` (lati curvi, cancellino),
 /// l'`aspetto` e `giri` quarti di giro in senso orario. Con gli angoli di tutta la foto e i lati
 /// dritti non si raddrizza niente.
-pub fn fai_pagina(foto: Arc<FotoScansionata>, angoli: Angoli, ritocchi: Ritocchi, aspetto: Aspetto, giri: u8) -> Result<PaginaScansionata, ErroreFoto> {
+pub fn fai_pagina(
+    foto: Arc<FotoScansionata>,
+    angoli: Angoli,
+    ritocchi: Ritocchi,
+    aspetto: Aspetto,
+    giri: u8,
+) -> Result<PaginaScansionata, ErroreFoto> {
     let rgb = foto.rgb()?;
     let (w, h) = rgb.dimensions();
     let intera = ritocchi.lati.is_none() && angoli == foto.tutta();
@@ -477,7 +483,11 @@ pub fn fai_pagina(foto: Arc<FotoScansionata>, angoli: Angoli, ritocchi: Ritocchi
         let lati = ritocchi.lati.unwrap_or_else(|| lati_dritti(angoli));
         let (largo, alto) = crate::stendi::lunghezze(angoli, lati);
         let visto = largo / alto.max(1.0);
-        let stimato = if intera { visto } else { rapporto_credibile(crate::stendi::proporzione_vera(angoli, f64::from(w), f64::from(h), foto.focale.map(f64::from)), visto) };
+        let stimato = if intera {
+            visto
+        } else {
+            rapporto_credibile(crate::stendi::proporzione_vera(angoli, f64::from(w), f64::from(h), foto.focale.map(f64::from)), visto)
+        };
         let (corto_su_lungo, lungo_mm) = proporzioni(stimato, ritocchi.formato);
         let lungo = largo.max(alto).round().max(1.0);
         let corto = (lungo * corto_su_lungo).round().max(1.0);
@@ -712,7 +722,8 @@ mod test {
         let a_sinistra = |x: u32, _: u32, w: u32, _: u32| x * 10 < w * 3;
         let a_destra = |x: u32, _: u32, w: u32, _: u32| x * 10 > w * 3 + w / 50;
         assert!(scuri(&dritta, &a_sinistra) > 100 && scuri(&dritta, &a_destra) > 100, "la prova vuole testo a sinistra e a destra");
-        let passate: Vec<Cancellatura> = (0..6).map(|i| Cancellatura { punti: vec![[i as f32 * 0.05 + 0.025, 0.0], [i as f32 * 0.05 + 0.025, 1.0]], raggio: 0.03 }).collect();
+        let passate: Vec<Cancellatura> =
+            (0..6).map(|i| Cancellatura { punti: vec![[i as f32 * 0.05 + 0.025, 0.0], [i as f32 * 0.05 + 0.025, 1.0]], raggio: 0.03 }).collect();
         let ritocchi = Ritocchi { lati: None, cancellature: passate, formato: Formato::Automatico };
         let cancellata = fai_pagina(foto.clone(), angoli, ritocchi.clone(), Aspetto::Grigi, 0).expect("cancellata");
         assert_eq!(scuri(&cancellata, &a_sinistra), 0);

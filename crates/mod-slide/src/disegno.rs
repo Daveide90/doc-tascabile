@@ -259,12 +259,16 @@ mod test {
     #[test]
     fn una_slide_che_manda_in_panico_il_motore_non_ferma_le_altre() {
         let p = Presentazione::apri(crate::prova::LEZIONE).unwrap();
-        let d = Disegnatore::avvia_con(p.documento().clone(), || {}, |doc, r| {
-            if r.indice == 1 {
-                panic!("il testo della slide: Zanzibar");
-            }
-            disegna(doc, r)
-        })
+        let d = Disegnatore::avvia_con(
+            p.documento().clone(),
+            || {},
+            |doc, r| {
+                if r.indice == 1 {
+                    panic!("il testo della slide: Zanzibar");
+                }
+                disegna(doc, r)
+            },
+        )
         .unwrap();
         let richiesta = |indice| Richiesta { indice, larghezza: 480, uso: Uso::Vista, passo: None };
         d.chiedi([richiesta(0), richiesta(1), richiesta(2)]);

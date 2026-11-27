@@ -26,6 +26,7 @@ use tascabile_word::salva;
 
 use crate::quando::Locale;
 use crate::{Da, Errore, Schermata, TascabileApp, adesso, home};
+use tascabile_touch::t;
 
 /// Le etichette dei pulsanti della barra alta (per l'accessibilità e per le prove).
 pub(crate) const INDIETRO: &str = "Indietro";
@@ -223,7 +224,9 @@ impl TascabileApp {
                 match perse {
                     0 => {}
                     1 => self.avviso_breve.avvisa("Una slide della presentazione non si legge e manca: forse il file è rovinato."),
-                    n => self.avviso_breve.avvisa(format!("{n} slide della presentazione non si leggono e mancano: forse il file è rovinato.")),
+                    n => self
+                        .avviso_breve
+                        .avvisa(tascabile_touch::tf!("{} slide della presentazione non si leggono e mancano: forse il file è rovinato.", n)),
                 }
                 let uscito = self.sostituisci(None);
                 self.metti_da_parte(uscito);
@@ -246,9 +249,14 @@ impl TascabileApp {
                 });
                 self.vai(Schermata::Slide);
                 match a.chiave {
-                    Some(chiave) => {
-                        self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Presentazione, aperto_alle: adesso(), pagine: Some(slide), impronta: None })
-                    }
+                    Some(chiave) => self.home.ricorda(Recente {
+                        chiave,
+                        nome: a.nome,
+                        tipo: Tipo::Presentazione,
+                        aperto_alle: adesso(),
+                        pagine: Some(slide),
+                        impronta: None,
+                    }),
                     None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
                 }
                 // Un .ppsx è salvato per presentare: parte già presentato, dall'inizio.
@@ -407,10 +415,10 @@ impl TascabileApp {
         let zona = ui.max_rect();
         let barra = Rect::from_min_size(zona.min, vec2(zona.width(), tema::BARRA_ALTA));
         let nome = home::nome_da_mostrare(&s.nome, Tipo::Presentazione).to_string();
-        let sotto = format!("Slide · {} slide", s.presentazione.slide());
+        let sotto = tascabile_touch::tf!("Slide · {} slide", s.presentazione.slide());
         let r = ui
             .scope_builder(UiBuilder::new().max_rect(barra), |ui| {
-                BarraAlta::new(&nome).indietro(INDIETRO).sottotitolo(&sotto).azione(PulsanteIcona::new(icone::MORE_VERT, MENU)).mostra(ui)
+                BarraAlta::nome_proprio(&nome).indietro(INDIETRO).sottotitolo(&sotto).azione(PulsanteIcona::new(icone::MORE_VERT, MENU)).mostra(ui)
             })
             .inner;
         if r.azione.is_some() {
@@ -521,7 +529,7 @@ impl TascabileApp {
             }
         };
         let base = home::nome_da_mostrare(&s.nome, Tipo::Presentazione).to_string();
-        let base = if e.con_note { format!("{base} - note") } else { base };
+        let base = if e.con_note { format!("{base} - {}", t("note")) } else { base };
         let cartella = tascabile_files::cartella_tascabile(&self.piattaforma.radice_archivio());
         let scritto = std::fs::create_dir_all(&cartella).and_then(|_| salva::scrivi_nuovo(&cartella, &base, "pdf", &byte));
         match scritto {
@@ -596,14 +604,14 @@ impl TascabileApp {
                     let adesso = ui.input(|i| i.time);
                     let tempo = sp.tempo(adesso).map_or_else(|| "0:00".to_string(), |t| minuti_e_secondi(t as u64));
                     let ora = Locale::da_utc(adesso_utc());
-                    let testo = format!("{tempo} · ore {}:{:02}", ora.ora, ora.minuti);
+                    let testo = tascabile_touch::tf!("{} · ore {}:{}", tempo, ora.ora, format!("{:02}", ora.minuti));
                     let font = Carattere::Grassetto.font(ui.ctx(), 15.0);
-                    let g = ui.painter().layout_no_wrap(testo.clone(), font, egui::Color32::WHITE);
+                    let g = ui.painter().layout_no_wrap(testo.clone(), font, tema::sull_indicatore());
                     let pillola = Rect::from_center_size(pos2(voci.center().x, voci.top() - 30.0), vec2(g.size().x + 28.0, 36.0));
-                    ui.painter().rect_filled(pillola, 18.0, tema::INDICATORE);
+                    ui.painter().rect_filled(pillola, 18.0, tema::indicatore());
                     ui.painter().galley(pillola.center() - g.size() / 2.0, g, egui::Color32::PLACEHOLDER);
                     ui.interact(pillola, egui::Id::new("tempo_presentazione"), egui::Sense::hover())
-                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &testo));
+                        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t(&testo)));
                     // Il tempo cambia ogni secondo.
                     ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
                     let penna = sp.penna().then_some(1);
@@ -704,14 +712,14 @@ impl TascabileApp {
             self.fogli_slide.miniature.chiudi();
         }
         let (titolo, testo) = match self.slide.as_ref() {
-            Some(s) => (format!("{NOTE} · slide {}", s.note_di + 1), s.presentazione.note(s.note_di)),
+            Some(s) => (format!("{} · {}", t(NOTE), tascabile_touch::tf!("slide {}", s.note_di + 1)), s.presentazione.note(s.note_di)),
             None => (NOTE.to_string(), String::new()),
         };
         self.fogli_slide.note.mostra(ctx, &titolo, |ui| {
             if testo.trim().is_empty() {
-                ui.label(RichText::new(NESSUNA_NOTA).font(Carattere::Testo.font(ui.ctx(), 16.0)).color(tema::MATITA));
+                ui.label(RichText::new(t(NESSUNA_NOTA)).font(Carattere::Testo.font(ui.ctx(), 16.0)).color(tema::matita()));
             } else {
-                ui.label(RichText::new(testo.as_str()).font(Carattere::Testo.font(ui.ctx(), 18.0)).color(tema::INCHIOSTRO));
+                ui.label(RichText::new(testo.as_str()).font(Carattere::Testo.font(ui.ctx(), 18.0)).color(tema::inchiostro()));
             }
         });
     }
@@ -729,12 +737,12 @@ impl TascabileApp {
                 return;
             }
             let font = Carattere::Grassetto.font(ui.ctx(), 15.0);
-            let g = ui.painter().layout_no_wrap(APRO.to_string(), font, egui::Color32::WHITE);
+            let g = ui.painter().layout_no_wrap(t(APRO).to_string(), font, tema::sull_indicatore());
             let pillola = Rect::from_center_size(zona.center(), vec2(g.size().x + 32.0, 44.0));
-            ui.painter().rect_filled(pillola, 22.0, tema::INDICATORE);
+            ui.painter().rect_filled(pillola, 22.0, tema::indicatore());
             ui.painter().galley(pillola.center() - g.size() / 2.0, g, egui::Color32::PLACEHOLDER);
             ui.interact(pillola, egui::Id::new("apertura_slide_testo"), egui::Sense::hover())
-                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, APRO));
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t(APRO)));
         });
     }
 }
@@ -742,9 +750,9 @@ impl TascabileApp {
 /// Una pillola scura con un testo, in mezzo a `centro`: «Preparo il PDF…».
 fn pillola(ui: &egui::Ui, centro: egui::Pos2, testo: &str) {
     let font = Carattere::Grassetto.font(ui.ctx(), 15.0);
-    let g = ui.painter().layout_no_wrap(testo.to_string(), font, egui::Color32::WHITE);
+    let g = ui.painter().layout_no_wrap(testo.to_string(), font, tema::sull_indicatore());
     let r = Rect::from_center_size(centro, vec2(g.size().x + 32.0, 44.0));
-    ui.painter().rect_filled(r, 22.0, tema::INDICATORE);
+    ui.painter().rect_filled(r, 22.0, tema::indicatore());
     ui.painter().galley(r.center() - g.size() / 2.0, g, egui::Color32::PLACEHOLDER);
     ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
 }
@@ -752,15 +760,15 @@ fn pillola(ui: &egui::Ui, centro: egui::Pos2, testo: &str) {
 /// Il pannello del relatore, scuro sopra la presentazione: in alto «Dopo» con quello che viene
 /// col prossimo «avanti» (o «Fine»), sotto le note della slide, grandi, che scorrono.
 fn pannello_del_relatore(ui: &mut egui::Ui, pannello: Rect, note: &str, dopo: Option<egui::TextureId>, rapporto: f32) {
-    ui.painter().rect_filled(pannello, 16.0, tema::SCURO.gamma_multiply(0.94));
+    ui.painter().rect_filled(pannello, 16.0, tema::chiaro::SCURO.gamma_multiply(0.94));
     ui.allocate_rect(pannello, egui::Sense::click_and_drag());
     let interno = pannello.shrink(14.0);
     let font = Carattere::Grassetto.font(ui.ctx(), 13.0);
-    let g = ui.painter().layout_no_wrap(DOPO.to_string(), font, egui::Color32::from_gray(170));
+    let g = ui.painter().layout_no_wrap(t(DOPO).to_string(), font, egui::Color32::from_gray(170));
     let etichetta = Rect::from_min_size(interno.min, g.size());
     ui.painter().galley(etichetta.min, g, egui::Color32::PLACEHOLDER);
     ui.interact(etichetta, egui::Id::new("relatore_dopo"), egui::Sense::hover())
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, DOPO));
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t(DOPO)));
     let anteprima =
         Rect::from_min_size(pos2(interno.left(), etichetta.bottom() + 6.0), vec2(LARGHEZZA_ANTEPRIMA, LARGHEZZA_ANTEPRIMA / rapporto.max(0.1)));
     match dopo {
@@ -770,7 +778,7 @@ fn pannello_del_relatore(ui: &mut egui::Ui, pannello: Rect, note: &str, dopo: Op
         None => {
             ui.painter().rect_filled(anteprima, 4.0, egui::Color32::BLACK);
             let font = Carattere::Testo.font(ui.ctx(), 13.0);
-            ui.painter().text(anteprima.center(), egui::Align2::CENTER_CENTER, FINE_DOPO, font, egui::Color32::from_gray(170));
+            ui.painter().text(anteprima.center(), egui::Align2::CENTER_CENTER, t(FINE_DOPO), font, egui::Color32::from_gray(170));
         }
     }
     // Le note a destra dell'anteprima, fino in fondo al pannello.
@@ -778,7 +786,7 @@ fn pannello_del_relatore(ui: &mut egui::Ui, pannello: Rect, note: &str, dopo: Op
     ui.scope_builder(UiBuilder::new().max_rect(testo), |ui| {
         egui::ScrollArea::vertical().id_salt("note_del_relatore").auto_shrink([false, false]).show(ui, |ui| {
             let (parole, colore) = if note.trim().is_empty() { (NESSUNA_NOTA, egui::Color32::from_gray(170)) } else { (note, egui::Color32::WHITE) };
-            ui.label(RichText::new(parole).font(Carattere::Testo.font(ui.ctx(), 19.0)).color(colore));
+            ui.label(RichText::new(t(parole)).font(Carattere::Testo.font(ui.ctx(), 19.0)).color(colore));
         });
     });
 }

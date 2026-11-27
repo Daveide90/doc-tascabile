@@ -33,9 +33,9 @@ impl Tono {
     /// Il fondo del quadrato e il colore dell'icona.
     pub fn colori(self) -> (Color32, Color32) {
         match self {
-            Tono::Rosso => (tema::ROSSO_TENUE, tema::ROSSO),
-            Tono::Blu => (tema::BLU_TENUE, tema::BLU),
-            Tono::Neutro => (tema::VELO, tema::INCHIOSTRO),
+            Tono::Rosso => (tema::rosso_tenue(), tema::rosso()),
+            Tono::Blu => (tema::blu_tenue(), tema::blu()),
+            Tono::Neutro => (tema::velo(), tema::inchiostro()),
         }
     }
 }
@@ -53,7 +53,7 @@ impl<'a> GrigliaStrumenti<'a> {
 
     /// Uno strumento: l'icona, il nome (anche per l'accessibilità) e il colore.
     pub fn voce(mut self, icona: &'a str, nome: &'a str, tono: Tono) -> Self {
-        self.voci.push((icona, nome, tono));
+        self.voci.push((icona, crate::lingua::t(nome), tono));
         self
     }
 
@@ -71,7 +71,8 @@ impl<'a> GrigliaStrumenti<'a> {
             let nomi: Vec<_> = voci
                 .iter()
                 .map(|(_, nome, _)| {
-                    let mut job = egui::text::LayoutJob::simple((*nome).to_owned(), Carattere::Grassetto.font(&ctx, NOME), tema::INCHIOSTRO, colonna);
+                    let mut job =
+                        egui::text::LayoutJob::simple((*nome).to_owned(), Carattere::Grassetto.font(&ctx, NOME), tema::inchiostro(), colonna);
                     job.halign = Align::Center;
                     job.wrap.max_rows = 2;
                     ui.painter().layout_job(job)
@@ -132,9 +133,9 @@ mod test {
             Vec::new(),
         );
         // Quadrati da 56 dp coi colori dei gruppi: uno rosso, uno blu, tre col velo.
-        let rossi = riempiti(&h, tema::ROSSO_TENUE);
-        let blu = riempiti(&h, tema::BLU_TENUE);
-        let neutri = riempiti(&h, tema::VELO);
+        let rossi = riempiti(&h, tema::rosso_tenue());
+        let blu = riempiti(&h, tema::blu_tenue());
+        let neutri = riempiti(&h, tema::velo());
         assert_eq!((rossi.len(), blu.len(), neutri.len()), (1, 1, 3), "{rossi:?} {blu:?} {neutri:?}");
         assert!(rossi.iter().chain(&blu).chain(&neutri).all(|q| q.size() == vec2(QUADRATO, QUADRATO)));
         // La quinta va a capo, nella prima colonna; le colonne sono larghe uguali.

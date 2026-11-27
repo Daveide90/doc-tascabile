@@ -58,7 +58,10 @@ fn inversa(h: &[f64; 9]) -> Option<[f64; 9]> {
     if det.abs() < 1e-15 {
         return None;
     }
-    Some([e * l - f * k, c * k - b * l, b * f - c * e, f * g - d * l, a * l - c * g, c * d - a * f, d * k - e * g, b * g - a * k, a * e - b * d].map(|v| v / det))
+    Some(
+        [e * l - f * k, c * k - b * l, b * f - c * e, f * g - d * l, a * l - c * g, c * d - a * f, d * k - e * g, b * g - a * k, a * e - b * d]
+            .map(|v| v / det),
+    )
 }
 
 /// La lunghezza del lato curvo da `a` a `b` che passa per `m` (una curva di secondo grado).
@@ -68,11 +71,12 @@ fn lunghezza(a: Punto, m: Punto, b: Punto) -> f64 {
         let u = 1.0 - t;
         [u * u * a[0] + 2.0 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2.0 * u * t * c[1] + t * t * b[1]]
     };
-    (0..16).map(|i| {
-        let (p, q) = (punto(i as f64 / 16.0), punto((i + 1) as f64 / 16.0));
-        (q[0] - p[0]).hypot(q[1] - p[1])
-    })
-    .sum()
+    (0..16)
+        .map(|i| {
+            let (p, q) = (punto(i as f64 / 16.0), punto((i + 1) as f64 / 16.0));
+            (q[0] - p[0]).hypot(q[1] - p[1])
+        })
+        .sum()
 }
 
 /// Quanto sono lunghi nella foto il più lungo dei lati alto e basso e il più lungo dei lati di
@@ -226,7 +230,8 @@ pub(crate) fn cancella(pixel: &mut [u8], canali: usize, w: u32, h: u32, passate:
         }
         let in_pixel: Vec<[f64; 2]> = punti.iter().map(|p| [f64::from(p[0]) * w as f64, f64::from(p[1]) * h as f64]).collect();
         // Ogni tratto fra due punti è una striscia con le punte tonde.
-        let tratti: Vec<([f64; 2], [f64; 2])> = if in_pixel.len() == 1 { vec![(in_pixel[0], in_pixel[0])] } else { in_pixel.windows(2).map(|t| (t[0], t[1])).collect() };
+        let tratti: Vec<([f64; 2], [f64; 2])> =
+            if in_pixel.len() == 1 { vec![(in_pixel[0], in_pixel[0])] } else { in_pixel.windows(2).map(|t| (t[0], t[1])).collect() };
         for (a, b) in tratti {
             let (x0, x1) = ((a[0].min(b[0]) - r).floor().max(0.0) as usize, ((a[0].max(b[0]) + r).ceil() as usize).min(w));
             let (y0, y1) = ((a[1].min(b[1]) - r).floor().max(0.0) as usize, ((a[1].max(b[1]) + r).ceil() as usize).min(h));

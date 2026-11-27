@@ -7,6 +7,7 @@ import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -742,6 +743,33 @@ public class MainActivity extends GameActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             finestra.setHideOverlayWindows(accesa);
         }
+    }
+
+    /** Il telefono è in modalità scura (Impostazioni di Android, Display): per il tema «Come il telefono». */
+    public boolean tascabileSistemaScuro() {
+        int notte = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        return notte == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /** La lingua del telefono, come codice ISO 639 («it», «en», «es»): la prima delle lingue scelte. */
+    public String tascabileLingua() {
+        return getResources().getConfiguration().getLocales().get(0).getLanguage();
+    }
+
+    /**
+     * Le barre di sistema e il fondo della finestra col tema dell'app: la carta chiara con le icone
+     * scure, o la carta scura con le icone chiare (tema::CARTA delle due tavolozze). Il fondo è quello
+     * che si vede prima del primo disegno e quando l'app torna dalle app recenti.
+     */
+    public void tascabileTema(boolean scuro) {
+        Window finestra = getWindow();
+        int carta = scuro ? 0xFF1A1816 : 0xFFF6F3EE;
+        finestra.getDecorView().setBackgroundColor(carta);
+        finestra.setStatusBarColor(carta);
+        finestra.setNavigationBarColor(carta);
+        WindowInsetsControllerCompat barre = WindowCompat.getInsetsController(finestra, finestra.getDecorView());
+        barre.setAppearanceLightStatusBars(!scuro);
+        barre.setAppearanceLightNavigationBars(!scuro);
     }
 
     public void tascabilePresentazione(boolean attiva) {

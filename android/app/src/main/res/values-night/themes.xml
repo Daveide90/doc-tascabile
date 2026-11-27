@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Col telefono in modalità scura l'app parte scura (tema «Come il telefono», 0.10.0): barre
+         color carta scura con le icone chiare. Se nelle Impostazioni si è scelto «Chiaro», l'app
+         rimette le barre chiare al primo frame (MainActivity.tascabileTema). -->
+    <style name="Theme.Tascabile" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/carta</item>
+        <item name="android:statusBarColor">@color/carta</item>
+        <item name="android:navigationBarColor">@color/carta</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

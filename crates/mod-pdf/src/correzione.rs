@@ -93,7 +93,8 @@ pub(crate) fn risolvi(d: &Document, p: Pulizia, edit: Edit) -> Result<Edit, Erro
     let unione = parole.iter().flatten().map(|(_, r)| *r).reduce(unisci).ok_or(ErroreCorrezione::NonScansione)?;
     // La foto sotto il paragrafo: quella che lo contiene, la più grande se sono più d'una.
     let immagini = d.page_images(p.pagina);
-    let Some((indice, immagine)) = immagini.iter().enumerate().filter(|(_, i)| !i.is_form && contiene(i.rect, unione)).max_by(|a, b| area(a.1.rect).total_cmp(&area(b.1.rect)))
+    let Some((indice, immagine)) =
+        immagini.iter().enumerate().filter(|(_, i)| !i.is_form && contiene(i.rect, unione)).max_by(|a, b| area(a.1.rect).total_cmp(&area(b.1.rect)))
     else {
         // Un disegno raggruppato sotto le righe non si rifà a pixel: meglio fermarsi.
         return Err(if immagini.iter().any(|i| si_toccano(i.rect, unione)) { ErroreCorrezione::Foto } else { ErroreCorrezione::SenzaFoto });
@@ -136,7 +137,8 @@ pub(crate) fn risolvi(d: &Document, p: Pulizia, edit: Edit) -> Result<Edit, Erro
         .min(misura.0.saturating_sub(1));
     // Prima i riquadri veri di tutte le righe, poi le righe cambiate si rifanno.
     // Ogni riga fra la metà dello spazio verso quella sopra e quella sotto.
-    let su_giu: Vec<Option<(u32, u32)>> = righe_foto.iter().map(|r| Some((r.iter().map(|p| p.r[1]).min()?, r.iter().map(|p| p.r[3]).max()?))).collect();
+    let su_giu: Vec<Option<(u32, u32)>> =
+        righe_foto.iter().map(|r| Some((r.iter().map(|p| p.r[1]).min()?, r.iter().map(|p| p.r[3]).max()?))).collect();
     let affinate: Vec<Option<(Vec<ParolaFoto>, crate::ritocco::Inchiostro)>> = righe_foto
         .iter()
         .enumerate()
@@ -156,7 +158,9 @@ pub(crate) fn risolvi(d: &Document, p: Pulizia, edit: Edit) -> Result<Edit, Erro
             (None, true) => finali.extend(riga.iter().cloned()),
             (None, false) => return Err(ErroreCorrezione::SenzaLettere),
             (Some((parole, inchiostro)), false) => {
-                let fondo = |r: Option<&Vec<ParolaFoto>>, alto: bool| r.and_then(|r| if alto { r.iter().map(|p| p.r[1]).min() } else { r.iter().map(|p| p.r[3]).max() });
+                let fondo = |r: Option<&Vec<ParolaFoto>>, alto: bool| {
+                    r.and_then(|r| if alto { r.iter().map(|p| p.r[1]).min() } else { r.iter().map(|p| p.r[3]).max() })
+                };
                 let sopra = i.checked_sub(1).and_then(|j| fondo(affinate[j].as_ref().map(|a| &a.0), false)).unwrap_or(0);
                 let sotto = affinate.get(i + 1).and_then(|a| fondo(a.as_ref().map(|a| &a.0), true)).unwrap_or(misura.1);
                 // Fin dove arriva questa riga: prima del primo inchiostro alla sua destra (l'altra
@@ -222,7 +226,8 @@ fn parole_del_paragrafo(blocco: &pdfcraft_engine::TextBlock, righe: &[pdfcraft_e
 /// tutte le nuove nella riga sotto, che non le teneva (revisione del 3/11). Senza parole tolte,
 /// una nuova va nella riga della parola di prima che la precede.
 pub(crate) fn allinea(vecchie: &[Vec<&str>], nuove: &[&str]) -> Vec<Vec<Voce>> {
-    let tutte: Vec<(usize, usize, &str)> = vecchie.iter().enumerate().flat_map(|(r, riga)| riga.iter().enumerate().map(move |(k, t)| (r, k, *t))).collect();
+    let tutte: Vec<(usize, usize, &str)> =
+        vecchie.iter().enumerate().flat_map(|(r, riga)| riga.iter().enumerate().map(move |(k, t)| (r, k, *t))).collect();
     let (n, m) = (tutte.len(), nuove.len());
     let prima = tutte.iter().zip(nuove).take_while(|(a, b)| a.2 == **b).count();
     let dopo = tutte[prima..].iter().rev().zip(nuove[prima..].iter().rev()).take_while(|(a, b)| a.2 == **b).count();
@@ -499,7 +504,10 @@ mod test {
             vec![vec![Tenuta(0), Nuova("di".into()), Tenuta(1)], vec![Tenuta(0), Tenuta(1), Nuova("ecc.".into())]]
         );
         // Tutto uguale; tutto tolto.
-        assert_eq!(allinea(&righe, &["Area", "lavoro/istruzione", "Tempo", "libero/hobby"]), vec![vec![Tenuta(0), Tenuta(1)], vec![Tenuta(0), Tenuta(1)]]);
+        assert_eq!(
+            allinea(&righe, &["Area", "lavoro/istruzione", "Tempo", "libero/hobby"]),
+            vec![vec![Tenuta(0), Tenuta(1)], vec![Tenuta(0), Tenuta(1)]]
+        );
         assert_eq!(allinea(&righe, &[]), vec![Vec::<Voce>::new(), Vec::new()]);
         // Un cambio a cavallo dell'a capo: ogni parola nuova al posto di una tolta, nella sua riga.
         assert_eq!(

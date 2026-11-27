@@ -4,7 +4,7 @@
 
 The office in your pocket: documents, PDFs, slides and spreadsheets on the phone, offline. · L'ufficio in tasca: documenti, PDF, slide e fogli di calcolo sul telefono, senza rete.
 
-Version 0.9.10 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
+Version 0.10.1 beta · Android 11 or later · not on Google Play: test builds are shared by hand.
 
 <p align="center">
   <a href="https://github.com/Daveide90/doc-tascabile/releases/latest/download/DocTascabile.apk"><img src="docs/pulsante-download.svg" width="340" alt="Download APK · Scarica l'APK"></a>
@@ -22,7 +22,7 @@ Version 0.9.10 beta · Android 11 or later · not on Google Play: test builds ar
 <tr><td align="center"><b>Spreadsheets</b> · Fogli di calcolo</td><td align="center"><b>Timestamp</b> · Timestamp</td><td align="center"><b>App lock</b> · Blocco</td><td align="center"><b>Settings</b> · Impostazioni</td></tr>
 </table>
 
-<sub>Screens drawn by the app itself in its tests (`app/tests/schermata.rs`), with made-up documents; the app is in Italian and the latest version may differ in small details. · Schermate disegnate dall'app nei suoi test, con documenti inventati; l'ultima versione può differire in piccoli dettagli.</sub>
+<sub>Screens drawn by the app itself in its tests (`app/tests/schermata.rs`), with made-up documents; the screens are in Italian (the app also speaks English and Spanish) and the latest version may differ in small details. · Schermate disegnate dall'app nei suoi test, con documenti inventati; l'ultima versione può differire in piccoli dettagli.</sub>
 
 ---
 
@@ -40,11 +40,12 @@ Doc Tascabile opens, writes and signs documents on an Android phone, with contro
 | **Slides** | Read .pptx, .ppsx, .potx with thumbnails and notes. Present full screen: tap or volume keys to move, pen, black screen, slide grid. With HDMI or Miracast the slides go to the projector and the notes stay on the phone. PDF of the slides, with notes too. |
 | **Spreadsheets** | Read .xlsx, .xlsm, .xls, .xlsb, .ods, .csv, .tsv: grid, sheets, frozen rows and columns, zoom. Values are those saved in the file, without recalculation. Read only. |
 | **Timestamp** | Optional proof that a saved file existed at a given moment, made with OpenTimestamps and saved next to the file as `.ots`. |
+| **Languages and theme** | Italian, English and Spanish: the app follows the phone's language (English for any other) or the one chosen in Settings; dates and new-document templates follow it too. Light or dark theme, or the same as the phone; document pages always stay white. |
 | **Safety nets** | App lock with fingerprint or PIN, fingerprint before placing the saved signature, private mode that blacks out screenshots and screen sharing, recovery of unsaved work after a crash. |
 
 ### Limits
 
-Open your own documents or documents from people you know: the app is not built for unknown files from the Internet. Slides are read and presented but not edited; spreadsheets are read only. Text recognition is for Italian. Scans saved as fax, JBIG2 or JPEG 2000 cannot be corrected. There is no dark theme yet.
+Open your own documents or documents from people you know: the app is not built for unknown files from the Internet. Slides are read and presented but not edited; spreadsheets are read only. Text recognition is tuned for Italian and spell check knows only Italian. Scans saved as fax, JBIG2 or JPEG 2000 cannot be corrected.
 
 A signature drawn with the finger is a simple electronic signature, not a qualified one. The OpenTimestamps timestamp is a public proof, not a qualified electronic time stamp under the eIDAS regulation, and it is not a signature. Recognised text can contain errors and must be read again.
 
@@ -125,11 +126,12 @@ Doc Tascabile apre, scrive e firma i documenti su un telefono Android, con i com
 | **Slide** | Leggere .pptx, .ppsx, .potx con miniature e note. Presentare a tutto schermo: tocco o tasti del volume per andare avanti, penna, schermo nero, griglia delle slide. Con HDMI o Miracast le slide vanno sul proiettore e le note restano sul telefono. PDF delle slide, anche con le note. |
 | **Fogli di calcolo** | Leggere .xlsx, .xlsm, .xls, .xlsb, .ods, .csv, .tsv: griglia, fogli, righe e colonne bloccate, zoom. I valori sono quelli salvati nel file, senza ricalcolo. Sola lettura. |
 | **Timestamp** | Prova facoltativa che un file salvato esisteva in un certo momento, fatta con OpenTimestamps e salvata accanto al file come `.ots`. |
+| **Lingue e tema** | Italiano, inglese e spagnolo: l'app segue la lingua del telefono (l'inglese per tutte le altre) o quella scelta nelle Impostazioni; anche le date e i modelli dei documenti nuovi. Tema chiaro, scuro o come il telefono; le pagine dei documenti restano sempre bianche. |
 | **Reti di sicurezza** | Blocco dell'app con impronta o PIN, impronta prima di mettere la firma salvata, modalità riservata che oscura screenshot e condivisione dello schermo, recupero del lavoro non salvato dopo una chiusura improvvisa. |
 
 ### Limiti
 
-Aprire documenti propri o di persone che si conoscono: l'app non è fatta per file sconosciuti presi da Internet. Le slide si leggono e si presentano ma non si modificano; i fogli di calcolo sono in sola lettura. Il riconoscimento del testo è per l'italiano. Le scansioni salvate come fax, JBIG2 o JPEG 2000 non si correggono. Il tema scuro non c'è ancora.
+Aprire documenti propri o di persone che si conoscono: l'app non è fatta per file sconosciuti presi da Internet. Le slide si leggono e si presentano ma non si modificano; i fogli di calcolo sono in sola lettura. Il riconoscimento del testo è pensato per l'italiano e il controllo ortografico conosce solo l'italiano. Le scansioni salvate come fax, JBIG2 o JPEG 2000 non si correggono.
 
 La firma fatta col dito è una firma elettronica semplice, non qualificata. Il timestamp di OpenTimestamps è una prova pubblica, non una validazione temporale elettronica qualificata secondo il regolamento eIDAS, e non è una firma. Il testo riconosciuto può avere errori e va riletto.
 

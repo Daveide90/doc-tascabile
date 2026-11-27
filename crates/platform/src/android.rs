@@ -302,13 +302,7 @@ pub struct Piattaforma {
 
 impl Piattaforma {
     pub fn nuova(app: AndroidApp) -> Self {
-        Self {
-            app,
-            cartella_app: OnceLock::new(),
-            cartella_cache: OnceLock::new(),
-            radice: OnceLock::new(),
-            rete_aperta: std::sync::Arc::default(),
-        }
+        Self { app, cartella_app: OnceLock::new(), cartella_cache: OnceLock::new(), radice: OnceLock::new(), rete_aperta: std::sync::Arc::default() }
     }
 
     /// Apre o chiude il cancello della rete (livello 1 della roadmap della sicurezza), in Rust e
@@ -562,6 +556,42 @@ impl Piattaforma {
     pub fn riservata(&self, accesa: bool) {
         self.on_activity(move |env, activity| {
             env.call_method(activity, jni_str!("tascabileRiservata"), jni_sig!("(Z)V"), &[JValue::Bool(accesa)])?;
+            Ok(())
+        });
+    }
+
+    /// Il telefono è in modalità scura (`MainActivity.tascabileSistemaScuro`); se la domanda non
+    /// va, no.
+    pub fn sistema_scuro(&self) -> bool {
+        self.with_activity(|env, activity| env.call_method(activity, jni_str!("tascabileSistemaScuro"), jni_sig!("()Z"), &[])?.z()).unwrap_or_else(
+            |e| {
+                diagnosi(format!("tema del telefono: non letto ({})", errore_jni(&e)));
+                false
+            },
+        )
+    }
+
+    /// La lingua del telefono, codice ISO 639 (`MainActivity.tascabileLingua`); se la domanda non
+    /// va, vuota (l'app sceglie l'inglese).
+    pub fn lingua_di_sistema(&self) -> String {
+        self.with_activity(|env, activity| {
+            let v = env.call_method(activity, jni_str!("tascabileLingua"), jni_sig!("()Ljava/lang/String;"), &[])?.l()?;
+            if v.is_null() {
+                return Ok(String::new());
+            }
+            env.cast_local::<JString>(v)?.try_to_string(env)
+        })
+        .unwrap_or_else(|e| {
+            diagnosi(format!("lingua del telefono: non letta ({})", errore_jni(&e)));
+            String::new()
+        })
+    }
+
+    /// Le barre di sistema e il fondo della finestra col tema dell'app
+    /// (`MainActivity.tascabileTema`), sul thread principale.
+    pub fn tema_di_sistema(&self, scuro: bool) {
+        self.on_activity(move |env, activity| {
+            env.call_method(activity, jni_str!("tascabileTema"), jni_sig!("(Z)V"), &[JValue::Bool(scuro)])?;
             Ok(())
         });
     }

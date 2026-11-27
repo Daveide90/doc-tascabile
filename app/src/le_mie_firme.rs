@@ -93,25 +93,29 @@ impl TascabileApp {
             .mostra(ctx, LE_MIE_FIRME, |ui| {
                 let ctx = ui.ctx().clone();
                 let mut tocco = None;
-                ui.label(RichText::new(if voci.is_empty() { NESSUNA } else { SPIEGA }).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::MATITA));
+                ui.label(
+                    RichText::new(tascabile_touch::t(if voci.is_empty() { NESSUNA } else { SPIEGA }))
+                        .font(Carattere::Testo.font(&ctx, 15.0))
+                        .color(tema::matita()),
+                );
                 ui.add_space(10.0);
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for (i, (firma, texture, nome)) in voci.iter().enumerate() {
                     let largo = ui.available_width();
                     let (rect, r) = ui.allocate_exact_size(vec2(largo, 60.0), Sense::hover());
-                    r.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, nome));
+                    r.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(nome)));
                     let box_ = Rect::from_min_size(pos2(rect.left() + 4.0, rect.top() + 8.0), vec2(110.0, 44.0));
-                    ui.painter().rect(box_, 8.0, tema::FOGLIO, Stroke::new(1.0, tema::FILO), StrokeKind::Inside);
+                    ui.painter().rect(box_, 8.0, tema::pagina::FOGLIO, Stroke::new(1.0, tema::pagina::FILO), StrokeKind::Inside);
                     disegna_firma(ui.painter(), box_.shrink(5.0), firma, texture.as_ref());
-                    let g = ui.painter().layout_no_wrap(nome.clone(), Carattere::Grassetto.font(&ctx, 16.0), tema::INCHIOSTRO);
-                    ui.painter().galley(pos2(box_.right() + 14.0, rect.center().y - g.size().y / 2.0), g, tema::INCHIOSTRO);
+                    let g = ui.painter().layout_no_wrap(nome.clone(), Carattere::Grassetto.font(&ctx, 16.0), tema::inchiostro());
+                    ui.painter().galley(pos2(box_.right() + 14.0, rect.center().y - g.size().y / 2.0), g, tema::inchiostro());
                     let cestino = Rect::from_center_size(pos2(rect.right() - 26.0, rect.center().y), vec2(48.0, 48.0));
-                    let etichetta = format!("{ELIMINA} {nome}");
+                    let etichetta = format!("{} {nome}", tascabile_touch::t(ELIMINA));
                     if ui.put(cestino, PulsanteIcona::new(icone::DELETE, &etichetta)).clicked() {
                         tocco = Some(Tocco::Elimina(i));
                     }
                     if i + 1 < voci.len() {
-                        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::FILO);
+                        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::filo());
                     }
                 }
                 if voci.len() > 1 {

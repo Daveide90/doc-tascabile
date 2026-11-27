@@ -875,7 +875,10 @@ mod test {
         }
         assert!(matches!(e, Evento::Applicata { .. }), "la correzione non è riuscita");
         let dopo = oggetti(&mut m, 0);
-        assert!(dopo.iter().any(|x| x.genere == GenereOggetto::Scansione && x.testo == "Dieci giorni fa"), "il testo nuovo resta invisibile e da correggere");
+        assert!(
+            dopo.iter().any(|x| x.genere == GenereOggetto::Scansione && x.testo == "Dieci giorni fa"),
+            "il testo nuovo resta invisibile e da correggere"
+        );
         assert!(!dopo.iter().any(|x| x.genere == GenereOggetto::Testo), "niente testo che si vede sopra la foto");
         assert!(!dopo.iter().any(|x| x.testo.contains("Nove")));
         assert!(dopo.iter().any(|x| x.genere == GenereOggetto::Scansione && x.testo.contains("perché")), "le altre righe restano da correggere");
@@ -896,7 +899,8 @@ mod test {
         // sovrappongono quasi tutto (a un pixel di distanza): stesso carattere, misura e posto.
         let giusta = crate::prova::foto_su_carta_con_l_ultima_riga("Dieci giorni fa");
         let scuro = |f: &image::RgbImage, x: u32, y: u32| f.get_pixel(x, y).0.iter().map(|v| u32::from(*v)).sum::<u32>() < 3 * 120;
-        let vicino = |f: &image::RgbImage, x: u32, y: u32| (x.saturating_sub(1)..=x + 1).any(|x| (y.saturating_sub(1)..=y + 1).any(|y| scuro(f, x, y)));
+        let vicino =
+            |f: &image::RgbImage, x: u32, y: u32| (x.saturating_sub(1)..=x + 1).any(|x| (y.saturating_sub(1)..=y + 1).any(|y| scuro(f, x, y)));
         let (mut nostri, mut giusti, mut presi, mut trovati) = (0, 0, 0, 0);
         for y in nove.0..nove.1 {
             for x in 0..misura.0 {
@@ -929,11 +933,14 @@ mod test {
     fn un_immagine_sostituita_o_tolta_non_resta_nel_file() {
         let jpeg = crate::prova::foto_di_un_foglio();
         let s = pdfcraft_engine::Session::new();
-        let con_la_foto = s.create_from_images_with_resolution(&[("foglio.jpg".into(), jpeg.clone())], pdfcraft_engine::ImageResolution::Dpi(150.0)).unwrap();
+        let con_la_foto =
+            s.create_from_images_with_resolution(&[("foglio.jpg".into(), jpeg.clone())], pdfcraft_engine::ImageResolution::Dpi(150.0)).unwrap();
         let dentro = |byte: &[u8]| byte.windows(jpeg.len()).any(|w| w == jpeg.as_slice());
         assert!(dentro(&con_la_foto), "la foto deve stare nel PDF così com'è");
         let mut png = Vec::new();
-        image::RgbImage::from_pixel(40, 30, image::Rgb([200, 30, 30])).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        image::RgbImage::from_pixel(40, 30, image::Rgb([200, 30, 30]))
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
         let foto = |m: &mut Motore<Esito>| oggetti(m, 0).into_iter().find(|o| o.genere == GenereOggetto::Immagine { gruppo: false }).unwrap();
         let mut m = motore(con_la_foto.to_vec());
         let o = foto(&mut m);

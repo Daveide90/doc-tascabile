@@ -6,7 +6,7 @@ use std::path::Path;
 
 use eframe::egui::{self, Margin, RichText, ScrollArea, Ui, Vec2, vec2};
 use tascabile_touch::tema::{self, Carattere};
-use tascabile_touch::{BarraAlta, CampoTesto, FoglioDalFondo, Peso, Pulsante, Scheda, Tipo, Voce, etichetta_sezione, icone};
+use tascabile_touch::{BarraAlta, CampoTesto, FoglioDalFondo, Lingua, Peso, Pulsante, Scheda, Tipo, Voce, etichetta_sezione, icone, t};
 
 use crate::VERSIONE;
 
@@ -45,6 +45,139 @@ pub(crate) const ORTOGRAFIA: &str = "Controllo ortografico";
 const SPIEGA_ORTOGRAFIA: &str = "Le parole sbagliate sottolineate in rosso nei documenti Word";
 /// Il file del controllo ortografico spento, nella cartella dell'app (acceso se non c'è).
 const FILE_ORTOGRAFIA: &str = "ortografia-spenta";
+/// Il tema (0.10.0): come il telefono (di base), chiaro o scuro. La scelta sta nel file `tema`
+/// della cartella dell'app («chiaro» o «scuro»; senza il file, come il telefono).
+pub(crate) const ASPETTO: &str = "Aspetto e lingua";
+pub(crate) const TEMA: &str = "Tema";
+pub(crate) const COME_IL_TELEFONO: &str = "Come il telefono";
+pub(crate) const CHIARO: &str = "Chiaro";
+pub(crate) const SCURO: &str = "Scuro";
+const SPIEGA_TEMA: &str = "Le pagine dei documenti, dei PDF e delle slide restano bianche, come quando si stampano.";
+const FILE_TEMA: &str = "tema";
+
+/// Il tema scelto nelle Impostazioni.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SceltaTema {
+    /// Chiaro o scuro come il telefono, anche quando il telefono cambia.
+    #[default]
+    Telefono,
+    Chiaro,
+    Scuro,
+}
+
+impl SceltaTema {
+    pub const TUTTE: [SceltaTema; 3] = [SceltaTema::Telefono, SceltaTema::Chiaro, SceltaTema::Scuro];
+
+    pub fn nome(self) -> &'static str {
+        match self {
+            SceltaTema::Telefono => COME_IL_TELEFONO,
+            SceltaTema::Chiaro => CHIARO,
+            SceltaTema::Scuro => SCURO,
+        }
+    }
+
+    fn icona(self) -> &'static str {
+        match self {
+            SceltaTema::Telefono => icone::CONTRAST,
+            SceltaTema::Chiaro => icone::LIGHT_MODE,
+            SceltaTema::Scuro => icone::DARK_MODE,
+        }
+    }
+
+    /// Scuro, col telefono scuro o no.
+    pub fn scuro(self, telefono_scuro: bool) -> bool {
+        match self {
+            SceltaTema::Telefono => telefono_scuro,
+            SceltaTema::Chiaro => false,
+            SceltaTema::Scuro => true,
+        }
+    }
+}
+
+/// Il tema scelto, dalla cartella dell'app (senza il file, o con un valore che non si conosce,
+/// come il telefono).
+pub(crate) fn leggi_tema(cartella: &Path) -> SceltaTema {
+    match std::fs::read_to_string(cartella.join(FILE_TEMA)).as_deref().map(str::trim) {
+        Ok("chiaro") => SceltaTema::Chiaro,
+        Ok("scuro") => SceltaTema::Scuro,
+        _ => SceltaTema::Telefono,
+    }
+}
+
+/// Scrive il tema scelto nella cartella dell'app (come il telefono: il file se ne va).
+pub(crate) fn scrivi_tema(cartella: &Path, tema: SceltaTema) -> std::io::Result<()> {
+    let file = cartella.join(FILE_TEMA);
+    let valore: &[u8] = match tema {
+        SceltaTema::Telefono => {
+            return match std::fs::remove_file(file) {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                altro => altro,
+            };
+        }
+        SceltaTema::Chiaro => b"chiaro",
+        SceltaTema::Scuro => b"scuro",
+    };
+    std::fs::create_dir_all(cartella)?;
+    tascabile_word::salva::scrivi_atomico(&file, valore)
+}
+
+/// La lingua (0.10.0): come il telefono (di base: italiano o spagnolo se il telefono è in una di
+/// queste lingue, altrimenti inglese), oppure una delle tre. La scelta sta nel file `lingua` della
+/// cartella dell'app («it», «en» o «es»; senza il file, come il telefono).
+pub(crate) const LINGUA: &str = "Lingua";
+const SPIEGA_LINGUA: &str = "Come il telefono: italiano o spagnolo se il telefono è in una di queste lingue, altrimenti inglese.";
+const FILE_LINGUA: &str = "lingua";
+
+/// La lingua scelta nelle Impostazioni.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SceltaLingua {
+    #[default]
+    Telefono,
+    Una(Lingua),
+}
+
+impl SceltaLingua {
+    pub const TUTTE: [SceltaLingua; 4] =
+        [SceltaLingua::Telefono, SceltaLingua::Una(Lingua::Italiano), SceltaLingua::Una(Lingua::Inglese), SceltaLingua::Una(Lingua::Spagnolo)];
+
+    /// Il nome nelle Impostazioni: le lingue col loro nome, che non si traduce.
+    pub fn nome(self) -> &'static str {
+        match self {
+            SceltaLingua::Telefono => COME_IL_TELEFONO,
+            SceltaLingua::Una(l) => l.nome(),
+        }
+    }
+
+    /// La lingua dell'app, con il telefono in `telefono` (codice ISO 639).
+    pub fn lingua(self, telefono: &str) -> Lingua {
+        match self {
+            SceltaLingua::Telefono => Lingua::del_telefono(telefono),
+            SceltaLingua::Una(l) => l,
+        }
+    }
+}
+
+/// La lingua scelta, dalla cartella dell'app (senza il file, o con un codice che non si conosce,
+/// come il telefono).
+pub(crate) fn leggi_lingua(cartella: &Path) -> SceltaLingua {
+    std::fs::read_to_string(cartella.join(FILE_LINGUA)).ok().and_then(|c| Lingua::da_codice(&c)).map_or(SceltaLingua::Telefono, SceltaLingua::Una)
+}
+
+/// Scrive la lingua scelta nella cartella dell'app (come il telefono: il file se ne va).
+pub(crate) fn scrivi_lingua(cartella: &Path, lingua: SceltaLingua) -> std::io::Result<()> {
+    let file = cartella.join(FILE_LINGUA);
+    match lingua {
+        SceltaLingua::Telefono => match std::fs::remove_file(file) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            altro => altro,
+        },
+        SceltaLingua::Una(l) => {
+            std::fs::create_dir_all(cartella)?;
+            tascabile_word::salva::scrivi_atomico(&file, l.codice().as_bytes())
+        }
+    }
+}
+
 /// Il file dell'autore nella cartella dell'app, e quanto può essere lungo.
 const FILE_AUTORE: &str = "autore.txt";
 const MASSIMO_AUTORE: usize = 80;
@@ -183,6 +316,12 @@ pub enum Scelta {
     ImprontaFirma,
     /// L'interruttore del blocco dell'app.
     Blocco,
+    /// Il foglio del tema, e la scelta fatta lì.
+    Tema,
+    TemaScelto(SceltaTema),
+    /// Il foglio della lingua, e la scelta fatta lì.
+    Lingua,
+    LinguaNuova(SceltaLingua),
 }
 
 /// Le righe dell'elenco: (icona, nome, riga sotto, scelta).
@@ -366,6 +505,12 @@ pub struct Impostazioni {
     pub(crate) blocco: bool,
     /// C'è una firma (o le iniziali) salvata: si mostra «Cancella firma salvata».
     pub(crate) firma_salvata: bool,
+    /// Il tema scelto, col suo foglio.
+    pub(crate) tema: SceltaTema,
+    pub(crate) foglio_tema: FoglioDalFondo,
+    /// La lingua scelta, col suo foglio.
+    pub(crate) lingua: SceltaLingua,
+    pub(crate) foglio_lingua: FoglioDalFondo,
     /// Il foglio della Guida rapida.
     foglio_guida: FoglioDalFondo,
     /// Il foglio dell'autore col suo campo, e se era aperto al frame prima.
@@ -386,6 +531,10 @@ impl Default for Impostazioni {
             impronta_firma: true,
             blocco: false,
             firma_salvata: false,
+            tema: SceltaTema::Telefono,
+            foglio_tema: FoglioDalFondo::new(egui::Id::new("foglio_tema")),
+            lingua: SceltaLingua::Telefono,
+            foglio_lingua: FoglioDalFondo::new(egui::Id::new("foglio_lingua")),
             foglio_guida: FoglioDalFondo::new(egui::Id::new("foglio_guida")),
             foglio_autore: FoglioDalFondo::new(egui::Id::new("foglio_autore")),
             campo_autore: CampoTesto::new(),
@@ -398,7 +547,11 @@ impl Impostazioni {
     /// Indietro di Android: chiude il foglio della licenza, quello dell'autore o la guida, se è
     /// aperto (vero).
     pub fn indietro(&mut self) -> bool {
-        self.foglio.indietro() || self.foglio_autore.indietro() || self.foglio_guida.indietro()
+        self.foglio.indietro()
+            || self.foglio_autore.indietro()
+            || self.foglio_guida.indietro()
+            || self.foglio_tema.indietro()
+            || self.foglio_lingua.indietro()
     }
 
     /// Chiude i fogli, uscendo dalla schermata.
@@ -406,6 +559,8 @@ impl Impostazioni {
         self.foglio.chiudi();
         self.foglio_autore.chiudi();
         self.foglio_guida.chiudi();
+        self.foglio_tema.chiudi();
+        self.foglio_lingua.chiudi();
     }
 
     /// Le Impostazioni con l'autore dei commenti e il controllo ortografico della cartella dell'app.
@@ -414,6 +569,12 @@ impl Impostazioni {
         self.riservata = riservata;
         self.rete_timestamp = rete_timestamp;
         self.impronta_firma = impronta_firma;
+        self
+    }
+
+    pub(crate) fn con_tema(mut self, tema: SceltaTema, lingua: SceltaLingua) -> Self {
+        self.tema = tema;
+        self.lingua = lingua;
         self
     }
 
@@ -441,6 +602,15 @@ impl Impostazioni {
                 ui.spacing_mut().item_spacing = Vec2::ZERO;
                 sezione(ui, "Aiuto");
                 scheda(ui, |ui| guida = riga(ui, icone::HELP, crate::guida::GUIDA, crate::guida::SOTTO, true));
+                sezione(ui, ASPETTO);
+                scheda(ui, |ui| {
+                    if riga(ui, self.tema.icona(), TEMA, self.tema.nome(), false) {
+                        scelta = Some(Scelta::Tema);
+                    }
+                    if riga(ui, icone::TRANSLATE, LINGUA, self.lingua.nome(), true) {
+                        scelta = Some(Scelta::Lingua);
+                    }
+                });
                 sezione(ui, SICUREZZA);
                 scheda(ui, |ui| {
                     let voce = Voce::new(Tipo::Cartella, BLOCCO_APP).icona(icone::LOCK).sotto(SPIEGA_BLOCCO).ultima(false);
@@ -455,11 +625,14 @@ impl Impostazioni {
                     if voce.interruttore(self.rete_timestamp).mostra(ui).aperta() {
                         scelta = Some(Scelta::ReteTimestamp);
                     }
-                    let voce = Voce::new(Tipo::Cartella, IMPRONTA_FIRMA).icona(icone::SIGNATURE).sotto(SPIEGA_IMPRONTA_FIRMA).ultima(!self.firma_salvata);
+                    let voce =
+                        Voce::new(Tipo::Cartella, IMPRONTA_FIRMA).icona(icone::SIGNATURE).sotto(SPIEGA_IMPRONTA_FIRMA).ultima(!self.firma_salvata);
                     if voce.interruttore(self.impronta_firma).mostra(ui).aperta() {
                         scelta = Some(Scelta::ImprontaFirma);
                     }
-                    if self.firma_salvata && riga(ui, icone::SIGNATURE, LE_MIE_FIRME, "Le firme e le iniziali salvate per i PDF: guardale ed eliminale", true) {
+                    if self.firma_salvata
+                        && riga(ui, icone::SIGNATURE, LE_MIE_FIRME, "Le firme e le iniziali salvate per i PDF: guardale ed eliminale", true)
+                    {
                         scelta = Some(Scelta::LeMieFirme);
                     }
                 });
@@ -493,15 +666,21 @@ impl Impostazioni {
                         ui.set_width(ui.available_width());
                         ui.spacing_mut().item_spacing.y = 4.0;
                         let ctx = ui.ctx().clone();
-                        ui.label(RichText::new(NOME_APP).font(Carattere::Titolo.font(&ctx, 22.0)).color(tema::INCHIOSTRO));
-                        ui.label(RichText::new(format!("Versione {VERSIONE}")).font(Carattere::Grassetto.font(&ctx, 15.0)).color(tema::INCHIOSTRO));
+                        ui.label(RichText::new(t(NOME_APP)).font(Carattere::Titolo.font(&ctx, 22.0)).color(tema::inchiostro()));
                         ui.label(
-                            RichText::new("I documenti restano sul telefono: in rete va solo l'impronta di un file, col «Timestamp con blockchain».")
-                                .font(Carattere::Testo.font(&ctx, 14.0))
-                                .color(tema::MATITA),
+                            RichText::new(tascabile_touch::tf!("Versione {}", VERSIONE))
+                                .font(Carattere::Grassetto.font(&ctx, 15.0))
+                                .color(tema::inchiostro()),
+                        );
+                        ui.label(
+                            RichText::new(t(
+                                "I documenti restano sul telefono: in rete va solo l'impronta di un file, col «Timestamp con blockchain».",
+                            ))
+                            .font(Carattere::Testo.font(&ctx, 14.0))
+                            .color(tema::matita()),
                         );
                         ui.add_space(4.0);
-                        ui.label(RichText::new(crate::guida::SVILUPPO_CON_IA).font(Carattere::Testo.font(&ctx, 14.0)).color(tema::MATITA));
+                        ui.label(RichText::new(t(crate::guida::SVILUPPO_CON_IA)).font(Carattere::Testo.font(&ctx, 14.0)).color(tema::matita()));
                     });
                 });
                 sezione(ui, "Caratteri, icone e librerie");
@@ -530,9 +709,49 @@ impl Impostazioni {
             // Un'etichetta per paragrafo: l'elenco delle librerie è lungo, e così egui disegna
             // solo i paragrafi che si vedono.
             for paragrafo in (c.testo)().split("\n\n") {
-                ui.label(RichText::new(paragrafo).font(Carattere::Testo.font(&ctx, 13.0)).color(tema::INCHIOSTRO));
+                ui.label(RichText::new(paragrafo).font(Carattere::Testo.font(&ctx, 13.0)).color(tema::inchiostro()));
             }
         });
+        let tema = self.tema;
+        let dal_tema = self
+            .foglio_tema
+            .mostra(ui.ctx(), TEMA, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                let mut s = None;
+                for (i, t) in SceltaTema::TUTTE.into_iter().enumerate() {
+                    let icona = if t == tema { icone::RADIO_BUTTON_CHECKED } else { icone::RADIO_BUTTON_UNCHECKED };
+                    if crate::pdf_compila::riga_scelta(ui, icona, t.nome(), t == tema, i + 1 == SceltaTema::TUTTE.len()).clicked() {
+                        s = Some(Scelta::TemaScelto(t));
+                    }
+                }
+                ui.add_space(8.0);
+                ui.label(RichText::new(t(SPIEGA_TEMA)).font(Carattere::Testo.font(ui.ctx(), 14.0)).color(tema::matita()));
+                ui.add_space(8.0);
+                s
+            })
+            .flatten();
+        let lingua = self.lingua;
+        let dalla_lingua = self
+            .foglio_lingua
+            .mostra(ui.ctx(), LINGUA, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                let mut s = None;
+                for (i, l) in SceltaLingua::TUTTE.into_iter().enumerate() {
+                    let icona = if l == lingua { icone::RADIO_BUTTON_CHECKED } else { icone::RADIO_BUTTON_UNCHECKED };
+                    let nome = match l {
+                        SceltaLingua::Telefono => t(l.nome()),
+                        SceltaLingua::Una(_) => l.nome(),
+                    };
+                    if crate::pdf_compila::riga_scelta(ui, icona, nome, l == lingua, i + 1 == SceltaLingua::TUTTE.len()).clicked() {
+                        s = Some(Scelta::LinguaNuova(l));
+                    }
+                }
+                ui.add_space(8.0);
+                ui.label(RichText::new(t(SPIEGA_LINGUA)).font(Carattere::Testo.font(ui.ctx(), 14.0)).color(tema::matita()));
+                ui.add_space(8.0);
+                s
+            })
+            .flatten();
         let c_e = !self.autore.is_empty();
         let campo = &self.campo_autore;
         let dal_foglio = self
@@ -540,7 +759,7 @@ impl Impostazioni {
             .mostra(ui.ctx(), AUTORE, |ui| {
                 let ctx = ui.ctx().clone();
                 let mut s = None;
-                ui.label(RichText::new(SPIEGA_AUTORE).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::MATITA));
+                ui.label(RichText::new(t(SPIEGA_AUTORE)).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::matita()));
                 ui.add_space(12.0);
                 if ui.allocate_ui(vec2(ui.available_width(), tema::PULSANTE), |ui| campo.mostra(ui, VUOTO_AUTORE).clicked()).inner {
                     s = Some(Scelta::CampoAutore);
@@ -558,7 +777,7 @@ impl Impostazioni {
                 s
             })
             .flatten();
-        scelta.or(dal_foglio)
+        scelta.or(dal_foglio).or(dal_tema).or(dalla_lingua)
     }
 }
 
@@ -600,6 +819,37 @@ mod test {
     }
 
     #[test]
+    fn il_tema_si_sceglie_e_resta() {
+        let cartella = crate::prova::cartella_di_prova("tema").join("app");
+        assert_eq!(leggi_tema(&cartella), SceltaTema::Telefono, "di base come il telefono");
+        for t in [SceltaTema::Scuro, SceltaTema::Chiaro, SceltaTema::Telefono] {
+            scrivi_tema(&cartella, t).unwrap();
+            assert_eq!(leggi_tema(&cartella), t);
+        }
+        assert!(!cartella.join(FILE_TEMA).exists(), "come il telefono: niente file");
+        std::fs::write(cartella.join(FILE_TEMA), "viola").unwrap();
+        assert_eq!(leggi_tema(&cartella), SceltaTema::Telefono);
+        assert!(SceltaTema::Telefono.scuro(true) && !SceltaTema::Telefono.scuro(false));
+        assert!(SceltaTema::Scuro.scuro(false) && !SceltaTema::Chiaro.scuro(true));
+    }
+
+    #[test]
+    fn la_lingua_si_sceglie_e_resta() {
+        let cartella = crate::prova::cartella_di_prova("lingua").join("app");
+        assert_eq!(leggi_lingua(&cartella), SceltaLingua::Telefono, "di base come il telefono");
+        for l in SceltaLingua::TUTTE.into_iter().rev() {
+            scrivi_lingua(&cartella, l).unwrap();
+            assert_eq!(leggi_lingua(&cartella), l);
+        }
+        assert!(!cartella.join(FILE_LINGUA).exists(), "come il telefono: niente file");
+        std::fs::write(cartella.join(FILE_LINGUA), "de").unwrap();
+        assert_eq!(leggi_lingua(&cartella), SceltaLingua::Telefono);
+        assert_eq!(SceltaLingua::Telefono.lingua("de-AT"), Lingua::Inglese);
+        assert_eq!(SceltaLingua::Telefono.lingua("es-ES"), Lingua::Spagnolo);
+        assert_eq!(SceltaLingua::Una(Lingua::Italiano).lingua("es"), Lingua::Italiano);
+    }
+
+    #[test]
     fn il_controllo_ortografico_si_spegne_e_si_riaccende() {
         let cartella = crate::prova::cartella_di_prova("ortografia").join("app");
         assert!(leggi_ortografia(&cartella), "acceso finché non lo si spegne");
@@ -612,7 +862,13 @@ mod test {
 
     #[test]
     fn ogni_licenza_ha_il_suo_testo() {
-        let licenze = ["SIL OPEN FONT LICENSE Version 1.1", "Apache License", "Permission is hereby granted", "GNU GENERAL PUBLIC LICENSE", "PolyForm Noncommercial License 1.0.0"];
+        let licenze = [
+            "SIL OPEN FONT LICENSE Version 1.1",
+            "Apache License",
+            "Permission is hereby granted",
+            "GNU GENERAL PUBLIC LICENSE",
+            "PolyForm Noncommercial License 1.0.0",
+        ];
         for c in &COMPONENTI {
             let testo = (c.testo)();
             assert!(testo.len() > 500, "{}: {} caratteri", c.nome, testo.len());

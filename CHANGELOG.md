@@ -4,6 +4,20 @@
 
 ## English
 
+### 0.10.1 · 27 November 2026
+
+Safer blockchain timestamps, after the first security audit.
+
+- **Timestamps.** Cancel really stops the job and closes the network. A proof in Documents/Tascabile counts only if it belongs to this file. Proof files that would use too much memory are refused. Both block explorers must agree, and the work required grows with the block height. Answers from the timestamp servers are checked before they are saved.
+
+### 0.10.0 · 26 November 2026
+
+Dark theme, three languages, and rotating PDFs straight from the menu.
+
+- **Dark theme.** In Settings, «Appearance and language», «Theme»: «Same as phone» (the default, it follows the phone even when it switches in the evening), «Light» or «Dark». Bars, menus, sheets and Home turn dark; the pages of documents, PDFs, slides and signatures stay white, as they will be printed or sent. The phone's system bars and the window background follow the theme, and with the phone in dark mode the app starts dark.
+- **Italian, English and Spanish.** The app reads the phone's language: Italian or Spanish if the phone is in one of them, English for every other language. In Settings, «Language» offers «Same as phone», Italiano, English and Español. Dates on Home, the names of some new files (scans, compressed copies, final copies) and the templates of new documents (minutes, report, letter, lesson) follow the language. Spell check still knows only Italian, spreadsheets still show numbers and dates the Italian way, and the diagnostic log stays in Italian.
+- **Rotate pages from the menu.** PDFs that arrive crooked can be straightened without selecting pages: in the PDF menu and in Tools, «Rotate pages» turns this page or all pages to the right or to the left. The sheet stays open, so two taps turn a page upside down, and Undo puts it back. «Organize pages» still turns only the pages you select.
+
 ### 0.9.10 · 10 November 2026
 
 Three saves instead of four, a redaction you can shape, and the most recent files first.
@@ -138,6 +152,20 @@ Fixes from a review of the whole app.
 - **Beta.** Word, PDF and slides in one app. Fixes for Italian Word styles, scans, replaced photos, links on text, text recognition and export to Word of scans; slides reviewed; a quick guide in Settings.
 
 ## Italiano
+
+### 0.10.1 · 27 novembre 2026
+
+Timestamp con blockchain più sicuri, dopo il primo controllo di sicurezza.
+
+- **Timestamp.** «Annulla» ferma davvero il lavoro e chiude la rete. Una prova in Documents/Tascabile vale solo se è di questo file. Le prove che occuperebbero troppa memoria si rifiutano. I due esploratori dei blocchi devono concordare, e il lavoro richiesto cresce con l'altezza del blocco. Le risposte dei server del timestamp si controllano prima di salvarle.
+
+### 0.10.0 · 26 novembre 2026
+
+Il tema scuro, tre lingue e i PDF che si girano direttamente dal menu.
+
+- **Tema scuro.** Nelle Impostazioni, «Aspetto e lingua», «Tema»: «Come il telefono» (la scelta di partenza, che segue il telefono anche quando la sera passa allo scuro), «Chiaro» o «Scuro». Barre, menu, pannelli e Home diventano scuri; le pagine dei documenti, dei PDF, delle slide e delle firme restano bianche, come verranno stampate o mandate. Le barre di sistema del telefono e il fondo della finestra seguono il tema, e col telefono in modalità scura l'app parte già scura.
+- **Italiano, inglese e spagnolo.** L'app legge la lingua del telefono: italiano o spagnolo se il telefono è in una di queste lingue, inglese per tutte le altre. Nelle Impostazioni, «Lingua» propone «Come il telefono», Italiano, English ed Español. Seguono la lingua anche le date della Home, i nomi di alcuni file nuovi (scansioni, copie compresse, copie definitive) e i modelli dei documenti nuovi (verbale, relazione, lettera, lezione). Il controllo ortografico conosce ancora solo l'italiano, i fogli di calcolo mostrano ancora numeri e date all'italiana e il registro della diagnosi resta in italiano.
+- **Ruotare le pagine dal menu.** I PDF che arrivano storti si raddrizzano senza scegliere le pagine: nel menu del PDF e negli Strumenti, «Ruota le pagine» gira questa pagina o tutte, a destra o a sinistra. Il pannello resta aperto, così due tocchi capovolgono la pagina, e Annulla la rimette com'era. «Organizza pagine» continua a girare solo le pagine che scegli.
 
 ### 0.9.10 · 10 novembre 2026
 

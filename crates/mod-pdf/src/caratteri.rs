@@ -293,10 +293,14 @@ impl Tela {
 
     fn copertura(self) -> Vec<f32> {
         let mut somma = 0.0;
-        self.a.iter().take(self.largo * self.alto).map(|v| {
-            somma += v;
-            somma.abs().min(1.0)
-        }).collect()
+        self.a
+            .iter()
+            .take(self.largo * self.alto)
+            .map(|v| {
+                somma += v;
+                somma.abs().min(1.0)
+            })
+            .collect()
     }
 }
 
@@ -342,7 +346,10 @@ mod test {
         let inchiostro = |c: &Carattere| c.disegna("lavoro", 60.0, 1.0).copertura.iter().map(|v| f64::from(*v)).sum::<f64>();
         assert!(inchiostro(cerca("Carlito", true, false)) > 1.3 * inchiostro(cerca("Carlito", false, false)));
         // Carlito (Calibri) è più stretto di Liberation Sans (Arial).
-        let (calibri, arial) = (cerca("Carlito", false, false).disegna("lavoro", 60.0, 1.0).avanza, cerca("Liberation Sans", false, false).disegna("lavoro", 60.0, 1.0).avanza);
+        let (calibri, arial) = (
+            cerca("Carlito", false, false).disegna("lavoro", 60.0, 1.0).avanza,
+            cerca("Liberation Sans", false, false).disegna("lavoro", 60.0, 1.0).avanza,
+        );
         assert!(calibri < 0.95 * arial, "{calibri} {arial}");
     }
 }

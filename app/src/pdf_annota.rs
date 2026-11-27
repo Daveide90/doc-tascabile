@@ -19,7 +19,9 @@ use eframe::egui::{self, Color32, CornerRadius, Id, Pos2, Rect, RichText, Sense,
 use tascabile_pdf::{Annotazione, AzioniSelezione, Evento, GenereAnnotazione, Marca, Modifica, SceltaSelezione, annotazione_sotto};
 use tascabile_platform::diagnosi;
 use tascabile_touch::tema::{self, Carattere};
-use tascabile_touch::{BarraContesto, BarraFlottante, Chip, Passo, Peso, Pulsante, PulsanteIcona, Tavolozza, Tinta, Verso, etichetta_sezione, icone};
+use tascabile_touch::{
+    BarraContesto, BarraFlottante, Chip, Passo, Peso, Pulsante, PulsanteIcona, Tavolozza, Tinta, Verso, etichetta_sezione, icone, t,
+};
 
 use crate::pdf_compila::{Bersaglio, RISCRIVI, TOGLI};
 use crate::pdf_lavoro::ModoPdf;
@@ -196,7 +198,7 @@ fn toccabile(modo: ModoPdf, g: GenereAnnotazione) -> bool {
 
 /// Il nome di un'annotazione per l'accessibilità: il suo genere, mai il testo.
 fn nome_dell_annotazione(a: &Annotazione) -> String {
-    format!("{ANNOTAZIONE}: {}", a.genere.nome())
+    format!("{}: {}", t(ANNOTAZIONE), t(a.genere.nome()))
 }
 
 /// Il riquadro di quello che si vede di un'annotazione (pt): i pezzi di testo per le marche.
@@ -207,15 +209,15 @@ fn riquadro(a: &Annotazione) -> [f32; 4] {
 /// Un cerchio di colore da toccare, cerchiato di blu se è quello scelto.
 fn colore_da_toccare(ui: &mut egui::Ui, c: Pos2, colore: Color32, nome: &str, acceso: bool, id: Id, largo: f32) -> bool {
     let r = ui.interact(Rect::from_center_size(c, vec2(largo.min(44.0), 44.0)), id, Sense::click());
-    r.widget_info(|| WidgetInfo::selected(WidgetType::Button, true, acceso, nome));
+    r.widget_info(|| WidgetInfo::selected(WidgetType::Button, true, acceso, tascabile_touch::t(nome)));
     let p = ui.painter();
     if r.is_pointer_button_down_on() {
-        p.circle_filled(c, RAGGIO_COLORE + 7.0, tema::PREMUTO);
+        p.circle_filled(c, RAGGIO_COLORE + 7.0, tema::premuto());
     }
     if acceso {
-        p.circle_stroke(c, RAGGIO_COLORE + 4.0, Stroke::new(2.5, tema::BLU));
+        p.circle_stroke(c, RAGGIO_COLORE + 4.0, Stroke::new(2.5, tema::blu()));
     }
-    p.circle(c, RAGGIO_COLORE, colore, Stroke::new(1.0, tema::FILO));
+    p.circle(c, RAGGIO_COLORE, colore, Stroke::new(1.0, tema::filo()));
     r.clicked()
 }
 
@@ -223,7 +225,7 @@ fn colore_da_toccare(ui: &mut egui::Ui, c: Pos2, colore: Color32, nome: &str, ac
 fn pillola(ui: &egui::Ui, r: Rect) {
     let raggio = CornerRadius::same((r.height() / 2.0) as u8);
     tema::dipingi_ombra(ui.painter(), r, raggio, &tema::OMBRA_FLOTTANTE);
-    ui.painter().rect_filled(r, raggio, tema::FOGLIO);
+    ui.painter().rect_filled(r, raggio, tema::foglio());
 }
 
 /// Quello che si tocca nella seconda riga della striscia.
@@ -264,17 +266,17 @@ pub(crate) fn riga_dei_colori(ui: &mut egui::Ui, r: Rect, colore: usize, spessor
     }
     let mut x = destra.unwrap_or(x);
     if destra.is_some() {
-        ui.painter().rect_filled(Rect::from_min_size(pos2(x - 30.0, r.center().y - 14.0), vec2(1.0, 28.0)), 0.0, tema::FILO);
+        ui.painter().rect_filled(Rect::from_min_size(pos2(x - 30.0, r.center().y - 14.0), vec2(1.0, 28.0)), 0.0, tema::filo());
     }
     if let Some(s) = spessore {
         for (i, (w, nome)) in SPESSORI.iter().enumerate() {
             let c = pos2(x, r.center().y);
             let risposta = ui.interact(Rect::from_center_size(c, Vec2::splat(44.0)), id.with(("spessore", i)), Sense::click());
-            risposta.widget_info(|| WidgetInfo::selected(WidgetType::Button, true, s == i, *nome));
+            risposta.widget_info(|| WidgetInfo::selected(WidgetType::Button, true, s == i, tascabile_touch::t(nome)));
             if s == i {
-                ui.painter().circle_filled(c, 19.0, tema::BLU_TENUE);
+                ui.painter().circle_filled(c, 19.0, tema::blu_tenue());
             }
-            let colore = if s == i { tema::BLU } else { tema::INCHIOSTRO };
+            let colore = if s == i { tema::blu() } else { tema::inchiostro() };
             ui.painter().line_segment([c - vec2(11.0, 0.0), c + vec2(11.0, 0.0)], Stroke::new(w * 1.6, colore));
             if risposta.clicked() {
                 scelta = Some(Scelta::Spessore(i));
@@ -293,7 +295,7 @@ pub(crate) fn riga_dei_colori(ui: &mut egui::Ui, r: Rect, colore: usize, spessor
             egui::Align2::CENTER_CENTER,
             testo,
             Carattere::Grassetto.font(ui.ctx(), 14.0),
-            tema::INCHIOSTRO,
+            tema::inchiostro(),
         );
         let piu = Rect::from_center_size(pos2(x + 76.0, r.center().y), Vec2::splat(tema::PULSANTE));
         if ui.put(piu, PulsanteIcona::new(icone::TEXT_INCREASE, PIU_GRANDE).spento(m >= 72.0)).clicked() {
@@ -364,19 +366,23 @@ impl TascabileApp {
         let testo = if vuoto { crate::pdf_compila::VUOTO_TESTO } else { s.campo.testo() };
         if nota {
             let icona = Rect::from_center_size(a.min, Vec2::splat(20.0 * k));
-            painter.rect(icona, 3.0, Color32::from_rgb(0xFF, 0xD1, 0x00), Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
-            let g =
-                painter.layout(testo.to_string(), Carattere::Testo.font(ui.ctx(), 15.0), if vuoto { tema::MATITA } else { tema::INCHIOSTRO }, 220.0);
+            painter.rect(icona, 3.0, Color32::from_rgb(0xFF, 0xD1, 0x00), Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
+            let g = painter.layout(
+                testo.to_string(),
+                Carattere::Testo.font(ui.ctx(), 15.0),
+                if vuoto { tema::pagina::MATITA } else { tema::pagina::INCHIOSTRO },
+                220.0,
+            );
             let r = Rect::from_min_size(icona.right_top() + vec2(8.0, 0.0), g.size()).expand2(vec2(6.0, 4.0));
-            painter.rect(r, 4.0, tema::FOGLIO, Stroke::new(1.0, tema::FILO), StrokeKind::Outside);
-            painter.galley(r.min + vec2(6.0, 4.0), g, tema::INCHIOSTRO);
+            painter.rect(r, 4.0, tema::pagina::FOGLIO, Stroke::new(1.0, tema::pagina::FILO), StrokeKind::Outside);
+            painter.galley(r.min + vec2(6.0, 4.0), g, tema::pagina::INCHIOSTRO);
             return;
         }
-        let colore = if vuoto { tema::MATITA } else { colore32(COLORI[p.annota.colore_testo].0) };
+        let colore = if vuoto { tema::pagina::MATITA } else { colore32(COLORI[p.annota.colore_testo].0) };
         let g =
             painter.layout(testo.to_string(), Carattere::Testo.font(ui.ctx(), (p.annota.misura_testo * k).max(6.0)), colore, (260.0 * k).max(40.0));
         let r = Rect::from_min_size(a.min, g.size()).expand2(vec2(3.0, 2.0));
-        painter.rect(r, 2.0, tema::FOGLIO, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+        painter.rect(r, 2.0, tema::pagina::FOGLIO, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
         painter.galley(r.min + vec2(3.0, 2.0), g, colore);
     }
 
@@ -402,7 +408,7 @@ impl TascabileApp {
     fn mostra_penna(&mut self, ui: &mut egui::Ui, pagine: Rect) -> Option<Dopo> {
         let p = self.pdf.as_mut()?;
         let risposta = ui.interact(pagine, Id::new("penna_pdf"), Sense::click_and_drag());
-        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, DISEGNA_CON_IL_DITO));
+        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(DISEGNA_CON_IL_DITO)));
         let dita = ui.input(|i| i.multi_touch().is_some()) || p.lettore.pizzica();
         if dita {
             if p.annota.tratto.take().is_some() {
@@ -493,7 +499,7 @@ impl TascabileApp {
             let presa = r.expand(BORDO).intersect(pagine);
             let risposta = ui.interact(presa, Id::new(("annotazione_pdf", pagina, indice)), Sense::click_and_drag());
             let nome = nome_dell_annotazione(&a);
-            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &nome));
+            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(&nome)));
             let origine = ui.input(|i| i.pointer.press_origin());
             let fin_qui = match (risposta.interact_pointer_pos(), origine) {
                 (Some(x), Some(o)) => x - o,
@@ -529,7 +535,7 @@ impl TascabileApp {
         if dove != r {
             painter.rect_filled(dove, 2.0, Color32::from_rgba_unmultiplied(35, 70, 160, 30));
         }
-        painter.rect_stroke(dove.expand(3.0), 3.0, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+        painter.rect_stroke(dove.expand(3.0), 3.0, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
         azione
     }
 
@@ -722,7 +728,10 @@ impl TascabileApp {
                 if let Some(c) = tascabile_pdf::carattere_che_manca(testo) {
                     self.errore = Some(Errore {
                         titolo: "Testo non aggiunto",
-                        testo: format!("Il carattere «{c}» non si può scrivere in un testo libero: le lettere italiane e «€» sì, i simboli no."),
+                        testo: tascabile_touch::tf!(
+                            "Il carattere «{}» non si può scrivere in un testo libero: le lettere italiane e «€» sì, i simboli no.",
+                            c
+                        ),
                     });
                     return;
                 }
@@ -744,7 +753,10 @@ impl TascabileApp {
                     diagnosi("pdf: testo libero riscritto con un carattere che non si scrive");
                     self.errore = Some(Errore {
                         titolo: "Testo non riscritto",
-                        testo: format!("Il carattere «{c}» non si può scrivere in un testo libero: le lettere italiane e «€» sì, i simboli no."),
+                        testo: tascabile_touch::tf!(
+                            "Il carattere «{}» non si può scrivere in un testo libero: le lettere italiane e «€» sì, i simboli no.",
+                            c
+                        ),
                     });
                     return;
                 }
@@ -826,11 +838,13 @@ impl TascabileApp {
                 let a = a.as_ref()?;
                 let mut s = None;
                 let testo = if a.testo.trim().is_empty() { "La nota non ha testo." } else { a.testo.as_str() };
-                ui.label(RichText::new(testo).font(Carattere::Testo.font(ui.ctx(), 17.0)).color(tema::INCHIOSTRO));
+                ui.label(RichText::new(testo).font(Carattere::Testo.font(ui.ctx(), 17.0)).color(tema::inchiostro()));
                 if !a.autore.trim().is_empty() {
                     ui.add_space(6.0);
                     ui.label(
-                        RichText::new(format!("Scritta da {}", a.autore.trim())).font(Carattere::Testo.font(ui.ctx(), 14.0)).color(tema::MATITA),
+                        RichText::new(tascabile_touch::tf!("Scritta da {}", a.autore.trim()))
+                            .font(Carattere::Testo.font(ui.ctx(), 14.0))
+                            .color(tema::matita()),
                     );
                 }
                 ui.add_space(16.0);

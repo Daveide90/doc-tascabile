@@ -54,9 +54,10 @@ impl<'a> GruppoSegmentato<'a> {
         // altezza il gruppo si sposta, e un tocco a metà andrebbe perso.
         let prima = self.voci.first().map_or("", |v| v.1);
         let mut ui = ui.new_child(UiBuilder::new().max_rect(rect).id_salt(("gruppo", prima)));
-        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_GRUPPO), tema::VELO);
+        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_GRUPPO), tema::velo());
         let mut scelto = None;
         for (i, &(icona, etichetta)) in self.voci.iter().enumerate() {
+            let etichetta = crate::lingua::t(etichetta);
             let posto = segmento(rect, rect.left() + BORDO + i as f32 * (tema::SEGMENTO.x + FRA));
             let mut p = PulsanteIcona::new(icona, etichetta).su_velo();
             if let Some(acceso) = self.acceso {
@@ -94,7 +95,7 @@ pub struct Passo<'a> {
 impl<'a> Passo<'a> {
     /// `meno` e `piu` sono le etichette dei due pulsanti per l'accessibilità («Più piccolo»).
     pub fn new(valore: &'a str, meno: &'a str, piu: &'a str) -> Self {
-        Self { valore, meno, piu, meno_spento: false, piu_spento: false }
+        Self { valore, meno: crate::lingua::t(meno), piu: crate::lingua::t(piu), meno_spento: false, piu_spento: false }
     }
 
     /// Al minimo: meno si spegne.
@@ -115,16 +116,16 @@ impl<'a> Passo<'a> {
         // link andava sotto il meno e il più (segnalazione dell'autore del 3/11).
         const VALORE: f32 = 56.0;
         let font = Carattere::Grassetto.font(ui.ctx(), 18.0);
-        let scritta = ui.painter().layout_no_wrap(self.valore.to_string(), font.clone(), tema::INCHIOSTRO).size().x;
+        let scritta = ui.painter().layout_no_wrap(self.valore.to_string(), font.clone(), tema::inchiostro()).size().x;
         let largo_valore = VALORE.max(scritta + 16.0);
         let largo = 2.0 * BORDO + 2.0 * tema::SEGMENTO.x + largo_valore;
         let (rect, _) = ui.allocate_exact_size(vec2(largo, ALTO), Sense::hover());
         let mut ui = ui.new_child(UiBuilder::new().max_rect(rect).id_salt(("passo", self.meno)));
-        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_GRUPPO), tema::VELO);
+        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_GRUPPO), tema::velo());
         let meno = segmento(rect, rect.left() + BORDO);
         let valore = Rect::from_min_size(pos2(meno.right(), meno.top()), vec2(largo_valore, tema::SEGMENTO.y));
         let piu = segmento(rect, valore.right());
-        ui.painter().text(valore.center(), Align2::CENTER_CENTER, self.valore, font, tema::INCHIOSTRO);
+        ui.painter().text(valore.center(), Align2::CENTER_CENTER, self.valore, font, tema::inchiostro());
         ui.allocate_rect(valore, Sense::hover()).widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, self.valore));
         let mut scelto = None;
         if PulsanteIcona::new(icone::REMOVE, self.meno).su_velo().spento(self.meno_spento).mostra_in(&mut ui, meno, tema::RAGGIO_SEGMENTO).clicked() {
@@ -156,7 +157,7 @@ pub struct Campione<'a> {
 
 impl<'a> Campione<'a> {
     pub fn new(testo: &'a str, carattere: Carattere, misura: f32, colore: Color32) -> Self {
-        Self { testo, carattere, misura, colore, acceso: false }
+        Self { testo: crate::lingua::t(testo), carattere, misura, colore, acceso: false }
     }
 
     pub fn acceso(mut self, acceso: bool) -> Self {
@@ -172,14 +173,18 @@ impl Widget for Campione<'_> {
         let (rect, r) = ui.allocate_exact_size(vec2(largo, CAMPIONE.y), Sense::click());
         info(&r, true, Some(self.acceso), self.testo);
         if ui.is_rect_visible(rect) {
+            // Il campione mostra il testo coi colori del documento: col tema scuro sta su un fondo
+            // chiaro come la pagina, se no il testo nero non si leggerebbe.
             let fondo = if r.is_pointer_button_down_on() {
-                tema::PREMUTO
+                if tema::e_scuro() { tema::chiaro::PREMUTO_VELO } else { tema::premuto() }
             } else if self.acceso {
-                tema::BLU_TENUE
+                if tema::e_scuro() { tema::chiaro::BLU_TENUE } else { tema::blu_tenue() }
+            } else if tema::e_scuro() {
+                tema::pagina::FOGLIO
             } else {
                 Color32::TRANSPARENT
             };
-            let bordo = if self.acceso { tema::BLU } else { tema::FILO };
+            let bordo = if self.acceso { tema::blu() } else { tema::filo() };
             ui.painter().rect(rect, CornerRadius::same(RAGGIO_CAMPIONE), fondo, Stroke::new(1.5, bordo), StrokeKind::Inside);
             ui.painter().galley(rect.center() - g.size() / 2.0, g, self.colore);
         }
@@ -275,6 +280,7 @@ impl<'a> Tavolozza<'a> {
         let passo = largo / per_fila as f32;
         let mut scelto = None;
         for (i, &(tinta, etichetta)) in self.tinte.iter().enumerate() {
+            let etichetta = crate::lingua::t(etichetta);
             let (fila, colonna) = (i / per_fila, i % per_fila);
             let posto = Rect::from_min_size(
                 pos2(rect.left() + colonna as f32 * passo, rect.top() + fila as f32 * tema::PULSANTE),
@@ -293,24 +299,24 @@ impl<'a> Tavolozza<'a> {
             let p = ui.painter();
             let c = posto.center();
             if r.is_pointer_button_down_on() {
-                p.circle_filled(c, RAGGIO_TINTA + 6.0, tema::PREMUTO);
+                p.circle_filled(c, RAGGIO_TINTA + 6.0, tema::premuto());
             }
             if acceso {
-                p.circle_stroke(c, RAGGIO_TINTA + 4.0, Stroke::new(2.5, tema::BLU));
+                p.circle_stroke(c, RAGGIO_TINTA + 4.0, Stroke::new(2.5, tema::blu()));
             }
-            let filo = Stroke::new(1.0, tema::FILO);
+            let filo = Stroke::new(1.0, tema::filo());
             match tinta {
                 Tinta::Colore(colore) => {
                     p.circle(c, RAGGIO_TINTA, colore, filo);
                 }
                 Tinta::Automatico => {
-                    p.circle(c, RAGGIO_TINTA, tema::FOGLIO, filo);
-                    p.text(c, Align2::CENTER_CENTER, "A", Carattere::Grassetto.font(ui.ctx(), 16.0), tema::INCHIOSTRO);
+                    p.circle(c, RAGGIO_TINTA, tema::foglio(), filo);
+                    p.text(c, Align2::CENTER_CENTER, "A", Carattere::Grassetto.font(ui.ctx(), 16.0), tema::inchiostro());
                 }
                 Tinta::Nessuno => {
-                    p.circle(c, RAGGIO_TINTA, tema::FOGLIO, filo);
+                    p.circle(c, RAGGIO_TINTA, tema::foglio(), filo);
                     let d = RAGGIO_TINTA * std::f32::consts::FRAC_1_SQRT_2;
-                    p.line_segment([c + vec2(-d, d), c + vec2(d, -d)], Stroke::new(2.0, tema::ROSSO));
+                    p.line_segment([c + vec2(-d, d), c + vec2(d, -d)], Stroke::new(2.0, tema::rosso()));
                 }
             }
         }
@@ -322,7 +328,7 @@ impl<'a> Tavolozza<'a> {
 pub fn misura_tabella(righe: usize, colonne: usize) -> String {
     let r = if righe == 1 { "riga" } else { "righe" };
     let c = if colonne == 1 { "colonna" } else { "colonne" };
-    format!("{righe} {r} e {colonne} {c}")
+    crate::tf!("{} {} e {} {}", righe, crate::lingua::t(r), colonne, crate::lingua::t(c))
 }
 
 /// Il lato più grande di un quadretto della [`GrigliaTabella`], e lo spazio fra due, in dp.
@@ -373,7 +379,7 @@ impl GrigliaTabella {
                     scelta = Some((r + 1, c + 1));
                 }
                 let (fondo, filo) =
-                    if dentro { (tema::BLU_TENUE, Stroke::new(1.5, tema::BLU)) } else { (tema::FOGLIO, Stroke::new(1.0, tema::FILO)) };
+                    if dentro { (tema::blu_tenue(), Stroke::new(1.5, tema::blu())) } else { (tema::foglio(), Stroke::new(1.0, tema::filo())) };
                 ui.painter().rect(q, 4.0, fondo, filo, StrokeKind::Inside);
             }
         }
@@ -391,10 +397,11 @@ impl GrigliaTabella {
 /// L'etichetta di una sezione di un foglio (`.etichetta`): maiuscola, grigia, in grassetto da 13
 /// dp, un po' spaziata, con 16 dp sopra e lo spazio fra le righe di egui sotto.
 pub fn etichetta_sezione(ui: &mut Ui, testo: &str) -> Response {
+    let testo = crate::lingua::t(testo);
     let maiuscolo = testo.to_uppercase();
     let mut job = LayoutJob::default();
     let formato =
-        TextFormat { font_id: Carattere::Grassetto.font(ui.ctx(), 13.0), color: tema::MATITA, extra_letter_spacing: 0.4, ..Default::default() };
+        TextFormat { font_id: Carattere::Grassetto.font(ui.ctx(), 13.0), color: tema::matita(), extra_letter_spacing: 0.4, ..Default::default() };
     job.append(&maiuscolo, 0.0, formato);
     let galley = ui.painter().layout_job(job);
     let sopra = (16.0 - ui.spacing().item_spacing.y).max(0.0);
@@ -408,12 +415,13 @@ pub fn etichetta_sezione(ui: &mut Ui, testo: &str) -> Response {
 /// 8 sotto; con `collegamento`, a destra un testo blu in grassetto da toccare (sulla stessa linea
 /// di base), la cui risposta torna a chi chiama.
 pub fn titoletto(ui: &mut Ui, testo: &str, collegamento: Option<&str>) -> Option<Response> {
+    let (testo, collegamento) = (crate::lingua::t(testo), collegamento.map(crate::lingua::t));
     const SOPRA: f32 = 16.0;
     const RIGA: f32 = 27.0;
     const SOTTO: f32 = 8.0;
     let ctx = ui.ctx().clone();
     let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), SOPRA + RIGA + SOTTO), Sense::hover());
-    let titolo = ui.painter().layout_no_wrap(testo.to_owned(), Carattere::Titolo.font(&ctx, 20.0), tema::INCHIOSTRO);
+    let titolo = ui.painter().layout_no_wrap(testo.to_owned(), Carattere::Titolo.font(&ctx, 20.0), tema::inchiostro());
     let riga = Rect::from_min_size(pos2(rect.left(), rect.top() + SOPRA), vec2(rect.width(), RIGA));
     let y = riga.center().y - titolo.size().y / 2.0;
     let base = y + linea_di_base(&titolo);
@@ -421,7 +429,7 @@ pub fn titoletto(ui: &mut Ui, testo: &str, collegamento: Option<&str>) -> Option
     ui.painter().galley(posto.min, titolo, Color32::PLACEHOLDER);
     r.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, testo));
     collegamento.map(|c| {
-        let g = ui.painter().layout_no_wrap(c.to_owned(), Carattere::Grassetto.font(&ctx, 14.0), tema::BLU);
+        let g = ui.painter().layout_no_wrap(c.to_owned(), Carattere::Grassetto.font(&ctx, 14.0), tema::blu());
         let origine = pos2(rect.right() - tema::MARGINE_TITOLO - g.size().x, base - linea_di_base(&g));
         let testo = Rect::from_min_size(origine, g.size());
         // Il bersaglio del dito: 48 dp di altezza attorno al testo, 8 di più ai lati.
@@ -429,7 +437,7 @@ pub fn titoletto(ui: &mut Ui, testo: &str, collegamento: Option<&str>) -> Option
         let risposta = ui.interact(bersaglio, ui.id().with(("titoletto", c)), Sense::click());
         risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, c));
         if risposta.is_pointer_button_down_on() {
-            ui.painter().rect_filled(bersaglio, CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::PREMUTO);
+            ui.painter().rect_filled(bersaglio, CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::premuto());
         }
         ui.painter().galley(origine, g, Color32::PLACEHOLDER);
         risposta
@@ -462,8 +470,8 @@ mod test {
             0,
         );
         assert_eq!(famiglia_del_testo(&h, "Recenti"), Some(Carattere::Titolo.famiglia()));
-        assert_eq!(colore_del_testo(&h, "Recenti"), Some(tema::INCHIOSTRO));
-        assert_eq!(colore_del_testo(&h, "Vedi tutti"), Some(tema::BLU));
+        assert_eq!(colore_del_testo(&h, "Recenti"), Some(tema::inchiostro()));
+        assert_eq!(colore_del_testo(&h, "Vedi tutti"), Some(tema::blu()));
         assert_eq!(famiglia_del_testo(&h, "Vedi tutti"), Some(Carattere::Grassetto.famiglia()));
         let titolo = rettangolo_del_testo(&h, "Recenti").unwrap();
         let link = rettangolo_del_testo(&h, "Vedi tutti").unwrap();
@@ -500,7 +508,7 @@ mod test {
             },
             Some(0),
         );
-        let fondi = riempiti(&h, tema::VELO);
+        let fondi = riempiti(&h, tema::velo());
         assert_eq!(fondi.len(), 1, "{fondi:?}");
         assert_eq!(fondi[0].size(), egui::vec2(4.0 + 4.0 * 46.0 + 3.0 * 2.0 + 4.0, 52.0));
         let sinistra = h.get_by_label("A sinistra");
@@ -509,15 +517,15 @@ mod test {
         assert_eq!(sinistra.accesskit_node().toggled(), Some(Toggled::True));
         assert_eq!(h.get_by_label("Al centro").accesskit_node().toggled(), Some(Toggled::False));
         // Acceso: bianco con l'ombra, icona blu; gli altri inchiostro, senza fondo.
-        assert_eq!(riempiti(&h, tema::FOGLIO), vec![sinistra.rect()]);
+        assert_eq!(riempiti(&h, tema::foglio()), vec![sinistra.rect()]);
         assert!(forme(&h).iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.blur_width > 0.0)));
-        assert!(riempiti(&h, tema::BLU_TENUE).is_empty());
-        assert_eq!(colore_del_testo(&h, icone::FORMAT_ALIGN_LEFT), Some(tema::BLU));
-        assert_eq!(colore_del_testo(&h, icone::FORMAT_ALIGN_CENTER), Some(tema::INCHIOSTRO));
+        assert!(riempiti(&h, tema::blu_tenue()).is_empty());
+        assert_eq!(colore_del_testo(&h, icone::FORMAT_ALIGN_LEFT), Some(tema::blu()));
+        assert_eq!(colore_del_testo(&h, icone::FORMAT_ALIGN_CENTER), Some(tema::inchiostro()));
         h.get_by_label("Al centro").click();
         h.run_steps(2);
         assert_eq!(*h.state(), Some(1));
-        assert_eq!(colore_del_testo(&h, icone::FORMAT_ALIGN_CENTER), Some(tema::BLU));
+        assert_eq!(colore_del_testo(&h, icone::FORMAT_ALIGN_CENTER), Some(tema::blu()));
     }
 
     #[test]
@@ -525,7 +533,7 @@ mod test {
         const AZIONI: [(&str, &str); 2] = [(icone::FORMAT_COLOR_TEXT, "Colore del testo"), (icone::FORMAT_CLEAR, "Togli il formato")];
         let h = banco(|ui, _: &mut ()| _ = GruppoSegmentato::new(&AZIONI).mostra(ui), ());
         assert_eq!(h.get_by_label("Colore del testo").accesskit_node().toggled(), None);
-        assert!(riempiti(&h, tema::FOGLIO).is_empty());
+        assert!(riempiti(&h, tema::foglio()).is_empty());
     }
 
     #[test]
@@ -536,7 +544,7 @@ mod test {
             },
             Vec::new(),
         );
-        let fondi = riempiti(&h, tema::VELO);
+        let fondi = riempiti(&h, tema::velo());
         assert_eq!(fondi.len(), 1, "{fondi:?}");
         assert_eq!(fondi[0].size(), egui::vec2(4.0 + 46.0 + 56.0 + 46.0 + 4.0, 52.0));
         let meno = h.get_by_label("Più piccolo").rect();
@@ -545,7 +553,7 @@ mod test {
         assert!(meno.right() < valore.left() && valore.right() < piu.left(), "{meno:?} {valore:?} {piu:?}");
         assert!((valore.center().x - fondi[0].center().x).abs() < 1.0);
         assert_eq!(famiglia_del_testo(&h, "11"), Some(Carattere::Grassetto.famiglia()));
-        assert_eq!(colore_del_testo(&h, icone::REMOVE), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, icone::REMOVE), Some(tema::inchiostro()));
         h.get_by_label("Più grande").click();
         h.run_steps(2);
         h.get_by_label("Più piccolo").click();
@@ -575,7 +583,7 @@ mod test {
             },
             Vec::new(),
         );
-        assert_eq!(colore_del_testo(&h, icone::REMOVE), Some(tema::SPENTO));
+        assert_eq!(colore_del_testo(&h, icone::REMOVE), Some(tema::spento()));
         h.get_by_label("Più piccolo").click();
         h.run_steps(2);
         assert!(h.state().is_empty());
@@ -590,7 +598,7 @@ mod test {
             ("Titolo 2", Carattere::Grassetto, 19.0, titoli),
             ("Titolo 3", Carattere::Grassetto, 17.0, titoli),
         ];
-        fila_scorrevole(ui, "stili", tema::FOGLIO, |ui| {
+        fila_scorrevole(ui, "stili", tema::foglio(), |ui| {
             for (i, (testo, carattere, misura, colore)) in voci.into_iter().enumerate() {
                 if ui.add(Campione::new(testo, carattere, misura, colore).acceso(*scelto == Some(i))).clicked() {
                     *scelto = Some(i);
@@ -624,10 +632,10 @@ mod test {
                 _ => None,
             })
         };
-        assert_eq!(riempiti(&h, tema::BLU_TENUE), vec![normale.rect()]);
-        assert_eq!(bordo(&normale.rect()), Some(tema::BLU));
+        assert_eq!(riempiti(&h, tema::blu_tenue()), vec![normale.rect()]);
+        assert_eq!(bordo(&normale.rect()), Some(tema::blu()));
         let titolo = h.get_by_label("Titolo 1").rect();
-        assert_eq!(bordo(&titolo), Some(tema::FILO));
+        assert_eq!(bordo(&titolo), Some(tema::filo()));
         assert!(titolo.width() > 92.0 && (titolo.left() - normale.rect().right() - 8.0).abs() < 0.5, "{titolo:?}");
         // Ogni campione nel suo aspetto.
         assert_eq!(famiglia_del_testo(&h, "Titolo 1"), Some(Carattere::Grassetto.famiglia()));
@@ -639,14 +647,14 @@ mod test {
         h.get_by_label("Titolo 2").click();
         h.run_steps(2);
         assert_eq!(*h.state(), Some(2));
-        assert_eq!(riempiti(&h, tema::BLU_TENUE), vec![h.get_by_label("Titolo 2").rect()]);
+        assert_eq!(riempiti(&h, tema::blu_tenue()), vec![h.get_by_label("Titolo 2").rect()]);
     }
 
     #[test]
     fn una_fila_che_ci_sta_non_e_sfumata() {
         let h = banco(
             |ui, _: &mut ()| {
-                fila_scorrevole(ui, "corta", tema::FOGLIO, |ui| ui.add(Campione::new("Normale", Carattere::Testo, 16.0, tema::INCHIOSTRO)));
+                fila_scorrevole(ui, "corta", tema::foglio(), |ui| ui.add(Campione::new("Normale", Carattere::Testo, 16.0, tema::inchiostro())));
             },
             (),
         );
@@ -678,11 +686,11 @@ mod test {
         // Quelli fino alla scelta sono accesi, in blu tenue.
         assert_eq!(h.get_by_label("2 righe e 2 colonne").accesskit_node().toggled(), Some(Toggled::True));
         assert_eq!(h.get_by_label("2 righe e 3 colonne").accesskit_node().toggled(), Some(Toggled::False));
-        assert_eq!(riempiti(&h, tema::BLU_TENUE).len(), 4);
+        assert_eq!(riempiti(&h, tema::blu_tenue()).len(), 4);
         h.get_by_label("3 righe e 4 colonne").click();
         h.run_steps(2);
         assert_eq!(*h.state(), (3, 4));
-        assert_eq!(riempiti(&h, tema::BLU_TENUE).len(), 12);
+        assert_eq!(riempiti(&h, tema::blu_tenue()).len(), 12);
         // Il dito che passa sopra la griglia sceglie dove arriva.
         let da = h.get_by_label("1 riga e 1 colonna").rect().center();
         let a = h.get_by_label("5 righe e 2 colonne").rect().center();
@@ -727,10 +735,10 @@ mod test {
         // Il colore pieno al centro del suo posto, l'anello blu attorno a quello scelto.
         let rosso = cerchi.iter().find(|c| c.fill == Color32::from_rgb(0xC0, 0, 0)).expect("il cerchio rosso");
         assert_eq!(rosso.center, posti[1].center());
-        assert!(cerchi.iter().any(|c| c.stroke.color == tema::BLU && c.center == posti[1].center() && c.radius > rosso.radius));
+        assert!(cerchi.iter().any(|c| c.stroke.color == tema::blu() && c.center == posti[1].center() && c.radius > rosso.radius));
         // Automatico: la A in inchiostro; Nessuno: la riga rossa che lo barra.
         assert!(rettangolo_del_testo(&h, "A").is_some_and(|r| posti[0].contains_rect(r)));
-        assert!(forme(&h).iter().any(|s| matches!(s, egui::Shape::LineSegment { stroke, .. } if stroke.color == tema::ROSSO)));
+        assert!(forme(&h).iter().any(|s| matches!(s, egui::Shape::LineSegment { stroke, .. } if stroke.color == tema::rosso())));
         h.get_by_label("Nessuno").click();
         h.run_steps(2);
         assert_eq!(*h.state(), Some(2));
@@ -776,7 +784,7 @@ mod test {
 
     /// C'è l'anello blu attorno a questo centro.
     fn cerchi_blu(h: &egui_kittest::Harness<'_, Option<usize>>, centro: egui::Pos2) -> bool {
-        forme(h).iter().any(|s| matches!(s, egui::Shape::Circle(c) if c.stroke.color == tema::BLU && c.center == centro))
+        forme(h).iter().any(|s| matches!(s, egui::Shape::Circle(c) if c.stroke.color == tema::blu() && c.center == centro))
     }
 
     #[test]
@@ -789,7 +797,7 @@ mod test {
             },
             None,
         );
-        assert_eq!(colore_del_testo(&h, "PARAGRAFO"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "PARAGRAFO"), Some(tema::matita()));
         assert_eq!(famiglia_del_testo(&h, "PARAGRAFO"), Some(Carattere::Grassetto.famiglia()));
         h.get_by_label("PARAGRAFO");
         let sopra = rettangolo_del_testo(&h, "Sopra").unwrap();

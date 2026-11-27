@@ -28,6 +28,7 @@ use tascabile_touch::{BarraAlta, Chip, Dialogo, Peso, Pulsante, RispostaDialogo,
 
 use crate::TascabileApp;
 use crate::pdf_lavoro::ModoPdf;
+use tascabile_touch::t;
 
 pub(crate) const FIRMA: &str = "Firma";
 pub(crate) const METTI_LA_FIRMA: &str = "Metti la firma";
@@ -55,10 +56,12 @@ pub(crate) const SOLO_QUI: &str = "Solo qui";
 /// La firma nuova va anche fra «Le mie firme».
 pub(crate) const SALVALA: &str = "Salvala";
 const SPIEGA_SALVARE: &str = "La firma nuova è sul documento. Vuoi tenerla anche fra «Le mie firme», accanto a quelle che ci sono già?";
-const SPIEGA_SALVARE_INIZIALI: &str = "Le iniziali nuove sono sul documento. Vuoi tenerle anche fra «Le mie firme», accanto a quelle che ci sono già?";
+const SPIEGA_SALVARE_INIZIALI: &str =
+    "Le iniziali nuove sono sul documento. Vuoi tenerle anche fra «Le mie firme», accanto a quelle che ci sono già?";
 pub(crate) const FIRMA_SALVATA: &str = "La firma resta salvata in Tascabile per la prossima volta: la trovi, e la togli, in «Le mie firme».";
 /// Già [`MASSIMO_SALVATE`] firme (o iniziali): la nuova va sul documento e basta.
-const FIRME_AL_COMPLETO: &str = "Hai già 6 firme salvate di questo tipo: la nuova è sul documento ma non fra «Le mie firme». Per tenerla, eliminane prima una.";
+const FIRME_AL_COMPLETO: &str =
+    "Hai già 6 firme salvate di questo tipo: la nuova è sul documento ma non fra «Le mie firme». Per tenerla, eliminane prima una.";
 const SI_PULISCE: &str = "Tolgo carta, ombre e tavolo…";
 const FIRMA_QUI: &str = "Firma qui col dito";
 
@@ -90,7 +93,7 @@ impl Salvata {
     /// Il nome per lo schermo: «Firma», «Firma 2», «Iniziali 3».
     pub(crate) fn nome(&self, posto: usize) -> String {
         let genere = if self.iniziali { "Iniziali" } else { "Firma" };
-        if posto == 1 { genere.to_string() } else { format!("{genere} {posto}") }
+        if posto == 1 { t(genere).to_string() } else { format!("{} {posto}", t(genere)) }
     }
 }
 
@@ -349,15 +352,15 @@ pub(crate) fn riga(
     let ctx = ui.ctx().clone();
     let largo = ui.available_width();
     let (rect, r) = ui.allocate_exact_size(vec2(largo, 56.0), Sense::click());
-    r.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, testo));
+    r.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(testo)));
     if r.is_pointer_button_down_on() {
-        ui.painter().rect_filled(rect, egui::CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::PREMUTO);
+        ui.painter().rect_filled(rect, egui::CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::premuto());
     }
     let mut x = rect.left() + 48.0;
     match anteprima {
         Some((f, t)) => {
             let box_ = Rect::from_min_size(pos2(rect.left() + 8.0, rect.top() + 6.0), vec2(96.0, 44.0));
-            ui.painter().rect(box_, 8.0, tema::FOGLIO, Stroke::new(1.0, tema::FILO), StrokeKind::Inside);
+            ui.painter().rect(box_, 8.0, tema::pagina::FOGLIO, Stroke::new(1.0, tema::pagina::FILO), StrokeKind::Inside);
             disegna_firma(ui.painter(), box_.shrink(5.0), f, t);
             x = box_.right() + 14.0;
         }
@@ -367,16 +370,16 @@ pub(crate) fn riga(
                 egui::Align2::CENTER_CENTER,
                 icona,
                 Carattere::Icona.font(&ctx, tema::ICONA),
-                tema::MATITA,
+                tema::matita(),
             );
         }
     }
-    let colore = if anteprima.is_some() { tema::BLU } else { tema::INCHIOSTRO };
+    let colore = if anteprima.is_some() { tema::blu() } else { tema::inchiostro() };
     let carattere = if anteprima.is_some() { Carattere::Grassetto } else { Carattere::Testo };
-    let g = ui.painter().layout_no_wrap(testo.to_string(), carattere.font(&ctx, 16.0), colore);
+    let g = ui.painter().layout_no_wrap(t(testo).to_string(), carattere.font(&ctx, 16.0), colore);
     ui.painter().galley(pos2(x, rect.center().y - g.size().y / 2.0), g, colore);
     if !ultima {
-        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::FILO);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::filo());
     }
     r
 }
@@ -385,7 +388,7 @@ pub(crate) fn riga(
 /// firma 2», «Metti le iniziali 3».
 pub(crate) fn metti_detto(iniziali: bool, posto: usize) -> String {
     let base = if iniziali { METTI_LE_INIZIALI } else { METTI_LA_FIRMA };
-    if posto <= 1 { base.to_string() } else { format!("{base} {posto}") }
+    if posto <= 1 { t(base).to_string() } else { format!("{} {posto}", t(base)) }
 }
 
 /// Quello che si è scelto nel foglio della firma.
@@ -402,14 +405,14 @@ enum Scelta {
 pub(crate) fn tocca_per_firmare(painter: &egui::Painter, ctx: &egui::Context, r: Rect) {
     painter.rect_filled(r, 8.0, FONDO_FIRMA);
     let punti = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
-    painter.extend(egui::Shape::dashed_line(&punti, Stroke::new(1.5, tema::ROSSO), 5.0, 3.0));
+    painter.extend(egui::Shape::dashed_line(&punti, Stroke::new(1.5, tema::pagina::ROSSO), 5.0, 3.0));
     let misura = (r.height() * 0.24).clamp(8.0, 15.0);
-    let g = painter.layout_no_wrap(TOCCA_PER_FIRMARE.to_string(), Carattere::Grassetto.font(ctx, misura), tema::ROSSO);
-    let icona = painter.layout_no_wrap(icone::SIGNATURE.to_string(), Carattere::Icona.font(ctx, misura * 1.5), tema::ROSSO);
+    let g = painter.layout_no_wrap(t(TOCCA_PER_FIRMARE).to_string(), Carattere::Grassetto.font(ctx, misura), tema::pagina::ROSSO);
+    let icona = painter.layout_no_wrap(icone::SIGNATURE.to_string(), Carattere::Icona.font(ctx, misura * 1.5), tema::pagina::ROSSO);
     let largo = icona.size().x + 6.0 + g.size().x;
     let x = r.center().x - largo / 2.0;
-    painter.galley(pos2(x, r.center().y - icona.size().y / 2.0), icona.clone(), tema::ROSSO);
-    painter.galley(pos2(x + icona.size().x + 6.0, r.center().y - g.size().y / 2.0), g, tema::ROSSO);
+    painter.galley(pos2(x, r.center().y - icona.size().y / 2.0), icona.clone(), tema::pagina::ROSSO);
+    painter.galley(pos2(x + icona.size().x + 6.0, r.center().y - g.size().y / 2.0), g, tema::pagina::ROSSO);
 }
 
 impl TascabileApp {
@@ -785,9 +788,15 @@ impl TascabileApp {
             .mostra(ctx, FIRMA_DALLA_FOTO, |ui| {
                 let largo = ui.available_width();
                 let (r, _) = ui.allocate_exact_size(vec2(largo, 150.0), Sense::hover());
-                ui.painter().rect(r, 12.0, tema::FOGLIO, Stroke::new(1.0, tema::FILO), StrokeKind::Inside);
+                ui.painter().rect(r, 12.0, tema::pagina::FOGLIO, Stroke::new(1.0, tema::pagina::FILO), StrokeKind::Inside);
                 let Some((f, t)) = &anteprima else {
-                    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, SI_PULISCE, Carattere::Testo.font(ui.ctx(), 15.0), tema::MATITA);
+                    ui.painter().text(
+                        r.center(),
+                        egui::Align2::CENTER_CENTER,
+                        t(SI_PULISCE),
+                        Carattere::Testo.font(ui.ctx(), 15.0),
+                        tema::pagina::MATITA,
+                    );
                     ui.ctx().request_repaint_after(std::time::Duration::from_millis(100));
                     return None;
                 };
@@ -851,30 +860,36 @@ impl TascabileApp {
             ui.set_min_size(schermo.size());
             // Tutto lo schermo: niente arriva alla pagina sotto.
             let _ = ui.interact(schermo, Id::new("firma_col_dito_fondo"), Sense::click_and_drag());
-            ui.painter().rect_filled(schermo, 0.0, tema::CARTA);
+            ui.painter().rect_filled(schermo, 0.0, tema::carta());
             let barra = Rect::from_min_size(schermo.min, vec2(schermo.width(), tema::BARRA_ALTA));
             let r = ui.scope_builder(UiBuilder::new().max_rect(barra), |ui| BarraAlta::new(titolo).indietro(CHIUDI).mostra(ui)).inner;
             chiudi = r.indietro;
             let blocco =
                 Rect::from_min_max(pos2(schermo.left() + 12.0, barra.bottom() + 4.0), pos2(schermo.right() - 12.0, schermo.bottom() - fondo));
-            ui.painter().rect(blocco, 16.0, tema::FOGLIO, Stroke::new(1.0, tema::FILO), StrokeKind::Inside);
+            ui.painter().rect(blocco, 16.0, tema::pagina::FOGLIO, Stroke::new(1.0, tema::pagina::FILO), StrokeKind::Inside);
             // La riga su cui si firma, con la croce davanti, a due terzi dell'altezza.
             let y = blocco.top() + blocco.height() * 0.66;
-            ui.painter().line_segment([pos2(blocco.left() + 28.0, y), pos2(blocco.right() - 28.0, y)], Stroke::new(1.5, tema::LINEETTA));
-            ui.painter().text(pos2(blocco.left() + 36.0, y - 16.0), egui::Align2::CENTER_CENTER, "×", Carattere::Testo.font(ctx, 22.0), tema::MATITA);
+            ui.painter().line_segment([pos2(blocco.left() + 28.0, y), pos2(blocco.right() - 28.0, y)], Stroke::new(1.5, tema::pagina::LINEETTA));
+            ui.painter().text(
+                pos2(blocco.left() + 36.0, y - 16.0),
+                egui::Align2::CENTER_CENTER,
+                "×",
+                Carattere::Testo.font(ctx, 22.0),
+                tema::pagina::MATITA,
+            );
             if b.tratti.is_empty() && b.in_corso.is_none() {
                 ui.painter().text(
                     pos2(blocco.center().x, y + 28.0),
                     egui::Align2::CENTER_CENTER,
-                    FIRMA_QUI,
+                    t(FIRMA_QUI),
                     Carattere::Testo.font(ctx, 15.0),
-                    tema::MATITA,
+                    tema::pagina::MATITA,
                 );
             }
             // Il dito: ogni movimento è un punto del tratto, col suo tempo (i movimenti dello
             // stesso frame si dividono il tempo dal frame prima).
             let risposta = ui.interact(blocco, Id::new("firma_col_dito_blocco"), Sense::click_and_drag());
-            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, titolo));
+            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(titolo)));
             let giu = risposta.is_pointer_button_down_on() || risposta.dragged();
             if giu {
                 let dentro = |p: Pos2| {

@@ -235,7 +235,10 @@ fn affina(foto: &RgbImage, soglia: f64, r: [u32; 4], sinistra: u32, destra: u32,
     // riquadro dell'OCR.
     let mezzo = ((r[1] + r[3]) / 2).clamp(y0, y1 - 1);
     let dentro = |y: u32| y >= r[1].max(y0) && y < r[3].min(y1);
-    let Some(partenza) = (0..(y1 - y0)).flat_map(|d| [mezzo.checked_sub(d), mezzo.checked_add(d)]).flatten().find(|y| dentro(*y) && con_inchiostro[(*y - y0) as usize])
+    let Some(partenza) = (0..(y1 - y0))
+        .flat_map(|d| [mezzo.checked_sub(d), mezzo.checked_add(d)])
+        .flatten()
+        .find(|y| dentro(*y) && con_inchiostro[(*y - y0) as usize])
     else {
         return r;
     };
@@ -313,7 +316,8 @@ fn osservata(foto: &RgbImage, ink: &Inchiostro, p: &ParolaFoto) -> Option<(Vec<f
     if ho < 4 || wo < 2 || p.testo.trim().is_empty() || wo * ho > PAROLA_MASSIMA {
         return None;
     }
-    let pixel = (0..ho).flat_map(|y| (0..wo).map(move |x| (x, y))).map(|(x, y)| ink.scuro(foto.get_pixel(p.r[0] + x as u32, p.r[1] + y as u32).0)).collect();
+    let pixel =
+        (0..ho).flat_map(|y| (0..wo).map(move |x| (x, y))).map(|(x, y)| ink.scuro(foto.get_pixel(p.r[0] + x as u32, p.r[1] + y as u32).0)).collect();
     Some((pixel, wo, ho))
 }
 
@@ -618,7 +622,10 @@ pub(crate) fn riscrivi_riga(
             (Voce::Tenuta(j), _) => {
                 let r = vecchie[*j].r;
                 let dx = *x - i64::from(r[0]);
-                finali.push(ParolaFoto { testo: vecchie[*j].testo.clone(), r: [(i64::from(r[0]) + dx) as u32, r[1], (i64::from(r[2]) + dx) as u32, r[3]] });
+                finali.push(ParolaFoto {
+                    testo: vecchie[*j].testo.clone(),
+                    r: [(i64::from(r[0]) + dx) as u32, r[1], (i64::from(r[2]) + dx) as u32, r[3]],
+                });
             }
             (Voce::Nuova(t), Some(d)) => {
                 let Some(ri) = d.inchiostro else { continue };
@@ -677,7 +684,10 @@ pub(crate) mod test {
                     foto.put_pixel(px, py, image::Rgb([m(carta[0], colore[0]), m(carta[1], colore[1]), m(carta[2], colore[2])]));
                 }
             }
-            fatte.push(ParolaFoto { testo: p.to_string(), r: [(ox + r[0] as i64) as u32, (oy + r[1] as i64) as u32, (ox + r[2] as i64) as u32, (oy + r[3] as i64) as u32] });
+            fatte.push(ParolaFoto {
+                testo: p.to_string(),
+                r: [(ox + r[0] as i64) as u32, (oy + r[1] as i64) as u32, (ox + r[2] as i64) as u32, (oy + r[3] as i64) as u32],
+            });
             x += d.avanza + spazio;
         }
         (foto, fatte)
@@ -753,7 +763,9 @@ pub(crate) mod test {
 
     #[test]
     fn si_riconosce_il_carattere_della_scansione() {
-        for (famiglia, grassetto, corsivo) in [("Carlito", true, false), ("Liberation Serif", false, false), ("Liberation Sans", false, false), ("Carlito", false, true)] {
+        for (famiglia, grassetto, corsivo) in
+            [("Carlito", true, false), ("Liberation Serif", false, false), ("Liberation Sans", false, false), ("Carlito", false, true)]
+        {
             let c = cerca(famiglia, grassetto, corsivo);
             let (foto, vere) = riga_scritta(c, &["Tempo", "libero/hobby", "Autostima"], 38.0);
             let (affinate, ink) = affina_riga(&foto, &come_l_ocr(&vere)).unwrap();

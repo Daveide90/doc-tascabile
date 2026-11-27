@@ -24,7 +24,7 @@ pub struct Scheda {
 
 impl Default for Scheda {
     fn default() -> Self {
-        Self { raggio: tema::RAGGIO_SCHEDA, margine: Margin::ZERO, ombra: tema::OMBRA, fondo: tema::FOGLIO }
+        Self { raggio: tema::RAGGIO_SCHEDA, margine: Margin::ZERO, ombra: tema::OMBRA, fondo: tema::foglio() }
     }
 }
 
@@ -81,11 +81,11 @@ impl Tipo {
     /// Il colore del segno e quello del fondo del riquadro.
     pub fn colori(self) -> (Color32, Color32) {
         match self {
-            Tipo::Word => (tema::BLU, tema::BLU_TENUE),
-            Tipo::Pdf => (tema::ROSSO, tema::ROSSO_TENUE),
-            Tipo::Slide => (tema::OCRA, tema::OCRA_TENUE),
-            Tipo::Foglio => (tema::VERDE, tema::VERDE_TENUE),
-            Tipo::Cartella | Tipo::Altro => (tema::MATITA, tema::VELO),
+            Tipo::Word => (tema::blu(), tema::blu_tenue()),
+            Tipo::Pdf => (tema::rosso(), tema::rosso_tenue()),
+            Tipo::Slide => (tema::ocra(), tema::ocra_tenue()),
+            Tipo::Foglio => (tema::verde(), tema::verde_tenue()),
+            Tipo::Cartella | Tipo::Altro => (tema::matita(), tema::velo()),
         }
     }
 
@@ -183,7 +183,13 @@ impl RispostaVoce {
 }
 
 impl<'a> Voce<'a> {
+    /// Una voce col nome `nome`, tradotto nella lingua dell'app (vedi [`crate::lingua`]).
     pub fn new(tipo: Tipo, nome: &'a str) -> Self {
+        Self::nome_proprio(tipo, crate::lingua::t(nome))
+    }
+
+    /// Una voce col nome com'è: un file o una cartella, che non si traducono.
+    pub fn nome_proprio(tipo: Tipo, nome: &'a str) -> Self {
         Self { tipo, icona: None, nome, dove: None, menu: None, interruttore: None, ultima: false, spenta: false }
     }
 
@@ -195,13 +201,13 @@ impl<'a> Voce<'a> {
 
     /// Il luogo e il quando sotto il nome, con un'icona davanti.
     pub fn dove(mut self, icona: &'a str, testo: &'a str) -> Self {
-        self.dove = Some((Some(icona), testo));
+        self.dove = Some((Some(icona), crate::lingua::t(testo)));
         self
     }
 
     /// Una riga grigia sotto il nome, senza icona.
     pub fn sotto(mut self, testo: &'a str) -> Self {
-        self.dove = Some((None, testo));
+        self.dove = Some((None, crate::lingua::t(testo)));
         self
     }
 
@@ -234,7 +240,7 @@ impl<'a> Voce<'a> {
     pub fn mostra(self, ui: &mut Ui) -> RispostaVoce {
         let largo = ui.available_width();
         let ctx = ui.ctx().clone();
-        let matita = if self.spenta { tema::SPENTO } else { tema::MATITA };
+        let matita = if self.spenta { tema::spento() } else { tema::matita() };
         let spazio = self.spazio_del_testo(largo);
         // Il luogo, con l'icona, su una riga; la riga sotto senza icona (una spiegazione) va a
         // capo, su due al più: tagliata, perdeva proprio la parte che dice che cosa fa la voce
@@ -270,13 +276,13 @@ impl<'a> Voce<'a> {
         info(&response, !self.spenta, self.interruttore, self.nome);
         let ctx = ui.ctx().clone();
         if !self.spenta && premuto(ui, &response) {
-            ui.painter().rect_filled(rect, 0.0, tema::PREMUTO);
+            ui.painter().rect_filled(rect, 0.0, tema::premuto());
         }
         if !self.ultima {
-            ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::FILO);
+            ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::filo());
         }
-        let (segno, fondo) = if self.spenta { (tema::SPENTO, tema::VELO) } else { self.tipo.colori() };
-        let inchiostro = if self.spenta { tema::SPENTO } else { tema::INCHIOSTRO };
+        let (segno, fondo) = if self.spenta { (tema::spento(), tema::velo()) } else { self.tipo.colori() };
+        let inchiostro = if self.spenta { tema::spento() } else { tema::inchiostro() };
         let riquadro = Rect::from_min_size(pos2(rect.left() + 14.0, rect.center().y - tema::TIPO / 2.0), Vec2::splat(tema::TIPO));
         ui.painter().rect_filled(riquadro, tema::RAGGIO_SEGMENTO, fondo);
         let icona = self.icona.unwrap_or(self.tipo.icona());
@@ -289,9 +295,9 @@ impl<'a> Voce<'a> {
         if let Some(acceso) = self.interruttore {
             let pista = Rect::from_min_size(pos2(rect.right() - 16.0 - INTERRUTTORE.x, rect.center().y - INTERRUTTORE.y / 2.0), INTERRUTTORE);
             let (fondo, x) =
-                if acceso { (tema::BLU, pista.right() - INTERRUTTORE.y / 2.0) } else { (tema::SPENTO, pista.left() + INTERRUTTORE.y / 2.0) };
+                if acceso { (tema::blu(), pista.right() - INTERRUTTORE.y / 2.0) } else { (tema::spento(), pista.left() + INTERRUTTORE.y / 2.0) };
             ui.painter().rect_filled(pista, (INTERRUTTORE.y / 2.0) as u8, fondo);
-            ui.painter().circle_filled(pos2(x, pista.center().y), TONDO_INTERRUTTORE, tema::FOGLIO);
+            ui.painter().circle_filled(pos2(x, pista.center().y), TONDO_INTERRUTTORE, tema::foglio());
         }
         let sinistra = riquadro.right() + 14.0;
         let nome = testo_tagliato(ui, self.nome, Carattere::Grassetto.font(&ctx, 16.0), inchiostro, self.spazio_del_testo(rect.width()));
@@ -323,7 +329,7 @@ pub struct SchedaCartella<'a> {
 
 impl<'a> SchedaCartella<'a> {
     pub fn new(icona: &'a str, nome: &'a str, sotto: &'a str) -> Self {
-        Self { icona, nome, sotto }
+        Self { icona, nome: crate::lingua::t(nome), sotto: crate::lingua::t(sotto) }
     }
 
     /// Disegna la scheda in `rect` (di solito 64 dp di altezza) e la rende toccabile.
@@ -336,7 +342,7 @@ impl<'a> SchedaCartella<'a> {
         let ctx = ui.ctx().clone();
         let raggio = CornerRadius::same(tema::RAGGIO_CARTELLA);
         tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA);
-        let fondo = if premuto(ui, &r) { tema::PREMUTO } else { tema::FOGLIO };
+        let fondo = if premuto(ui, &r) { tema::premuto() } else { tema::foglio() };
         ui.painter().rect_filled(rect, raggio, fondo);
         let x_icona = rect.left() + 14.0;
         ui.painter().text(
@@ -344,12 +350,12 @@ impl<'a> SchedaCartella<'a> {
             Align2::CENTER_CENTER,
             self.icona,
             Carattere::Icona.font(&ctx, tema::ICONA),
-            tema::MATITA,
+            tema::matita(),
         );
         let x = x_icona + tema::ICONA + 12.0;
         let largo = rect.right() - 14.0 - x;
-        let nome = testo_tagliato(ui, self.nome, Carattere::Grassetto.font(&ctx, 15.0), tema::INCHIOSTRO, largo);
-        let sotto = testo_tagliato(ui, self.sotto, Carattere::Testo.font(&ctx, 12.0), tema::MATITA, largo);
+        let nome = testo_tagliato(ui, self.nome, Carattere::Grassetto.font(&ctx, 15.0), tema::inchiostro(), largo);
+        let sotto = testo_tagliato(ui, self.sotto, Carattere::Testo.font(&ctx, 12.0), tema::matita(), largo);
         let y = rect.center().y - (nome.size().y + sotto.size().y) / 2.0;
         let a_capo = y + nome.size().y;
         ui.painter().galley(pos2(x, y), nome, Color32::PLACEHOLDER);
@@ -399,18 +405,19 @@ impl<'a> Menu<'a> {
 
     /// La voce principale, in grassetto con l'icona blu.
     pub fn primo(mut self, icona: &'a str, etichetta: &'a str) -> Self {
-        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: true, rosso: false });
+        self.voci.push(VoceMenu::Voce { icona, etichetta: crate::lingua::t(etichetta), sotto: None, primo: true, rosso: false });
         self
     }
 
     pub fn voce(mut self, icona: &'a str, etichetta: &'a str) -> Self {
-        self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: None, primo: false, rosso: false });
+        self.voci.push(VoceMenu::Voce { icona, etichetta: crate::lingua::t(etichetta), sotto: None, primo: false, rosso: false });
         self
     }
 
     /// Una voce con sotto una riga grigia più piccola che dice che cosa fa: per le voci che si
     /// somigliano («Salva una copia», «Copia definitiva»).
     pub fn voce_spiegata(mut self, icona: &'a str, etichetta: &'a str, sotto: &'a str) -> Self {
+        let (etichetta, sotto) = (crate::lingua::t(etichetta), crate::lingua::t(sotto));
         self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: Some(sotto), primo: false, rosso: false });
         self
     }
@@ -418,6 +425,7 @@ impl<'a> Menu<'a> {
     /// Una voce spiegata tutta rossa (icona, etichetta e riga sotto): quella da cui non si torna
     /// indietro, come la copia definitiva, dove quello che si fissa non si modifica più.
     pub fn voce_rossa(mut self, icona: &'a str, etichetta: &'a str, sotto: &'a str) -> Self {
+        let (etichetta, sotto) = (crate::lingua::t(etichetta), crate::lingua::t(sotto));
         self.voci.push(VoceMenu::Voce { icona, etichetta, sotto: Some(sotto), primo: false, rosso: true });
         self
     }
@@ -454,7 +462,7 @@ impl<'a> Menu<'a> {
                         }
                         VoceMenu::Separatore => {
                             let (r, _) = ui.allocate_exact_size(vec2(tema::MENU, 13.0), Sense::hover());
-                            ui.painter().rect_filled(Rect::from_center_size(r.center(), vec2(tema::MENU, 1.0)), 0.0, tema::FILO);
+                            ui.painter().rect_filled(Rect::from_center_size(r.center(), vec2(tema::MENU, 1.0)), 0.0, tema::filo());
                         }
                     }
                 }
@@ -476,7 +484,7 @@ fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, sotto: Option<&str>,
     let ctx = ui.ctx().clone();
     let colonna = tema::MENU - 58.0 - 18.0;
     let font = if primo { Carattere::Grassetto } else { Carattere::Testo }.font(&ctx, 15.5);
-    let (inchiostro, matita) = if rosso { (tema::ROSSO, tema::ROSSO) } else { (tema::INCHIOSTRO, tema::MATITA) };
+    let (inchiostro, matita) = if rosso { (tema::rosso(), tema::rosso()) } else { (tema::inchiostro(), tema::matita()) };
     let testo = ui.painter().layout(etichetta.to_owned(), font, inchiostro, colonna);
     let spiega = sotto.map(|s| ui.painter().layout(s.to_owned(), Carattere::Testo.font(&ctx, 13.0), matita, colonna));
     let testi = testo.size().y + spiega.as_ref().map_or(0.0, |g| FRA_ETICHETTA_E_SPIEGA + g.size().y);
@@ -485,9 +493,9 @@ fn voce_del_menu(ui: &mut Ui, icona: &str, etichetta: &str, sotto: Option<&str>,
     info(&r, true, None, etichetta);
     let p = ui.painter();
     if r.is_pointer_button_down_on() {
-        p.rect_filled(rect, 0.0, tema::PREMUTO);
+        p.rect_filled(rect, 0.0, tema::premuto());
     }
-    let colore = if primo { tema::BLU } else { matita };
+    let colore = if primo { tema::blu() } else { matita };
     p.text(
         pos2(rect.left() + 18.0 + tema::ICONA / 2.0, rect.center().y),
         Align2::CENTER_CENTER,
@@ -532,7 +540,7 @@ mod test {
         let tutte = forme(&h);
         let fondo = tutte
             .iter()
-            .position(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::FOGLIO && r.rect == rect && r.corner_radius == egui::CornerRadius::same(tema::RAGGIO_SCHEDA)))
+            .position(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::foglio() && r.rect == rect && r.corner_radius == egui::CornerRadius::same(tema::RAGGIO_SCHEDA)))
             .expect("il fondo della scheda");
         let ombre: Vec<usize> =
             tutte.iter().enumerate().filter(|(_, s)| matches!(s, egui::Shape::Rect(r) if r.blur_width > 0.0)).map(|(i, _)| i).collect();
@@ -574,27 +582,27 @@ mod test {
         let voce = h.state().rect.unwrap();
         assert_eq!(voce.size(), egui::vec2(SCHERMO.x, tema::VOCE));
         // Il riquadro rosso tenue del PDF, 44 dp, a 14 dal bordo, con l'icona piena rossa.
-        let riquadri = riempiti(&h, tema::ROSSO_TENUE);
+        let riquadri = riempiti(&h, tema::rosso_tenue());
         assert_eq!(riquadri.len(), 1, "{riquadri:?}");
         assert_eq!(riquadri[0].size(), egui::Vec2::splat(tema::TIPO));
         assert_eq!(riquadri[0].left(), voce.left() + 14.0);
         assert_eq!(riquadri[0].center().y, voce.center().y);
-        assert_eq!(colore_del_testo(&h, icone::PICTURE_AS_PDF), Some(tema::ROSSO));
+        assert_eq!(colore_del_testo(&h, icone::PICTURE_AS_PDF), Some(tema::rosso()));
         assert_eq!(famiglia_del_testo(&h, icone::PICTURE_AS_PDF), Some(Carattere::IconaPiena.famiglia()));
-        assert_eq!(riempiti(&h, tema::BLU_TENUE).len(), 1);
-        assert_eq!(riempiti(&h, tema::OCRA_TENUE).len(), 1);
+        assert_eq!(riempiti(&h, tema::blu_tenue()).len(), 1);
+        assert_eq!(riempiti(&h, tema::ocra_tenue()).len(), 1);
         // Il nome in grassetto, il luogo grigio sotto, a destra del riquadro.
         let nome = rettangolo_del_testo(&h, "Consenso informato da firmare").unwrap();
         let dove = rettangolo_del_testo(&h, "da WhatsApp · ieri 19:40").unwrap();
         assert!(nome.left() >= riquadri[0].right() + 13.0 && nome.bottom() <= dove.top(), "{nome:?} {dove:?}");
         assert_eq!(famiglia_del_testo(&h, "Consenso informato da firmare"), Some(Carattere::Grassetto.famiglia()));
-        assert_eq!(colore_del_testo(&h, "da WhatsApp · ieri 19:40"), Some(tema::MATITA));
-        assert_eq!(colore_del_testo(&h, icone::CHAT), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "da WhatsApp · ieri 19:40"), Some(tema::matita()));
+        assert_eq!(colore_del_testo(&h, icone::CHAT), Some(tema::matita()));
         // Il menu a destra; due linee sottili fra tre voci.
         let menu = h.get_all_by_label("Altre azioni").map(|n| n.rect()).collect::<Vec<_>>();
         assert_eq!(menu.len(), 3);
         assert_eq!(menu[1].right(), voce.right() - 8.0);
-        let fili = riempiti(&h, tema::FILO);
+        let fili = riempiti(&h, tema::filo());
         assert_eq!(fili.len(), 2, "{fili:?}");
         assert!(fili.iter().all(|f| f.height() == 1.0 && f.width() == SCHERMO.x));
     }
@@ -612,11 +620,11 @@ mod test {
 
     #[test]
     fn i_tipi_hanno_il_loro_colore_e_la_loro_icona() {
-        assert_eq!(Tipo::Word.colori(), (tema::BLU, tema::BLU_TENUE));
-        assert_eq!(Tipo::Pdf.colori(), (tema::ROSSO, tema::ROSSO_TENUE));
-        assert_eq!(Tipo::Slide.colori(), (tema::OCRA, tema::OCRA_TENUE));
-        assert_eq!(Tipo::Cartella.colori(), (tema::MATITA, tema::VELO));
-        assert_eq!(Tipo::Altro.colori(), (tema::MATITA, tema::VELO));
+        assert_eq!(Tipo::Word.colori(), (tema::blu(), tema::blu_tenue()));
+        assert_eq!(Tipo::Pdf.colori(), (tema::rosso(), tema::rosso_tenue()));
+        assert_eq!(Tipo::Slide.colori(), (tema::ocra(), tema::ocra_tenue()));
+        assert_eq!(Tipo::Cartella.colori(), (tema::matita(), tema::velo()));
+        assert_eq!(Tipo::Altro.colori(), (tema::matita(), tema::velo()));
         assert_eq!(Tipo::Word.icona(), icone::DESCRIPTION);
         assert_eq!(Tipo::Pdf.icona(), icone::PICTURE_AS_PDF);
         assert_eq!(Tipo::Slide.icona(), icone::SLIDESHOW);
@@ -638,15 +646,15 @@ mod test {
         let voce = h.get_by_label("Controllo ortografico");
         assert_eq!(voce.accesskit_node().toggled(), Some(egui::accesskit::Toggled::True));
         // La pista blu a destra, a 16 dp dal bordo, col tondo bianco dalla parte destra.
-        let piste = riempiti(&h, tema::BLU);
+        let piste = riempiti(&h, tema::blu());
         assert_eq!(piste.len(), 1, "{piste:?}");
         assert_eq!((piste[0].size(), piste[0].right()), (INTERRUTTORE, SCHERMO.x - 16.0));
         voce.click();
         h.run_steps(2);
         assert!(!*h.state());
         assert_eq!(h.get_by_label("Controllo ortografico").accesskit_node().toggled(), Some(egui::accesskit::Toggled::False));
-        assert!(riempiti(&h, tema::BLU).is_empty());
-        assert_eq!(riempiti(&h, tema::SPENTO).len(), 1);
+        assert!(riempiti(&h, tema::blu()).is_empty());
+        assert_eq!(riempiti(&h, tema::spento()).len(), 1);
     }
 
     #[test]
@@ -665,11 +673,11 @@ mod test {
         h.run_steps(2);
         assert_eq!(*h.state(), 0);
         // Il nome, il riquadro e il luogo sbiaditi: il colore del tipo non c'è più.
-        assert_eq!(colore_del_testo(&h, "Bolletta.pdf"), Some(tema::SPENTO));
-        assert_eq!(colore_del_testo(&h, icone::PICTURE_AS_PDF), Some(tema::SPENTO));
-        assert_eq!(colore_del_testo(&h, "in arrivo"), Some(tema::SPENTO));
-        assert!(riempiti(&h, tema::ROSSO_TENUE).is_empty());
-        assert_eq!(riempiti(&h, tema::VELO).len(), 1);
+        assert_eq!(colore_del_testo(&h, "Bolletta.pdf"), Some(tema::spento()));
+        assert_eq!(colore_del_testo(&h, icone::PICTURE_AS_PDF), Some(tema::spento()));
+        assert_eq!(colore_del_testo(&h, "in arrivo"), Some(tema::spento()));
+        assert!(riempiti(&h, tema::rosso_tenue()).is_empty());
+        assert_eq!(riempiti(&h, tema::velo()).len(), 1);
     }
 
     #[test]
@@ -680,13 +688,13 @@ mod test {
             },
             (),
         );
-        assert_eq!(colore_del_testo(&h, icone::ARROW_UPWARD), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, icone::ARROW_UPWARD), Some(tema::matita()));
         assert!(colore_del_testo(&h, icone::FOLDER).is_none());
         let nome = rettangolo_del_testo(&h, "..").unwrap();
         let sotto = rettangolo_del_testo(&h, "La cartella che la contiene").unwrap();
         // Senza icona davanti, la riga sotto parte dove parte il nome.
         assert!((sotto.left() - nome.left()).abs() < 2.0 && nome.bottom() <= sotto.top(), "{nome:?} {sotto:?}");
-        assert_eq!(colore_del_testo(&h, "La cartella che la contiene"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "La cartella che la contiene"), Some(tema::matita()));
     }
 
     /// Una riga sotto che non ci sta in una riga va a capo, su due al più, e la voce si allunga
@@ -743,17 +751,17 @@ mod test {
         assert_eq!(nodo.rect(), egui::Rect::from_min_size(egui::pos2(14.0, 100.0), egui::vec2(187.0, 64.0)));
         // Bianca, arrotondata 16 dp, con i due strati d'ombra sotto.
         let tutte = forme(&h);
-        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::FOGLIO && r.rect == nodo.rect() && r.corner_radius == egui::CornerRadius::same(tema::RAGGIO_CARTELLA))));
+        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::foglio() && r.rect == nodo.rect() && r.corner_radius == egui::CornerRadius::same(tema::RAGGIO_CARTELLA))));
         assert_eq!(tutte.iter().filter(|s| matches!(s, egui::Shape::Rect(r) if r.blur_width > 0.0)).count(), 2);
         // L'icona grigia a 14 dp dal bordo, poi il nome in grassetto e il numero grigio sotto.
-        assert_eq!(colore_del_testo(&h, icone::DOWNLOAD), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, icone::DOWNLOAD), Some(tema::matita()));
         let icona = rettangolo_del_testo(&h, icone::DOWNLOAD).unwrap();
         let nome = rettangolo_del_testo(&h, "Download").unwrap();
         let numero = rettangolo_del_testo(&h, "24 file").unwrap();
         assert!(icona.left() >= 14.0 + 13.0 && icona.right() < nome.left(), "{icona:?} {nome:?}");
         assert!(nome.bottom() <= numero.top() + 1.0 && (nome.left() - numero.left()).abs() < 2.0, "{nome:?} {numero:?}");
         assert_eq!(famiglia_del_testo(&h, "Download"), Some(Carattere::Grassetto.famiglia()));
-        assert_eq!(colore_del_testo(&h, "24 file"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "24 file"), Some(tema::matita()));
         nodo.click();
         h.run_steps(2);
         assert_eq!(*h.state(), 1);
@@ -786,13 +794,13 @@ mod test {
         assert!(testo.height() > 30.0 && testo.width() <= tema::MENU - 58.0 - 18.0, "{testo:?}");
         assert!(info.contains_rect(testo), "{info:?} {testo:?}");
         assert_eq!(famiglia_del_testo(&h, "Salva"), Some(Carattere::Grassetto.famiglia()));
-        assert_eq!(colore_del_testo(&h, icone::SAVE), Some(tema::BLU));
+        assert_eq!(colore_del_testo(&h, icone::SAVE), Some(tema::blu()));
         assert_eq!(famiglia_del_testo(&h, "Salva una copia"), Some(egui::FontFamily::Proportional));
-        assert_eq!(colore_del_testo(&h, icone::FILE_COPY), Some(tema::MATITA));
-        let fili = riempiti(&h, tema::FILO);
+        assert_eq!(colore_del_testo(&h, icone::FILE_COPY), Some(tema::matita()));
+        let fili = riempiti(&h, tema::filo());
         assert_eq!(fili.len(), 1);
         assert_eq!(fili[0].width(), tema::MENU);
-        assert!(riempiti(&h, tema::FOGLIO).iter().any(|r| r.width() == tema::MENU && r.contains_rect(info)));
+        assert!(riempiti(&h, tema::foglio()).iter().any(|r| r.width() == tema::MENU && r.contains_rect(info)));
     }
 
     #[test]
@@ -855,8 +863,8 @@ mod test {
         assert!((spiega.left() - etichetta.left()).abs() < 1.5, "stessa colonna: {etichetta:?} {spiega:?}");
         assert!(spiega.width() <= tema::MENU - 58.0 - 18.0, "{spiega:?}");
         assert!(spiega.top() - copia.top() >= 8.0 && copia.bottom() - spiega.bottom() >= 8.0, "aria sopra e sotto: {copia:?} {spiega:?}");
-        assert_eq!(colore_del_testo(&h, SPIEGA), Some(tema::MATITA));
-        assert_eq!(colore_del_testo(&h, "Salva una copia"), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, SPIEGA), Some(tema::matita()));
+        assert_eq!(colore_del_testo(&h, "Salva una copia"), Some(tema::inchiostro()));
         // La spiegazione si legge anche da sola (lettore dello schermo, prove), dentro la voce.
         assert!(copia.contains_rect(h.get_by_label(SPIEGA).rect()));
         // Un tocco sulla spiegazione sceglie la voce.
@@ -884,11 +892,11 @@ mod test {
         );
         h.run_steps(2);
         for testo in ["Copia definitiva", SPIEGA, icone::PICTURE_AS_PDF] {
-            assert_eq!(colore_del_testo(&h, testo), Some(tema::ROSSO), "«{testo}» non è rosso");
+            assert_eq!(colore_del_testo(&h, testo), Some(tema::rosso()), "«{testo}» non è rosso");
         }
-        assert_eq!(colore_del_testo(&h, "Salva una copia"), Some(tema::INCHIOSTRO));
-        assert_eq!(colore_del_testo(&h, "Si può ancora modificare"), Some(tema::MATITA));
-        assert_eq!(colore_del_testo(&h, icone::FILE_COPY), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "Salva una copia"), Some(tema::inchiostro()));
+        assert_eq!(colore_del_testo(&h, "Si può ancora modificare"), Some(tema::matita()));
+        assert_eq!(colore_del_testo(&h, icone::FILE_COPY), Some(tema::matita()));
         let definitiva = h.get_by_label("Copia definitiva").rect();
         assert!(definitiva.contains_rect(rettangolo_del_testo(&h, SPIEGA).unwrap()));
         h.get_by_label("Copia definitiva").click();

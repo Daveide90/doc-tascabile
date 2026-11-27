@@ -40,6 +40,11 @@ struct Finta {
     presentazione: bool,
     /// La modalità riservata: sul telefono FLAG_SECURE e finestre di altre app nascoste.
     riservata: bool,
+    /// Il telefono finto in modalità scura, la sua lingua (di base l'italiano) e il tema che
+    /// l'app ha dato alle barre di sistema.
+    sistema_scuro: bool,
+    lingua: Option<String>,
+    tema_delle_barre: Option<bool>,
     /// L'impronta: quello che risponde la finestra finta (riuscita, se le prove non dicono
     /// altro), quante se ne sono chieste, e la richiesta che aspetta il suo esito.
     impronta_simulata: Option<crate::EsitoImpronta>,
@@ -134,9 +139,16 @@ impl Piattaforma {
     /// Per i test: cartelle dell'app e della cache (create al primo uso) e radice dei documenti
     /// scelte da chi prova.
     pub fn con_cartelle(app: PathBuf, cache: PathBuf, radice: PathBuf) -> Self {
+        // Le schermate delle prove nel tema scuro e nelle altre lingue: il telefono finto scuro con
+        // TASCABILE_SISTEMA_SCURO, nella lingua di TASCABILE_LINGUA («en», «es»…).
+        let finta = Finta {
+            sistema_scuro: std::env::var_os("TASCABILE_SISTEMA_SCURO").is_some(),
+            lingua: std::env::var("TASCABILE_LINGUA").ok().filter(|l| !l.is_empty()),
+            ..Finta::default()
+        };
         Self {
             rete: RefCell::default(),
-            finta: RefCell::default(),
+            finta: RefCell::new(finta),
             richieste: RichiesteTastiera::nuove(),
             app,
             cache,
@@ -237,6 +249,38 @@ impl Piattaforma {
     }
 
     /// Per le prove: la modalità riservata è accesa.
+    /// Il telefono è in modalità scura (sul PC: quello che dicono le prove, di base no).
+    pub fn sistema_scuro(&self) -> bool {
+        self.finta.borrow().sistema_scuro
+    }
+
+    /// La lingua del telefono, come codice ISO 639 («it», «en», «es»…): sul PC quella che dicono
+    /// le prove, di base l'italiano.
+    pub fn lingua_di_sistema(&self) -> String {
+        self.finta.borrow().lingua.clone().unwrap_or_else(|| "it".to_string())
+    }
+
+    /// Le barre di sistema e il fondo della finestra col tema dell'app (sul telefono
+    /// `MainActivity.tascabileTema`).
+    pub fn tema_di_sistema(&self, scuro: bool) {
+        self.finta.borrow_mut().tema_delle_barre = Some(scuro);
+    }
+
+    /// Per le prove: il telefono finto in modalità scura, o no.
+    pub fn simula_sistema_scuro(&self, scuro: bool) {
+        self.finta.borrow_mut().sistema_scuro = scuro;
+    }
+
+    /// Per le prove: la lingua del telefono finto.
+    pub fn simula_lingua(&self, lingua: &str) {
+        self.finta.borrow_mut().lingua = Some(lingua.to_string());
+    }
+
+    /// Per le prove: il tema dato alle barre di sistema (vero: scuro), se è stato dato.
+    pub fn tema_delle_barre(&self) -> Option<bool> {
+        self.finta.borrow().tema_delle_barre
+    }
+
     pub fn riservata_accesa(&self) -> bool {
         self.finta.borrow().riservata
     }

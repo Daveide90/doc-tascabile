@@ -36,6 +36,7 @@ use tascabile_touch::{
 use crate::pdf_compila::{Bersaglio, RISCRIVI, TOGLI};
 use crate::pdf_lavoro::ModoPdf;
 use crate::{Errore, TascabileApp};
+use tascabile_touch::t;
 
 pub(crate) const AGGIUNGI_TESTO: &str = "Aggiungi testo";
 pub(crate) const IMMAGINE: &str = "Immagine";
@@ -464,7 +465,7 @@ impl TascabileApp {
         {
             let presa = r.expand(BORDO).intersect(pagine);
             let risposta = ui.interact(presa, Id::new(("oggetto_pdf", o.chiave())), Sense::click_and_drag());
-            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, nome_dell_oggetto(&o)));
+            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(nome_dell_oggetto(&o))));
             let origine = ui.input(|i| i.pointer.press_origin());
             let fin_qui = |r: &egui::Response| match (r.interact_pointer_pos(), origine) {
                 (Some(a), Some(o)) => a - o,
@@ -498,14 +499,19 @@ impl TascabileApp {
             if dove != r {
                 painter.rect_filled(dove, 2.0, FONDO_SPOSTA);
             }
-            painter.rect_stroke(dove, 2.0, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+            painter.rect_stroke(dove, 2.0, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
             if si_muove {
                 let centro = dove.right_bottom() + Vec2::splat(FUORI_DALL_ANGOLO);
-                painter.line_segment([dove.right_bottom(), centro], Stroke::new(1.5, tema::BLU));
-                painter.circle(centro, MANIGLIA, tema::BLU, Stroke::new(2.0, tema::FOGLIO));
-                let m =
-                    ui.interact(Rect::from_center_size(centro, Vec2::splat(PRESA_MANIGLIA)), Id::new(("maniglia_oggetto", o.chiave())), Sense::drag());
-                m.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, if o.con_proporzioni() { "Ingrandisci" } else { "Allarga" }));
+                painter.line_segment([dove.right_bottom(), centro], Stroke::new(1.5, tema::pagina::BLU));
+                painter.circle(centro, MANIGLIA, tema::pagina::BLU, Stroke::new(2.0, tema::pagina::FOGLIO));
+                let m = ui.interact(
+                    Rect::from_center_size(centro, Vec2::splat(PRESA_MANIGLIA)),
+                    Id::new(("maniglia_oggetto", o.chiave())),
+                    Sense::drag(),
+                );
+                m.widget_info(|| {
+                    WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(if o.con_proporzioni() { "Ingrandisci" } else { "Allarga" }))
+                });
                 if m.drag_started() {
                     p.modifica.trascina = Some(Trascina::Misura(Vec2::ZERO));
                 }
@@ -530,20 +536,21 @@ impl TascabileApp {
         {
             let testo = s.campo.testo();
             let font = Carattere::Testo.font(&ctx, posto.misura);
-            let (mostrato, colore) = if testo.is_empty() { (crate::pdf_compila::VUOTO_TESTO, tema::MATITA) } else { (testo, posto.colore) };
+            let (mostrato, colore) = if testo.is_empty() { (crate::pdf_compila::VUOTO_TESTO, tema::pagina::MATITA) } else { (testo, posto.colore) };
             let g = painter.layout(mostrato.to_string(), font, colore, posto.largo);
             // Un paragrafo allargabile è largo quanto la sua larghezza di adesso: si vede fin dove
             // arriva il testo prima di andare a capo.
             let largo_del_riquadro = if posto.allargabile.is_some() { posto.largo } else { posto.riquadro.width() };
-            let dentro = Rect::from_min_size(posto.riquadro.min, vec2(largo_del_riquadro, posto.riquadro.height()).max(g.size())).expand2(vec2(4.0, 3.0));
-            painter.rect(dentro, 2.0, tema::FOGLIO, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+            let dentro =
+                Rect::from_min_size(posto.riquadro.min, vec2(largo_del_riquadro, posto.riquadro.height()).max(g.size())).expand2(vec2(4.0, 3.0));
+            painter.rect(dentro, 2.0, tema::pagina::FOGLIO, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
             let origine = dentro.min + vec2(4.0, 3.0);
             painter.galley(origine, g.clone(), colore);
             let cursore = if testo.is_empty() { 0 } else { testo.get(..s.campo.selezione().1).map_or(0, |t| t.chars().count()) };
             let c = g.pos_from_cursor(egui::text::CCursor::new(cursore)).translate(origine.to_vec2());
-            painter.rect_filled(Rect::from_min_max(pos2(c.left() - 1.0, c.top()), pos2(c.left() + 1.0, c.bottom())), 0.0, tema::BLU);
+            painter.rect_filled(Rect::from_min_max(pos2(c.left() - 1.0, c.top()), pos2(c.left() + 1.0, c.bottom())), 0.0, tema::pagina::BLU);
             let risposta = ui.interact(dentro, Id::new("scrittura_sulla_pagina"), Sense::click_and_drag());
-            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, SCRITTURA_SULLA_PAGINA));
+            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::TextEdit, true, tascabile_touch::t(SCRITTURA_SULLA_PAGINA)));
             if (risposta.clicked() || risposta.drag_started() || risposta.dragged())
                 && let Some(dove) = risposta.interact_pointer_pos()
             {
@@ -556,9 +563,19 @@ impl TascabileApp {
             let mut dopo_la_presa = 0.0;
             if let Some((base, massimo)) = posto.allargabile {
                 let centro = pos2(dentro.right() + 8.0, dentro.center().y);
-                painter.rect(Rect::from_center_size(centro, vec2(7.0, 26.0)), 3.5, tema::BLU, Stroke::new(1.5, tema::FOGLIO), StrokeKind::Outside);
-                let presa = ui.interact(Rect::from_center_size(centro, vec2(PRESA_MANIGLIA, PRESA_MANIGLIA.max(dentro.height()))), Id::new("allarga_scrittura"), Sense::drag());
-                presa.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, ALLARGA_SCRITTURA));
+                painter.rect(
+                    Rect::from_center_size(centro, vec2(7.0, 26.0)),
+                    3.5,
+                    tema::pagina::BLU,
+                    Stroke::new(1.5, tema::pagina::FOGLIO),
+                    StrokeKind::Outside,
+                );
+                let presa = ui.interact(
+                    Rect::from_center_size(centro, vec2(PRESA_MANIGLIA, PRESA_MANIGLIA.max(dentro.height()))),
+                    Id::new("allarga_scrittura"),
+                    Sense::drag(),
+                );
+                presa.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(ALLARGA_SCRITTURA)));
                 if presa.dragged() {
                     let k = posto.largo / base.max(1.0) + presa.drag_delta().x / base.max(1.0);
                     p.modifica.allargata = Some(k.clamp(0.3, massimo));
@@ -579,16 +596,16 @@ impl TascabileApp {
             let x = angolo.x.min(pagine.right() - lato - 4.0).max(pagine.left() + 4.0);
             let y = angolo.y.min(pagine.bottom() - lato - 4.0).max(pagine.top() + 4.0);
             let quadro = Rect::from_min_size(pos2(x, y), Vec2::splat(lato));
-            painter.circle(quadro.center(), lato / 2.0, tema::FOGLIO, Stroke::new(1.0, TRATTO));
-            if ui.put(quadro, PulsanteIcona::new(icone::CHECK, crate::pdf_compila::FATTO).colore(tema::BLU)).clicked() {
+            painter.circle(quadro.center(), lato / 2.0, tema::pagina::FOGLIO, Stroke::new(1.0, TRATTO));
+            if ui.put(quadro, PulsanteIcona::new(icone::CHECK, crate::pdf_compila::FATTO).colore(tema::pagina::BLU)).clicked() {
                 azione = Some(Box::new(|app| app.conferma_scrittura_pdf(true)));
             }
         }
         if let Some((pagina, pt)) = p.modifica.proposta
             && let Some(r) = p.lettore.sullo_schermo(pagina, [pt.x, pt.y, pt.x, pt.y])
         {
-            painter.circle(r.center(), 9.0, FONDO_SPOSTA, Stroke::new(1.5, tema::BLU));
-            painter.circle_filled(r.center(), 3.5, tema::BLU);
+            painter.circle(r.center(), 9.0, FONDO_SPOSTA, Stroke::new(1.5, tema::pagina::BLU));
+            painter.circle_filled(r.center(), 3.5, tema::pagina::BLU);
         }
         self.disegna_i_link(ui, pagine);
         let azione = match azione {
@@ -677,7 +694,10 @@ impl TascabileApp {
         p.modifica.link_scelto = None;
         let k = p.lettore.dp_per_pt(pagina).max(1e-3);
         match oggetto_sotto(&oggetti, pt, BORDO / k).cloned() {
-            Some(o) if matches!(o.genere, GenereOggetto::Testo | GenereOggetto::Scansione) || (p.modifica.scelto == Some(o.chiave()) && o.genere.testo()) => {
+            Some(o)
+                if matches!(o.genere, GenereOggetto::Testo | GenereOggetto::Scansione)
+                    || (p.modifica.scelto == Some(o.chiave()) && o.genere.testo()) =>
+            {
                 p.modifica.scelto = Some(o.chiave());
                 self.riscrivi_oggetto_pdf(&o);
             }
@@ -814,7 +834,7 @@ impl TascabileApp {
         let Some(p) = self.pdf.as_mut() else { return };
         let painter = ui.painter_at(pagine);
         let risposta = ui.interact(pagine, Id::new("oscura_pdf"), Sense::click_and_drag());
-        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, DISEGNA));
+        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(DISEGNA)));
         let dita = ui.input(|i| i.multi_touch().is_some()) || p.lettore.pizzica();
         let Some(o) = p.modifica.oscura.as_mut() else { return };
         o.scelto = o.scelto.filter(|i| *i < o.rettangoli.len());
@@ -898,9 +918,9 @@ impl TascabileApp {
             painter.rect(s, 0.0, NERO, Stroke::new(1.5, ROSSO), StrokeKind::Outside);
             if o.scelto == Some(i) {
                 // Il rettangolo scelto: il bordo blu e le due maniglie.
-                painter.rect_stroke(s.expand(1.5), 0.0, Stroke::new(2.0, tema::BLU), StrokeKind::Outside);
+                painter.rect_stroke(s.expand(1.5), 0.0, Stroke::new(2.0, tema::pagina::BLU), StrokeKind::Outside);
                 for m in maniglie_oscura(s) {
-                    painter.circle(m, MANIGLIA, tema::BLU, Stroke::new(2.0, tema::FOGLIO));
+                    painter.circle(m, MANIGLIA, tema::pagina::BLU, Stroke::new(2.0, tema::pagina::FOGLIO));
                 }
             }
         }
@@ -910,10 +930,10 @@ impl TascabileApp {
         let (pronti, scelto) = (!o.rettangoli.is_empty(), o.scelto);
         let sotto = Rect::from_center_size(pos2(zona.center().x, zona.bottom() - 40.0), vec2(1.0, 1.0));
         let dice = if scelto.is_some() { MODELLA } else { DISEGNA };
-        let g = painter.layout(dice.to_string(), Carattere::Testo.font(&ctx, 14.0), tema::FOGLIO, zona.width() - 48.0);
+        let g = painter.layout(t(dice).to_string(), Carattere::Testo.font(&ctx, 14.0), tema::pagina::FOGLIO, zona.width() - 48.0);
         let fondo = Rect::from_center_size(pos2(zona.center().x, zona.top() + 28.0), g.size() + vec2(24.0, 14.0));
-        painter.rect_filled(fondo, 8.0, tema::INCHIOSTRO);
-        painter.galley(fondo.min + vec2(12.0, 7.0), g, tema::FOGLIO);
+        painter.rect_filled(fondo, 8.0, tema::pagina::INCHIOSTRO);
+        painter.galley(fondo.min + vec2(12.0, 7.0), g, tema::pagina::FOGLIO);
         // «Lascia stare», poi «Togli» se un rettangolo è scelto, poi «Applica» se ce ne sono.
         let mut barra = BarraContesto::new().azione(icone::CLOSE, ANNULLA_OSCURA);
         if scelto.is_some() {
@@ -974,7 +994,10 @@ impl TascabileApp {
                     diagnosi("pdf: testo aggiunto riscritto con un carattere che non si scrive");
                     self.errore = Some(Errore {
                         titolo: "Testo non riscritto",
-                        testo: format!("Il carattere «{c}» non si può scrivere in un testo aggiunto: le lettere italiane e «€» sì, i simboli no."),
+                        testo: tascabile_touch::tf!(
+                            "Il carattere «{}» non si può scrivere in un testo aggiunto: le lettere italiane e «€» sì, i simboli no.",
+                            c
+                        ),
                     });
                     return;
                 }
@@ -1021,7 +1044,10 @@ impl TascabileApp {
                     diagnosi("pdf: testo nuovo con un carattere che non si scrive");
                     self.errore = Some(Errore {
                         titolo: "Testo non aggiunto",
-                        testo: format!("Il carattere «{c}» non si può scrivere in un testo nuovo: le lettere italiane e «€» sì, i simboli no."),
+                        testo: tascabile_touch::tf!(
+                            "Il carattere «{}» non si può scrivere in un testo nuovo: le lettere italiane e «€» sì, i simboli no.",
+                            c
+                        ),
                     });
                     return;
                 }
@@ -1401,8 +1427,10 @@ impl TascabileApp {
             Scelta::Metti => {
                 let testo = FILIGRANE.get(p.modifica.filigrana).map_or(p.modifica.filigrana_scritta.clone(), |t| t.to_string());
                 if let Some(c) = carattere_che_manca(&testo) {
-                    self.errore =
-                        Some(Errore { titolo: "Filigrana non messa", testo: format!("Il carattere «{c}» non si può scrivere in una filigrana.") });
+                    self.errore = Some(Errore {
+                        titolo: "Filigrana non messa",
+                        testo: tascabile_touch::tf!("Il carattere «{}» non si può scrivere in una filigrana.", c),
+                    });
                     return;
                 }
                 self.fogli_pdf.filigrana.chiudi();
@@ -1473,8 +1501,10 @@ impl TascabileApp {
             }
             Scelta::Metti => {
                 if let Some(c) = carattere_che_manca(&p.modifica.intestazione) {
-                    self.errore =
-                        Some(Errore { titolo: "Numeri non messi", testo: format!("Il carattere «{c}» non si può scrivere nell'intestazione.") });
+                    self.errore = Some(Errore {
+                        titolo: "Numeri non messi",
+                        testo: tascabile_touch::tf!("Il carattere «{}» non si può scrivere nell'intestazione.", c),
+                    });
                     return;
                 }
                 self.fogli_pdf.numeri.chiudi();
@@ -1562,7 +1592,7 @@ impl TascabileApp {
                 continue;
             }
             if p.modifica.link_scelto == Some((c.pagina, c.indice)) {
-                painter.rect_stroke(r.expand(2.0), 2.0, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+                painter.rect_stroke(r.expand(2.0), 2.0, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
             } else {
                 tratteggia(&painter, r.expand(1.0));
             }
@@ -1577,7 +1607,7 @@ impl TascabileApp {
         let Some(p) = self.pdf.as_mut() else { return };
         let Some(f) = p.modifica.forme.as_mut() else { return };
         let risposta = ui.interact(pagine, Id::new("forme_pdf"), Sense::click_and_drag());
-        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, DISEGNA_FORMA));
+        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(DISEGNA_FORMA)));
         let dita = ui.input(|i| i.multi_touch().is_some()) || p.lettore.pizzica();
         if dita {
             f.disegna = None;
@@ -1671,7 +1701,7 @@ impl TascabileApp {
         let Some(p) = self.pdf.as_mut() else { return };
         let painter = ui.painter_at(pagine);
         let risposta = ui.interact(pagine, Id::new("link_pdf"), Sense::click_and_drag());
-        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, DISEGNA_LINK));
+        risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(DISEGNA_LINK)));
         let Some(l) = p.modifica.link.as_mut() else { return };
         if risposta.drag_started()
             && let Some(da) = ui.input(|i| i.pointer.press_origin())
@@ -1701,10 +1731,10 @@ impl TascabileApp {
                 apri = true;
             }
         }
-        let g = painter.layout(DISEGNA_LINK.to_string(), Carattere::Testo.font(&ctx, 14.0), tema::FOGLIO, zona.width() - 48.0);
+        let g = painter.layout(t(DISEGNA_LINK).to_string(), Carattere::Testo.font(&ctx, 14.0), tema::pagina::FOGLIO, zona.width() - 48.0);
         let fondo = Rect::from_center_size(pos2(zona.center().x, zona.top() + 28.0), g.size() + vec2(24.0, 14.0));
-        painter.rect_filled(fondo, 8.0, tema::INCHIOSTRO);
-        painter.galley(fondo.min + vec2(12.0, 7.0), g, tema::FOGLIO);
+        painter.rect_filled(fondo, 8.0, tema::pagina::INCHIOSTRO);
+        painter.galley(fondo.min + vec2(12.0, 7.0), g, tema::pagina::FOGLIO);
         let sotto = Rect::from_center_size(pos2(zona.center().x, zona.bottom() - 40.0), vec2(1.0, 1.0));
         if BarraContesto::new().azione(icone::CLOSE, ANNULLA_OSCURA).mostra_in_primo_piano(&ctx, Id::new("barra_link"), sotto, zona).is_some() {
             diagnosi("pdf: link lasciato stare");
@@ -1792,7 +1822,7 @@ impl TascabileApp {
                         r = Some(Scelta::Scrivi);
                     }
                 } else {
-                    let valore = format!("Pagina {} di {pagine}", pagina + 1);
+                    let valore = tascabile_touch::tf!("Pagina {} di {}", pagina + 1, pagine);
                     if let Some(v) =
                         Passo::new(&valore, "Pagina prima", "Pagina dopo").meno_spento(pagina == 0).piu_spento(pagina + 1 >= pagine).mostra(ui)
                     {
@@ -1941,7 +1971,9 @@ pub(crate) fn posto_sulla_pagina(p: &crate::schermo_pdf::PdfAperto, ctx: &egui::
             let righe: Vec<&str> = o.righe.lines().filter(|r| !r.trim().is_empty()).collect();
             let quante = righe.len().max(1);
             let (misura, colore) = match o.genere {
-                GenereOggetto::TestoAggiunto { misura, colore } => (misura * k, Color32::from_rgb((colore[0] * 255.0) as u8, (colore[1] * 255.0) as u8, (colore[2] * 255.0) as u8)),
+                GenereOggetto::TestoAggiunto { misura, colore } => {
+                    (misura * k, Color32::from_rgb((colore[0] * 255.0) as u8, (colore[1] * 255.0) as u8, (colore[2] * 255.0) as u8))
+                }
                 GenereOggetto::Testo | GenereOggetto::Scansione => {
                     let alta = r.height() / quante as f32 * 0.85;
                     let prova = 20.0;
@@ -1950,7 +1982,7 @@ pub(crate) fn posto_sulla_pagina(p: &crate::schermo_pdf::PdfAperto, ctx: &egui::
                         .map(|t| ctx.fonts_mut(|f| f.layout_no_wrap(t.to_string(), Carattere::Testo.font(ctx, prova), Color32::PLACEHOLDER).size().x))
                         .fold(0.0f32, f32::max);
                     let larga = if piu_larga > 0.0 { prova * r.width() / piu_larga } else { alta };
-                    (alta.min(larga), tema::INCHIOSTRO)
+                    (alta.min(larga), tema::pagina::INCHIOSTRO)
                 }
                 _ => return None,
             };

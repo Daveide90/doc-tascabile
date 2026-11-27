@@ -279,7 +279,9 @@ pub fn cartella_dell_omonimo(radice: &Path, nome: &str) -> Option<&'static str> 
     }
     SCORCIATOIE
         .iter()
-        .filter_map(|(etichetta, dove)| fs::metadata(radice.join(dove).join(nome)).ok().filter(|m| m.is_file()).map(|m| (m.modified().ok(), *etichetta)))
+        .filter_map(|(etichetta, dove)| {
+            fs::metadata(radice.join(dove).join(nome)).ok().filter(|m| m.is_file()).map(|m| (m.modified().ok(), *etichetta))
+        })
         .max_by_key(|(quando, _)| *quando)
         .map(|(_, etichetta)| etichetta)
 }
@@ -299,9 +301,7 @@ pub fn lo_stesso_file(radice: &Path, nome: &str, byte: &[u8], da: Option<&str>) 
     let uguale = |p: &Path| fs::metadata(p).is_ok_and(|m| m.is_file() && m.len() == byte.len() as u64) && fs::read(p).is_ok_and(|b| b == byte);
     // Un nome con dentro una cartella non è un nome di file.
     let semplice = !nome.is_empty() && Path::new(nome).file_name().is_some_and(|f| f == nome);
-    if semplice
-        && let Some(p) = cartelle.iter().map(|c| c.join(nome)).find(|p| uguale(p))
-    {
+    if semplice && let Some(p) = cartelle.iter().map(|c| c.join(nome)).find(|p| uguale(p)) {
         return Some(p);
     }
     for c in &cartelle {

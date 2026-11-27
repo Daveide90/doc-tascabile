@@ -228,7 +228,7 @@ impl LettoreSlide {
         if self.ultimo_movimento.is_none() {
             self.ultimo_movimento = Some(adesso);
         }
-        ui.painter().rect_filled(rect, 0.0, tema::TAVOLO);
+        ui.painter().rect_filled(rect, 0.0, tema::tavolo());
         let vista = rect.size();
         // Il telefono girato: la slide che si leggeva resta in cima.
         if let Some(imp) = &self.imp
@@ -426,13 +426,13 @@ impl LettoreSlide {
         for i in imp.visibili(viewport) {
             let r = imp.rettangolo(i).translate(origine.to_vec2());
             tema::dipingi_ombra(painter, r, 0, &tema::OMBRA_PAGINA);
-            painter.rect_filled(r, 0.0, tema::FOGLIO);
+            painter.rect_filled(r, 0.0, tema::pagina::FOGLIO);
             if let Some(d) = self.disegni.get(&i) {
                 painter.image(d.texture.id(), r, uv, Color32::WHITE);
             }
             if self.nascoste[i] {
-                painter.rect_filled(r, 0.0, tema::VELO.gamma_multiply(0.75));
-                painter.circle_filled(r.center(), RAGGIO_NASCOSTA, tema::INDICATORE);
+                painter.rect_filled(r, 0.0, tema::velo().gamma_multiply(0.75));
+                painter.circle_filled(r.center(), RAGGIO_NASCOSTA, tema::indicatore());
                 let g = painter.layout_no_wrap(icone::VISIBILITY_OFF.to_string(), Carattere::Icona.font(ui.ctx(), ICONA_NASCOSTA), Color32::WHITE);
                 painter.galley(r.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
             }
@@ -517,26 +517,26 @@ impl LettoreSlide {
                 );
                 let numero = Rect::from_min_size(cella.left_bottom(), vec2(cella_w, NUMERO_MINIATURA));
                 let risposta = ui.interact(cella.union(numero), self.id.with(("miniatura", i)), Sense::click());
-                let etichetta = format!("Slide {}", i + 1);
-                risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &etichetta));
+                let etichetta = tascabile_touch::tf!("Slide {}", i + 1);
+                risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(&etichetta)));
                 let painter = ui.painter();
                 tema::dipingi_ombra(painter, cella, 0, &tema::OMBRA_PAGINA);
-                painter.rect_filled(cella, 0.0, tema::FOGLIO);
+                painter.rect_filled(cella, 0.0, tema::pagina::FOGLIO);
                 if let Some(d) = self.miniature.get(&i).or_else(|| self.disegni.get(&i)) {
                     painter.image(d.texture.id(), cella, uv, Color32::WHITE);
                 }
                 if self.nascoste[i] {
-                    painter.rect_filled(cella, 0.0, tema::VELO.gamma_multiply(0.75));
-                    let g = painter.layout_no_wrap(icone::VISIBILITY_OFF.to_string(), Carattere::Icona.font(ui.ctx(), 20.0), tema::MATITA);
+                    painter.rect_filled(cella, 0.0, tema::velo().gamma_multiply(0.75));
+                    let g = painter.layout_no_wrap(icone::VISIBILITY_OFF.to_string(), Carattere::Icona.font(ui.ctx(), 20.0), tema::matita());
                     painter.galley(cella.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
                 }
                 if risposta.is_pointer_button_down_on() {
-                    painter.rect_filled(cella, 0.0, tema::SELEZIONE);
+                    painter.rect_filled(cella, 0.0, tema::selezione());
                 }
                 if i == corrente {
-                    painter.rect_stroke(cella.expand(1.0), 2.0, egui::Stroke::new(2.5, tema::BLU), egui::StrokeKind::Outside);
+                    painter.rect_stroke(cella.expand(1.0), 2.0, egui::Stroke::new(2.5, tema::blu()), egui::StrokeKind::Outside);
                 }
-                let (font, colore) = if i == corrente { (Carattere::Grassetto, tema::BLU) } else { (Carattere::Testo, tema::MATITA) };
+                let (font, colore) = if i == corrente { (Carattere::Grassetto, tema::blu()) } else { (Carattere::Testo, tema::matita()) };
                 let g = painter.layout_no_wrap((i + 1).to_string(), font.font(ui.ctx(), 13.0), colore);
                 painter.galley(numero.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
                 if risposta.clicked() {
@@ -599,13 +599,14 @@ impl LettoreSlide {
         }
         let testo = format!("{} / {n}", self.corrente() + 1);
         let font = Carattere::Grassetto.font(ui.ctx(), 13.0);
-        let g = ui.painter().layout_no_wrap(testo.clone(), font, Color32::WHITE.gamma_multiply(alfa));
+        let g = ui.painter().layout_no_wrap(testo.clone(), font, tema::sull_indicatore().gamma_multiply(alfa));
         let misura = vec2(g.size().x + 24.0, (g.size().y + 10.0).max(28.0));
         let centro = pos2(rect.center().x, rect.top() + rect.height() * 2.0 / 3.0);
         let pillola = Rect::from_center_size(centro, misura);
-        ui.painter().rect_filled(pillola, misura.y / 2.0, tema::INDICATORE.gamma_multiply(alfa));
+        ui.painter().rect_filled(pillola, misura.y / 2.0, tema::indicatore().gamma_multiply(alfa));
         ui.painter().galley(pillola.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
-        ui.interact(pillola, self.id.with("slide"), Sense::hover()).widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, &testo));
+        ui.interact(pillola, self.id.with("slide"), Sense::hover())
+            .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(&testo)));
     }
 }
 

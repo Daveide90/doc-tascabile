@@ -196,9 +196,9 @@ enum Azione {
 /// «2 campi da compilare», «1 campo da compilare», «tutto compilato».
 pub(crate) fn da_compilare_detto(n: usize) -> String {
     match n {
-        0 => "tutto compilato".to_string(),
-        1 => "1 campo da compilare".to_string(),
-        n => format!("{n} campi da compilare"),
+        0 => tascabile_touch::t("tutto compilato").to_string(),
+        1 => tascabile_touch::t("1 campo da compilare").to_string(),
+        n => tascabile_touch::tf!("{} campi da compilare", n),
     }
 }
 
@@ -206,7 +206,7 @@ pub(crate) fn da_compilare_detto(n: usize) -> String {
 fn evidenzia(painter: &egui::Painter, r: Rect, pieno: bool) {
     let raggio = (r.height().min(r.width()) / 5.0).min(4.0);
     if pieno {
-        painter.rect(r, raggio, FONDO_PIENO, Stroke::new(1.5, tema::BLU), StrokeKind::Inside);
+        painter.rect(r, raggio, FONDO_PIENO, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Inside);
     } else {
         painter.rect_filled(r, raggio, FONDO_VUOTO);
         tratteggia(painter, r.shrink(0.5), Stroke::new(1.0, TRATTO));
@@ -221,15 +221,15 @@ fn tratteggia(painter: &egui::Painter, r: Rect, tratto: Stroke) {
 /// Il campo che si scrive, sulla pagina: bianco col bordo blu e il testo di adesso (punti per una
 /// password), in alto se ha più righe.
 fn dipingi_in_scrittura(painter: &egui::Painter, ctx: &egui::Context, r: Rect, testo: &str, segreto: bool, righe: bool) {
-    painter.rect(r, 3.0, tema::FOGLIO, Stroke::new(2.0, tema::BLU), StrokeKind::Outside);
+    painter.rect(r, 3.0, tema::pagina::FOGLIO, Stroke::new(2.0, tema::pagina::BLU), StrokeKind::Outside);
     let mostrato: String = if segreto { testo.chars().map(|_| tascabile_touch::PUNTO_SEGRETO).collect() } else { testo.to_string() };
     let misura = if righe { 11.0 } else { (r.height() * 0.62).clamp(8.0, 22.0) };
-    let g = painter.layout_no_wrap(mostrato, Carattere::Testo.font(ctx, misura), tema::INCHIOSTRO);
+    let g = painter.layout_no_wrap(mostrato, Carattere::Testo.font(ctx, misura), tema::pagina::INCHIOSTRO);
     let y = if righe { r.top() + 2.0 } else { r.center().y - g.size().y / 2.0 };
     let dentro = painter.with_clip_rect(r.intersect(painter.clip_rect()));
     // Il testo lungo scorre a sinistra, perché si veda la fine, dove si scrive.
     let x = if g.size().x > r.width() - 8.0 { r.right() - 4.0 - g.size().x } else { r.left() + 4.0 };
-    dentro.galley(pos2(x, y), g, tema::INCHIOSTRO);
+    dentro.galley(pos2(x, y), g, tema::pagina::INCHIOSTRO);
 }
 
 /// Dove si prende un campo col dito: il suo posto, allargato fino a `PRESA_MINIMA` per lato.
@@ -271,10 +271,10 @@ fn etichetta(c: &Campo, posto: usize, i: usize) -> String {
             GenereCampo::Firma => "Firma",
             GenereCampo::Altro => "Campo",
         };
-        format!("{genere} {}", i + 1)
+        format!("{} {}", tascabile_touch::t(genere), i + 1)
     });
     match (c.genere, c.posti.get(posto).and_then(|p| p.acceso_come.as_deref())) {
-        (GenereCampo::Radio, Some(come)) => format!("{base}: {come}"),
+        (GenereCampo::Radio, Some(come)) => tascabile_touch::tf!("{}: {}", base, come),
         _ => base,
     }
 }
@@ -306,15 +306,15 @@ pub(crate) fn oggi() -> Data {
 
 /// Una riga di un foglio di scelta, alta 52 dp: l'icona (radio o casella, blu se scelta) e il
 /// testo; la linea sottile sotto, se non è l'ultima.
-fn riga_scelta(ui: &mut egui::Ui, icona: &str, testo: &str, accesa: bool, ultima: bool) -> egui::Response {
+pub(crate) fn riga_scelta(ui: &mut egui::Ui, icona: &str, testo: &str, accesa: bool, ultima: bool) -> egui::Response {
     let ctx = ui.ctx().clone();
     let largo = ui.available_width();
     let (rect, r) = ui.allocate_exact_size(vec2(largo, 52.0), Sense::click());
-    r.widget_info(|| WidgetInfo::selected(WidgetType::RadioButton, true, accesa, testo));
+    r.widget_info(|| WidgetInfo::selected(WidgetType::RadioButton, true, accesa, tascabile_touch::t(testo)));
     if r.is_pointer_button_down_on() {
-        ui.painter().rect_filled(rect, egui::CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::PREMUTO);
+        ui.painter().rect_filled(rect, egui::CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::premuto());
     }
-    let colore = if accesa { tema::BLU } else { tema::MATITA };
+    let colore = if accesa { tema::blu() } else { tema::matita() };
     let carattere = if accesa { Carattere::IconaPiena } else { Carattere::Icona };
     ui.painter().text(
         pos2(rect.left() + 8.0 + tema::ICONA / 2.0, rect.center().y),
@@ -324,12 +324,12 @@ fn riga_scelta(ui: &mut egui::Ui, icona: &str, testo: &str, accesa: bool, ultima
         colore,
     );
     let mut job =
-        egui::text::LayoutJob::single_section(testo.to_string(), egui::TextFormat::simple(Carattere::Testo.font(&ctx, 16.0), tema::INCHIOSTRO));
+        egui::text::LayoutJob::single_section(testo.to_string(), egui::TextFormat::simple(Carattere::Testo.font(&ctx, 16.0), tema::inchiostro()));
     job.wrap = egui::text::TextWrapping::truncate_at_width((largo - 56.0).max(24.0));
     let g = ui.painter().layout_job(job);
-    ui.painter().galley(pos2(rect.left() + 48.0, rect.center().y - g.size().y / 2.0), g, tema::INCHIOSTRO);
+    ui.painter().galley(pos2(rect.left() + 48.0, rect.center().y - g.size().y / 2.0), g, tema::inchiostro());
     if !ultima {
-        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::FILO);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::filo());
     }
     r
 }
@@ -412,10 +412,10 @@ impl TascabileApp {
                 let risposta = ui.interact(presa_fra(r, &posti).intersect(pagine), Id::new(("campo_pdf", i, j)), tocco_o_niente(Sense::click()));
                 let nome = etichetta(c, j, i);
                 risposta.widget_info(|| match c.genere {
-                    GenereCampo::Casella => WidgetInfo::selected(WidgetType::Checkbox, true, posto.acceso, &nome),
-                    GenereCampo::Radio => WidgetInfo::selected(WidgetType::RadioButton, true, posto.acceso, &nome),
-                    GenereCampo::Testo => WidgetInfo::labeled(WidgetType::TextEdit, true, &nome),
-                    _ => WidgetInfo::labeled(WidgetType::ComboBox, true, &nome),
+                    GenereCampo::Casella => WidgetInfo::selected(WidgetType::Checkbox, true, posto.acceso, tascabile_touch::t(&nome)),
+                    GenereCampo::Radio => WidgetInfo::selected(WidgetType::RadioButton, true, posto.acceso, tascabile_touch::t(&nome)),
+                    GenereCampo::Testo => WidgetInfo::labeled(WidgetType::TextEdit, true, tascabile_touch::t(&nome)),
+                    _ => WidgetInfo::labeled(WidgetType::ComboBox, true, tascabile_touch::t(&nome)),
                 });
                 if risposta.clicked() {
                     azione = Some(Azione::Campo(c.nome.clone(), j));
@@ -441,7 +441,7 @@ impl TascabileApp {
                 crate::pdf_firma::tocca_per_firmare(&painter, &ctx, r);
                 let risposta = ui.interact(r.intersect(pagine), Id::new(("firma_pdf", j, &c.nome)), tocco_o_niente(Sense::click()));
                 let nome = c.suggerimento.clone().unwrap_or_else(|| crate::pdf_firma::TOCCA_PER_FIRMARE.to_string());
-                risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &nome));
+                risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(&nome)));
                 if risposta.clicked() {
                     azione = Some(Azione::Firma(posto.pagina, posto.rettangolo));
                 }
@@ -460,7 +460,7 @@ impl TascabileApp {
             // dito vicino a una spunta la spostava (analisi del 27/10, compila 9).
             let senso = tocco_o_niente(if p.compila.segno == Some(chiave) { Sense::click_and_drag() } else { Sense::click() });
             let risposta = ui.interact(presa_fra(r, &posti_dei_segni).intersect(pagine), Id::new(("segno_pdf", s.pagina, s.indice)), senso);
-            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, nome_del_segno(s)));
+            risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t(nome_del_segno(s))));
             // Il movimento si conta da dove il dito si è appoggiato: egui comincia il trascinamento
             // solo dopo qualche dp, e quelli non vanno persi.
             let origine = ui.input(|i| i.pointer.press_origin());
@@ -496,17 +496,17 @@ impl TascabileApp {
                 anteprima_del_segno(&painter, &ctx, s, dove, dove.height() / r.height().max(1.0) * k_di(s.pagina));
             }
             if p.compila.segno == Some(chiave) {
-                painter.rect_stroke(dove, 2.0, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+                painter.rect_stroke(dove, 2.0, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
                 let centro = dove.right_bottom() + Vec2::splat(FUORI_DALL_ANGOLO);
-                painter.line_segment([dove.right_bottom(), centro], Stroke::new(1.5, tema::BLU));
-                painter.circle(centro, MANIGLIA, tema::BLU, Stroke::new(2.0, tema::FOGLIO));
+                painter.line_segment([dove.right_bottom(), centro], Stroke::new(1.5, tema::pagina::BLU));
+                painter.circle(centro, MANIGLIA, tema::pagina::BLU, Stroke::new(2.0, tema::pagina::FOGLIO));
                 if s.genere != GenereSegno::Altro {
                     let m = ui.interact(
                         Rect::from_center_size(centro, Vec2::splat(PRESA_MANIGLIA)),
                         Id::new(("maniglia_segno", s.pagina, s.indice)),
                         tocco_o_niente(Sense::drag()),
                     );
-                    m.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, "Ingrandisci"));
+                    m.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, tascabile_touch::t("Ingrandisci")));
                     if m.drag_started() {
                         p.compila.trascina = Some(Trascina::Misura { pagina: s.pagina, indice: s.indice, delta: Vec2::ZERO });
                     }
@@ -530,10 +530,11 @@ impl TascabileApp {
             && let Some(a) = p.lettore.sullo_schermo(*pagina, [punto[0], punto[1], punto[0], punto[1]])
         {
             let misura = MISURA_TESTO as f32 * k_di(*pagina);
-            let (testo, colore) = if campo.testo().is_empty() { (VUOTO_TESTO, tema::MATITA) } else { (campo.testo(), tema::INCHIOSTRO) };
+            let (testo, colore) =
+                if campo.testo().is_empty() { (VUOTO_TESTO, tema::pagina::MATITA) } else { (campo.testo(), tema::pagina::INCHIOSTRO) };
             let g = painter.layout_no_wrap(testo.to_string(), Carattere::Testo.font(&ctx, misura.max(6.0)), colore);
             let r = Rect::from_min_size(pos2(a.min.x, a.min.y - g.size().y / 2.0), g.size()).expand2(vec2(3.0, 2.0));
-            painter.rect(r, 2.0, tema::FOGLIO, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+            painter.rect(r, 2.0, tema::pagina::FOGLIO, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
             painter.galley(r.min + vec2(3.0, 2.0), g, colore);
         }
         if let Some(Scrittura { bersaglio: Bersaglio::Segno { pagina, indice }, campo, .. }) = &p.compila.scrittura
@@ -542,14 +543,14 @@ impl TascabileApp {
         {
             let segno = Segno { testo: campo.testo().to_string(), ..s.clone() };
             anteprima_del_segno(&painter, &ctx, &segno, r, k_di(s.pagina));
-            painter.rect_stroke(r, 2.0, Stroke::new(1.5, tema::BLU), StrokeKind::Outside);
+            painter.rect_stroke(r, 2.0, Stroke::new(1.5, tema::pagina::BLU), StrokeKind::Outside);
         }
         // Il punto della proposta.
         if let Some((pagina, pt)) = p.compila.proposta
             && let Some(r) = p.lettore.sullo_schermo(pagina, [pt.x, pt.y, pt.x, pt.y])
         {
-            painter.circle(r.center(), 9.0, FONDO_PIENO, Stroke::new(1.5, tema::BLU));
-            painter.circle_filled(r.center(), 3.5, tema::BLU);
+            painter.circle(r.center(), 9.0, FONDO_PIENO, Stroke::new(1.5, tema::pagina::BLU));
+            painter.circle_filled(r.center(), 3.5, tema::pagina::BLU);
         }
         if azione.is_none()
             && let Some((pagina, pt)) = tocco
@@ -830,7 +831,8 @@ impl TascabileApp {
         // (scriverlo ancora ne poserebbe un altro).
         let chiudi = chiudi || !matches!(bersaglio, Bersaglio::Campo(_));
         // Un paragrafo allargato con la presa è cambiato anche col testo di prima.
-        let allargato = matches!(bersaglio, Bersaglio::Oggetto(_)) && self.pdf.as_ref().and_then(|p| p.modifica.allargata).is_some_and(|k| (k - 1.0).abs() > 0.01);
+        let allargato = matches!(bersaglio, Bersaglio::Oggetto(_))
+            && self.pdf.as_ref().and_then(|p| p.modifica.allargata).is_some_and(|k| (k - 1.0).abs() > 0.01);
         let cambiato = testo != s.confermato || allargato;
         if cambiato {
             let autore = self.impostazioni.autore.clone();
@@ -850,7 +852,8 @@ impl TascabileApp {
                         // Il valore resta giusto, ma senza un carattere del modulo che abbia la
                         // lettera il motore la disegna «?» (analisi del 27/10, critico 12).
                         if let Some(ch) = tascabile_pdf::lettera_fuori_da_winansi(&testo) {
-                            self.avviso_breve.avvisa(format!("«{ch}» non c'è nel carattere del modulo: chi apre il PDF può vedere «?»."));
+                            self.avviso_breve
+                                .avvisa(tascabile_touch::tf!("«{}» non c'è nel carattere del modulo: chi apre il PDF può vedere «?».", ch));
                         }
                     }
                 }
@@ -863,7 +866,10 @@ impl TascabileApp {
                     diagnosi("pdf: fill & sign, testo con un carattere che non si scrive");
                     self.errore = Some(Errore {
                         titolo: "Testo non posato",
-                        testo: format!("«{ch}» non c'è nel carattere di Fill & Sign: nel PDF diventerebbe «?». Le lettere italiane e «€» sì."),
+                        testo: tascabile_touch::tf!(
+                            "«{}» non c'è nel carattere di Fill & Sign: nel PDF diventerebbe «?». Le lettere italiane e «€» sì.",
+                            ch
+                        ),
                     });
                     return;
                 }
@@ -1007,7 +1013,7 @@ impl TascabileApp {
         let mut ui = ui.new_child(UiBuilder::new().max_rect(rect).id_salt("barra della scrittura"));
         let raggio = egui::CornerRadius::same(tema::RAGGIO_FORMATO_SULLA_TASTIERA);
         tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA_FLOTTANTE);
-        ui.painter().rect_filled(rect, raggio, tema::FOGLIO);
+        ui.painter().rect_filled(rect, raggio, tema::foglio());
         ui.allocate_rect(rect, Sense::click());
         let quadro = |x: f32| Rect::from_min_size(pos2(x, rect.center().y - tema::PULSANTE / 2.0), Vec2::splat(tema::PULSANTE));
         let mut sinistra = rect.left() + 6.0;
@@ -1019,7 +1025,7 @@ impl TascabileApp {
             sinistra += tema::PULSANTE + 4.0;
         }
         let mut destra = rect.right() - 6.0 - tema::PULSANTE;
-        let fatto = ui.put(quadro(destra), PulsanteIcona::new(icone::CHECK, FATTO).colore(tema::BLU)).clicked();
+        let fatto = ui.put(quadro(destra), PulsanteIcona::new(icone::CHECK, FATTO).colore(tema::blu())).clicked();
         let mut calendario = false;
         if data.is_some() {
             destra -= tema::PULSANTE;
@@ -1184,7 +1190,7 @@ impl TascabileApp {
                 let (Some(c), Some((_, d))) = (campo.as_ref(), aperto.as_ref()) else { return None };
                 let mut tocco = None;
                 ui.add_space(4.0);
-                ui.label(RichText::new(d.scritta(&formato)).font(Carattere::Grassetto.font(ui.ctx(), 26.0)).color(tema::INCHIOSTRO));
+                ui.label(RichText::new(d.scritta(&formato)).font(Carattere::Grassetto.font(ui.ctx(), 26.0)).color(tema::inchiostro()));
                 ui.add_space(12.0);
                 for (parte, nome, valore) in [
                     (ParteData::Giorno, "Giorno", d.giorno.to_string()),
@@ -1193,10 +1199,11 @@ impl TascabileApp {
                 ] {
                     ui.horizontal(|ui| {
                         ui.set_min_height(tema::PULSANTE);
-                        ui.label(RichText::new(nome).font(Carattere::Testo.font(ui.ctx(), 16.0)).color(tema::INCHIOSTRO));
+                        let nome = tascabile_touch::t(nome);
+                        ui.label(RichText::new(nome).font(Carattere::Testo.font(ui.ctx(), 16.0)).color(tema::inchiostro()));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            let meno = format!("{nome} prima");
-                            let piu = format!("{nome} dopo");
+                            let meno = tascabile_touch::tf!("{} prima", nome);
+                            let piu = tascabile_touch::tf!("{} dopo", nome);
                             match Passo::new(&valore, &meno, &piu).mostra(ui) {
                                 Some(Verso::Meno) => tocco = Some(Tocco::Sposta(parte, false)),
                                 Some(Verso::Piu) => tocco = Some(Tocco::Sposta(parte, true)),
@@ -1338,8 +1345,8 @@ fn anteprima_del_segno(painter: &egui::Painter, ctx: &egui::Context, s: &Segno, 
     painter.rect_filled(dove, 2.0, Color32::from_rgba_unmultiplied(255, 255, 255, 200));
     match s.genere {
         GenereSegno::Testo { misura } if !s.testo.is_empty() => {
-            let g = painter.layout_no_wrap(s.testo.clone(), Carattere::Testo.font(ctx, (misura * dp_per_pt).max(4.0)), tema::INCHIOSTRO);
-            painter.with_clip_rect(dove).galley(pos2(dove.left() + 4.0 * dp_per_pt, dove.center().y - g.size().y / 2.0), g, tema::INCHIOSTRO);
+            let g = painter.layout_no_wrap(s.testo.clone(), Carattere::Testo.font(ctx, (misura * dp_per_pt).max(4.0)), tema::pagina::INCHIOSTRO);
+            painter.with_clip_rect(dove).galley(pos2(dove.left() + 4.0 * dp_per_pt, dove.center().y - g.size().y / 2.0), g, tema::pagina::INCHIOSTRO);
         }
         _ => {}
     }

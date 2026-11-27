@@ -5,7 +5,7 @@ pub mod blocco;
 pub mod formato;
 pub mod server;
 
-pub use blocco::{BloccoControllato, ErroreBlocco, controlla_intestazione};
+pub use blocco::{BloccoControllato, ErroreBlocco, controlla_intestazione, controlla_intestazione_all_altezza};
 pub use formato::{Albero, Attestazione, ErroreFormato, Operazione, Prova};
 pub use server::{Controllo, ErroreData, ErroreRete, Rete, Stato, controlla, fissa};
 

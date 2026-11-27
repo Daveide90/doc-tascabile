@@ -14,6 +14,7 @@ use tascabile_word::revisioni::{Commento, Modifica, StatoRevisioni, data_breve, 
 use wordcraft_engine::doc::Pos;
 
 use crate::{QualeCampo, Schermata, TascabileApp};
+use tascabile_touch::t;
 
 /// Il titolo del foglio e la voce del menu.
 pub(crate) const REVISIONI: &str = "Revisioni";
@@ -68,10 +69,10 @@ fn riga_modifica(ui: &mut egui::Ui, i: usize, m: &Modifica, ultima: bool) -> Opt
             ui.set_width(colonna);
             ui.spacing_mut().item_spacing.y = 2.0;
             ui.add_space(6.0);
-            ui.label(RichText::new(m.genere.nome()).font(Carattere::Grassetto.font(&ctx, 15.0)).color(tema::INCHIOSTRO));
+            ui.label(RichText::new(t(m.genere.nome())).font(Carattere::Grassetto.font(&ctx, 15.0)).color(tema::inchiostro()));
             if !m.testo.is_empty() {
                 let r = ui.add(
-                    Label::new(RichText::new(format!("«{}»", m.testo)).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::INCHIOSTRO))
+                    Label::new(RichText::new(format!("«{}»", m.testo)).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::inchiostro()))
                         .selectable(false),
                 );
                 if ui.interact(r.rect, ui.id().with(("modifica", i)), Sense::click()).clicked() {
@@ -79,7 +80,7 @@ fn riga_modifica(ui: &mut egui::Ui, i: usize, m: &Modifica, ultima: bool) -> Opt
                 }
             }
             let autore = if m.autore.trim().is_empty() { SENZA_NOME } else { m.autore.as_str() };
-            ui.label(RichText::new(autore).font(Carattere::Testo.font(&ctx, 13.0)).color(tema::MATITA));
+            ui.label(RichText::new(t(autore)).font(Carattere::Testo.font(&ctx, 13.0)).color(tema::matita()));
             ui.add_space(6.0);
         });
         if ui.add(PulsanteIcona::new(icone::CHECK, ACCETTA)).clicked() {
@@ -107,8 +108,8 @@ fn scheda_commento(ui: &mut egui::Ui, c: &Commento, ultimo: bool) -> Option<Nell
     };
     ui.add_space(10.0);
     ui.spacing_mut().item_spacing.y = 2.0;
-    ui.label(RichText::new(chi(&c.autore, &c.data)).font(Carattere::Grassetto.font(&ctx, 14.0)).color(tema::MATITA));
-    let testo = ui.add(Label::new(RichText::new(&c.testo).font(Carattere::Testo.font(&ctx, 16.0)).color(tema::INCHIOSTRO)).selectable(false));
+    ui.label(RichText::new(chi(&c.autore, &c.data)).font(Carattere::Grassetto.font(&ctx, 14.0)).color(tema::matita()));
+    let testo = ui.add(Label::new(RichText::new(&c.testo).font(Carattere::Testo.font(&ctx, 16.0)).color(tema::inchiostro())).selectable(false));
     if ui.interact(testo.rect, ui.id().with(("commento", c.id)), Sense::click()).clicked()
         && let Some(a) = &c.ancora
     {
@@ -120,13 +121,13 @@ fn scheda_commento(ui: &mut egui::Ui, c: &Commento, ultimo: bool) -> Option<Nell
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
                 ui.add_space(4.0);
-                ui.label(RichText::new(chi(&r.autore, &r.data)).font(Carattere::Grassetto.font(&ctx, 13.0)).color(tema::MATITA));
-                ui.label(RichText::new(&r.testo).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::INCHIOSTRO));
+                ui.label(RichText::new(chi(&r.autore, &r.data)).font(Carattere::Grassetto.font(&ctx, 13.0)).color(tema::matita()));
+                ui.label(RichText::new(&r.testo).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::inchiostro()));
             });
         });
     }
     if c.risolto {
-        ui.label(RichText::new(format!("{} Risolto", icone::TASK_ALT)).font(Carattere::Grassetto.font(&ctx, 13.0)).color(tema::VERDE));
+        ui.label(RichText::new(format!("{} {}", icone::TASK_ALT, t("Risolto"))).font(Carattere::Grassetto.font(&ctx, 13.0)).color(tema::verde()));
     }
     ui.add_space(4.0);
     // I tre pulsanti si dividono la larghezza: larghi quanto il testo non ci stavano su un
@@ -155,13 +156,13 @@ fn scheda_commento(ui: &mut egui::Ui, c: &Commento, ultimo: bool) -> Option<Nell
 /// La linea sottile fra due righe.
 fn filo(ui: &mut egui::Ui) {
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
-    ui.painter().rect_filled(r, 0.0, tema::FILO);
+    ui.painter().rect_filled(r, 0.0, tema::filo());
 }
 
 /// Il titolo di una sezione del foglio, grigio e maiuscolo, col numero.
 fn sezione(ui: &mut egui::Ui, titolo: &str, n: usize) {
     ui.add_space(14.0);
-    etichetta_sezione(ui, &format!("{titolo} · {n}"));
+    etichetta_sezione(ui, &format!("{} · {n}", t(titolo)));
     ui.add_space(4.0);
 }
 
@@ -176,9 +177,9 @@ fn pagina_delle_revisioni(ui: &mut egui::Ui, st: &StatoRevisioni) -> Option<Nell
     if st.modifiche.is_empty() && st.commenti.is_empty() {
         ui.add_space(14.0);
         ui.label(
-            RichText::new("Nessuna modifica né commento. Per un commento scegli il testo e tocca «Commenta».")
+            RichText::new(t("Nessuna modifica né commento. Per un commento scegli il testo e tocca «Commenta»."))
                 .font(Carattere::Testo.font(&ctx, 15.0))
-                .color(tema::MATITA),
+                .color(tema::matita()),
         );
         ui.add_space(8.0);
         return scelta;
@@ -327,11 +328,11 @@ impl TascabileApp {
             ui.spacing_mut().item_spacing.y = 12.0;
             let dove = if risposta { "La risposta va sotto il commento" } else { "Il commento va sul testo scelto" };
             let chi = if autore.is_empty() {
-                format!("{dove}, senza nome: il nome si scrive nelle Impostazioni, in «{}».", crate::impostazioni::AUTORE)
+                tascabile_touch::tf!("{}, senza nome: il nome si scrive nelle Impostazioni, in «{}».", dove, crate::impostazioni::AUTORE)
             } else {
-                format!("{dove}, col nome {autore}.")
+                tascabile_touch::tf!("{}, col nome {}.", dove, autore)
             };
-            ui.label(RichText::new(chi).font(Carattere::Testo.font(ui.ctx(), 15.0)).color(tema::MATITA));
+            ui.label(RichText::new(chi).font(Carattere::Testo.font(ui.ctx(), 15.0)).color(tema::matita()));
             tocco = c.campo.mostra(ui, if risposta { VUOTO_RISPOSTA } else { VUOTO_COMMENTO }).clicked();
             let largo = ui.available_width();
             fatto = ui.add(Pulsante::new(FATTO, Peso::Principale).icona(icone::CHECK).larghezza(largo).spento(vuoto)).clicked();

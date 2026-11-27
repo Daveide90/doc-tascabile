@@ -22,6 +22,7 @@ use tascabile_word::editor::Editor;
 use tascabile_word::salva::Origine;
 
 use crate::{Da, Errore, NON_TROVATO, TascabileApp, adesso, home, leggi_file, non_si_apre_piu};
+use tascabile_touch::t;
 
 /// La pillola mentre un documento si apre.
 pub(crate) const APRO_DOCUMENTO: &str = "Apro il documento";
@@ -353,14 +354,14 @@ impl TascabileApp {
                 // Il genere sì (zip troppo grande, protetto da password), il messaggio no: quello
                 // del motore può riportare il nome del file.
                 a.da.scrivi(format!("{etichetta}: {misura} byte, tipo {tipo}, errore di apertura ({})", errore.genere));
-                self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {errore}")));
+                self.errore = Some(Errore::apertura(tascabile_touch::tf!("Non riesco ad aprire il file: {}", errore)));
             }
             Pronto::NonLetto(e) => {
                 a.da.scrivi(format!("{etichetta}: errore di lettura ({}), tipo {tipo}", e.genere));
                 match a.richiesta {
                     Richiesta::Recente(r) => self.recente_non_letto(r, e),
                     Richiesta::Cartella | Richiesta::ApriCon => {
-                        self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
+                        self.errore = Some(Errore::apertura(tascabile_touch::tf!("Non riesco ad aprire il file: {}", e)));
                     }
                 }
             }
@@ -411,7 +412,7 @@ impl TascabileApp {
             }
             self.errore = Some(Errore::apertura(messaggio));
         } else {
-            self.errore = Some(Errore::apertura(format!("Non riesco ad aprire il file: {e}")));
+            self.errore = Some(Errore::apertura(tascabile_touch::tf!("Non riesco ad aprire il file: {}", e)));
         }
     }
 
@@ -433,12 +434,12 @@ impl TascabileApp {
         let zona = ctx.content_rect();
         egui::Area::new(Id::new("apertura_documento")).order(egui::Order::Foreground).fixed_pos(zona.min).show(ctx, |ui| {
             ui.allocate_rect(Rect::from_min_size(zona.min, zona.size()), Sense::click_and_drag());
-            let g = ui.painter().layout_no_wrap(APRO_DOCUMENTO.to_string(), Carattere::Grassetto.font(ui.ctx(), 15.0), Color32::WHITE);
+            let g = ui.painter().layout_no_wrap(t(APRO_DOCUMENTO).to_string(), Carattere::Grassetto.font(ui.ctx(), 15.0), tema::sull_indicatore());
             let pillola = Rect::from_center_size(zona.center(), vec2(g.size().x + 32.0, 44.0));
-            ui.painter().rect_filled(pillola, 22.0, tema::INDICATORE);
+            ui.painter().rect_filled(pillola, 22.0, tema::indicatore());
             ui.painter().galley(pillola.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
             ui.interact(pillola, Id::new("apertura_documento_testo"), Sense::hover())
-                .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, APRO_DOCUMENTO));
+                .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(APRO_DOCUMENTO)));
             ctx.request_repaint_after(Duration::from_millis(100));
         });
     }

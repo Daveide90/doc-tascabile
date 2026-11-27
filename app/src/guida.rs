@@ -103,7 +103,7 @@ pub(crate) const PARTI: [(&str, &str); 11] = [
          Il testo delle scansioni si riconosce in italiano, e una pagina già riconosciuta non si riconosce di nuovo: se il \
          foglio è storto, giralo con Ruota prima di Crea PDF. Una correzione usa il carattere più simile fra quelli \
          dell'app (come Calibri, Arial, Times, Cambria): uno raro o la scrittura a mano non vengono uguali; le scansioni \
-         salvate come fax, JBIG2 o JPEG 2000 non si correggono. Il tema scuro non c'è ancora.",
+         salvate come fax, JBIG2 o JPEG 2000 non si correggono. L'app parla italiano, inglese e spagnolo, ma il controllo ortografico conosce solo l'italiano.",
     ),
     (
         "Se qualcosa non va",
@@ -121,9 +121,9 @@ pub(crate) fn mostra(ui: &mut egui::Ui) {
         if i > 0 {
             ui.add_space(16.0);
         }
-        ui.label(RichText::new(*titolo).font(Carattere::Grassetto.font(&ctx, 17.0)).color(tema::INCHIOSTRO));
+        ui.label(RichText::new(tascabile_touch::t(titolo)).font(Carattere::Grassetto.font(&ctx, 17.0)).color(tema::inchiostro()));
         ui.add_space(4.0);
-        ui.label(RichText::new(*testo).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::INCHIOSTRO));
+        ui.label(RichText::new(tascabile_touch::t(testo)).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::inchiostro()));
     }
     ui.add_space(8.0);
 }

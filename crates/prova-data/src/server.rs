@@ -6,18 +6,23 @@
 
 use sha2::{Digest, Sha256};
 
-use crate::blocco::{ErroreBlocco, controlla_intestazione};
-use crate::formato::{ErroreFormato, Prova, esadecimale};
+use crate::blocco::{BloccoControllato, ErroreBlocco, controlla_intestazione_all_altezza};
+use crate::formato::{ErroreFormato, Prova, esadecimale, leggi_albero};
 
 /// I quattro aggregatori del client ufficiale (`DEFAULT_AGGREGATORS`).
 pub const AGGREGATORI: [&str; 4] =
     ["https://a.pool.opentimestamps.org", "https://b.pool.opentimestamps.org", "https://a.pool.eternitywall.com", "https://ots.btc.catallaxy.com"];
-/// Gli esploratori dei blocchi, con la stessa interfaccia: il secondo se il primo non risponde.
+/// Gli esploratori dei blocchi, con la stessa interfaccia: si interpellano tutti per confrontarli.
 pub const ESPLORATORI: [&str; 2] = ["https://blockstream.info/api", "https://mempool.space/api"];
 /// Al più tante attese chieste per un controllo, una per server, e al più tante richieste insieme:
 /// un .ots costruito apposta può averne migliaia (revisione del 31/10, punto 7).
 pub const ATTESE_MASSIME: usize = 8;
 const RICHIESTE_INSIEME: usize = 4;
+/// Al più tante attese tenute per ogni risposta di aggregatore: con 4 aggregatori restano dentro
+/// `ATTESE_MASSIME` (8), così un solo server ostile non può escludere i calendari degli altri.
+const ATTESE_PER_AGGREGATORE: usize = 2;
+/// La misura massima di una prova `.ots` letta dall'app: una fusione non deve mai superarla.
+const PROVA_MASSIMA: usize = 64 * 1024;
 
 /// Le attese da chiedere: una per server, le prime `ATTESE_MASSIME`.
 fn da_chiedere(attese: Vec<(Vec<u8>, String)>) -> Vec<(Vec<u8>, String)> {
@@ -103,7 +108,16 @@ pub fn fissa(byte: &[u8], rete: &dyn Rete, numero: [u8; 16]) -> Result<Vec<u8>, 
     });
     let mut unite = 0;
     for r in risposte.into_iter().flatten() {
-        if r.len() <= RISPOSTA_MASSIMA && prova.unisci_risposta(&mandato, &r).is_ok() {
+        if r.len() > RISPOSTA_MASSIMA {
+            continue;
+        }
+        let Ok(albero) = leggi_albero(&r, &mandato) else { continue };
+        let Some(albero) = albero.solo_attese_fidate(ATTESE_PER_AGGREGATORE) else { continue };
+        let mut copia = prova.clone();
+        let valida = copia.albero.trova_mut(&mandato).is_some_and(|n| n.unisci(albero).is_ok())
+            && copia.scrivi().is_ok_and(|b| b.len() <= PROVA_MASSIMA && Prova::leggi(&b).is_ok());
+        if valida {
+            prova = copia;
             unite += 1;
         }
     }
@@ -131,6 +145,58 @@ pub enum Stato {
 pub struct Controllo {
     pub stato: Stato,
     pub aggiornata: Option<Vec<u8>>,
+}
+
+/// Esito della verifica di un singolo blocco presso tutti gli esploratori.
+enum EsitoBlocco {
+    Confermato(u32),
+    Errore(ErroreBlocco),
+    NessunaRisposta,
+}
+
+/// Chiede hash e intestazione del blocco a tutti gli esploratori: se due esploratori danno hash
+/// diversi è errore (`EsploratoriDiscordi`); se almeno uno conferma con hash e intestazione validi
+/// vale quella conferma; se nessuno conferma, torna il primo errore o `NessunaRisposta`.
+fn controlla_blocco_agli_esploratori(altezza: u64, radice: &[u8], rete: &dyn Rete) -> EsitoBlocco {
+    let mut hash_visto: Option<String> = None;
+    let mut confermato: Option<BloccoControllato> = None;
+    let mut primo_errore: Option<ErroreBlocco> = None;
+    for e in ESPLORATORI {
+        let Ok(hash) = rete.get(&format!("{e}/block-height/{altezza}")) else { continue };
+        let Some(hash) = esadecimale_valido(&hash, 64) else { continue };
+        if let Some(ref altro) = hash_visto
+            && altro != &hash
+        {
+            return EsitoBlocco::Errore(ErroreBlocco::EsploratoriDiscordi);
+        }
+        hash_visto = Some(hash.clone());
+        let Ok(intestazione) = rete.get(&format!("{e}/block/{hash}/header")) else { continue };
+        let Some(intestazione) = esadecimale_valido(&intestazione, 160).and_then(|h| da_esadecimale(&h)) else { continue };
+        match controlla_intestazione_all_altezza(&intestazione, radice, altezza) {
+            Ok(b) if b.hash == hash => {
+                if confermato.is_none() {
+                    confermato = Some(b);
+                }
+            }
+            Ok(_) => {
+                if primo_errore.is_none() {
+                    primo_errore = Some(ErroreBlocco::LavoroNonTorna);
+                }
+            }
+            Err(err) => {
+                if primo_errore.is_none() {
+                    primo_errore = Some(err);
+                }
+            }
+        }
+    }
+    match confermato {
+        Some(b) => EsitoBlocco::Confermato(b.ora),
+        None => match primo_errore {
+            Some(err) => EsitoBlocco::Errore(err),
+            None => EsitoBlocco::NessunaRisposta,
+        },
+    }
 }
 
 /// Controlla la prova `prova` (i byte del `.ots`) del file `byte`.
@@ -163,8 +229,13 @@ pub fn controlla(byte: &[u8], prova: &[u8], rete: &dyn Rete) -> Result<Controllo
             match r {
                 Ok(r) => {
                     qualcuno = true;
-                    if r.len() <= RISPOSTA_MASSIMA && p.unisci_risposta(&m, &r).is_ok() {
-                        cambiata = true;
+                    if r.len() <= RISPOSTA_MASSIMA {
+                        let mut copia = p.clone();
+                        if copia.unisci_risposta(&m, &r).is_ok() && copia.scrivi().is_ok_and(|b| b.len() <= PROVA_MASSIMA && Prova::leggi(&b).is_ok())
+                        {
+                            p = copia;
+                            cambiata = true;
+                        }
                     }
                 }
                 Err(ErroreRete::Collegamento) => {}
@@ -175,23 +246,32 @@ pub fn controlla(byte: &[u8], prova: &[u8], rete: &dyn Rete) -> Result<Controllo
             aggiornata = Some(p.scrivi()?);
         }
     }
-    // Il blocco più vecchio: la data più presto che la prova dimostra.
-    let Some((radice, altezza)) = p.blocchi().into_iter().min_by_key(|(_, h)| *h) else {
+    let mut blocchi = p.blocchi();
+    if blocchi.is_empty() {
         let stato = if attese.is_empty() || qualcuno { Stato::InAttesa } else { Stato::SenzaRete };
-        return Ok(Controllo { stato, aggiornata });
-    };
-    for e in ESPLORATORI {
-        let Ok(hash) = rete.get(&format!("{e}/block-height/{altezza}")) else { continue };
-        let Some(hash) = esadecimale_valido(&hash, 64) else { continue };
-        let Ok(intestazione) = rete.get(&format!("{e}/block/{hash}/header")) else { continue };
-        let Some(intestazione) = esadecimale_valido(&intestazione, 160).and_then(|h| da_esadecimale(&h)) else { continue };
-        let b = controlla_intestazione(&intestazione, &radice).map_err(ErroreData::Blocco)?;
-        if b.hash != hash {
-            return Err(ErroreData::Blocco(ErroreBlocco::LavoroNonTorna));
-        }
-        return Ok(Controllo { stato: Stato::Confermata { ora: b.ora, altezza }, aggiornata });
+        return Ok(Controllo { stato, aggiornata: None });
     }
-    Ok(Controllo { stato: Stato::SenzaRete, aggiornata })
+    // Tutti i blocchi, dal più vecchio: il primo che regge dimostra la data più presto.
+    blocchi.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    blocchi.dedup();
+    let mut primo_errore = None;
+    for (radice, altezza) in blocchi {
+        match controlla_blocco_agli_esploratori(altezza, &radice, rete) {
+            EsitoBlocco::Confermato(ora) => {
+                return Ok(Controllo { stato: Stato::Confermata { ora, altezza }, aggiornata });
+            }
+            EsitoBlocco::Errore(e) => {
+                if primo_errore.is_none() {
+                    primo_errore = Some(e);
+                }
+            }
+            EsitoBlocco::NessunaRisposta => {}
+        }
+    }
+    if let Some(e) = primo_errore {
+        return Err(ErroreData::Blocco(e));
+    }
+    Ok(Controllo { stato: Stato::SenzaRete, aggiornata: None })
 }
 
 /// Il testo di una risposta, se è esadecimale minuscolo della lunghezza `n` (spazi ai lati tolti).
@@ -347,7 +427,8 @@ mod test {
         let rete = rete_dell_esempio(ESPLORATORI[0]);
         let c = controlla(ESEMPIO_TXT, c.aggiornata.as_ref().unwrap(), &rete).unwrap();
         assert_eq!(c, Controllo { stato: Stato::Confermata { ora: 1_432_827_678, altezza: 358391 }, aggiornata: None });
-        assert!(rete.chiamate().iter().all(|u| u.starts_with(ESPLORATORI[0])), "{:?}", rete.chiamate());
+        // Solo esploratori, nessun calendario (dalla 0.10.1 si sentono tutti e due gli esploratori).
+        assert!(rete.chiamate().iter().all(|u| ESPLORATORI.iter().any(|e| u.starts_with(e))), "{:?}", rete.chiamate());
     }
 
     #[test]
@@ -442,11 +523,173 @@ mod test {
     /// server.
     #[test]
     fn migliaia_di_attese_fanno_al_piu_otto_richieste() {
-        let tante: Vec<(Vec<u8>, String)> = (0..5_000).map(|i: u32| (i.to_le_bytes().to_vec(), format!("https://a{}.calendar.opentimestamps.org", i % 20))).collect();
+        let tante: Vec<(Vec<u8>, String)> =
+            (0..5_000).map(|i: u32| (i.to_le_bytes().to_vec(), format!("https://a{}.calendar.opentimestamps.org", i % 20))).collect();
         let scelte = da_chiedere(tante);
         assert_eq!(scelte.len(), ATTESE_MASSIME);
         assert_eq!(scelte.iter().map(|(_, u)| u).collect::<std::collections::HashSet<_>>().len(), ATTESE_MASSIME);
-        let stesso: Vec<(Vec<u8>, String)> = (0..5_000).map(|i: u32| (i.to_le_bytes().to_vec(), "https://alice.btc.calendar.opentimestamps.org".to_string())).collect();
+        let stesso: Vec<(Vec<u8>, String)> =
+            (0..5_000).map(|i: u32| (i.to_le_bytes().to_vec(), "https://alice.btc.calendar.opentimestamps.org".to_string())).collect();
         assert_eq!(da_chiedere(stesso).len(), 1);
+    }
+
+    /// Audit B4: i due esploratori vanno sentiti entrambi e devono concordare sul blocco; un'intestazione
+    /// rovinata del primo fa ripiegare sul secondo se concordano sull'hash; e un blocco di un'epoca
+    /// vecchia (67 bit di lavoro) non passa per un'altezza recente come 900.000.
+    #[test]
+    fn audit_b4_i_due_esploratori_devono_dare_lo_stesso_blocco() {
+        // (A) Disaccordo fra i due esploratori sull'hash del blocco: si sente il secondo e non si conferma.
+        let altro = format!("1{}", &HASH_358391[1..]);
+        let rete_discordi = rete_dell_esempio(ESPLORATORI[0]).con(&format!("{}/block-height/358391", ESPLORATORI[1]), Ok(altro.into_bytes()));
+        let esito = controlla(ESEMPIO_TXT, ESEMPIO_OTS, &rete_discordi);
+        assert!(
+            rete_discordi.chiamate().iter().any(|u| u.starts_with(ESPLORATORI[1])),
+            "si deve sentire anche il secondo esploratore: {:?}",
+            rete_discordi.chiamate()
+        );
+        assert!(esito.is_err(), "due esploratori in disaccordo non possono confermare: {esito:?}");
+
+        // (B) Stesso hash, ma il primo manda un'intestazione rovinata: si ripiega sul secondo e si conferma.
+        let mut rovinata = include_str!("../tests/fixtures/blocco-358391.hex").trim().to_string();
+        rovinata.replace_range(158..160, "00");
+        let rete_ripiego = rete_dell_esempio(ESPLORATORI[1])
+            .con(&format!("{}/block-height/358391", ESPLORATORI[0]), Ok(HASH_358391.as_bytes().to_vec()))
+            .con(&format!("{}/block/{HASH_358391}/header", ESPLORATORI[0]), Ok(rovinata.into_bytes()));
+        let esito = controlla(ESEMPIO_TXT, ESEMPIO_OTS, &rete_ripiego);
+        assert!(rete_ripiego.chiamate().iter().any(|u| u.starts_with(ESPLORATORI[1])), "{:?}", rete_ripiego.chiamate());
+        assert_eq!(esito, Ok(Controllo { stato: Stato::Confermata { ora: 1_432_827_678, altezza: 358391 }, aggiornata: None }));
+
+        // (C) L'intestazione del blocco 358391 (del 2015, 67 bit di lavoro) non può reggere all'altezza 900.000.
+        fn cambia_altezza(a: &mut Albero, nuova: u64) {
+            for att in &mut a.attestazioni {
+                if let Attestazione::Blocco(h) = att {
+                    *h = nuova;
+                }
+            }
+            for (_, sotto) in &mut a.rami {
+                cambia_altezza(sotto, nuova);
+            }
+        }
+        let mut p = Prova::leggi(ESEMPIO_OTS).unwrap();
+        cambia_altezza(&mut p.albero, 900_000);
+        let ots_900k = p.scrivi().unwrap();
+        let rete_900k = ESPLORATORI.iter().fold(ReteFinta::default(), |r, e| {
+            r.con(&format!("{e}/block-height/900000"), Ok(HASH_358391.as_bytes().to_vec()))
+                .con(&format!("{e}/block/{HASH_358391}/header"), Ok(include_bytes!("../tests/fixtures/blocco-358391.hex").to_vec()))
+        });
+        assert!(
+            matches!(controlla(ESEMPIO_TXT, &ots_900k, &rete_900k), Err(ErroreData::Blocco(_))),
+            "un'intestazione del 2015 con 67 bit di lavoro non deve valere per l'altezza 900.000"
+        );
+    }
+
+    /// Audit B5: un singolo aggregatore o calendario ostile non può avvelenare il `.ots` con un
+    /// blocco falso o futuro, con una catena oltre la profondità massima o riempiendo tutte le 8
+    /// attese per escludere i calendari onesti.
+    #[test]
+    fn audit_b5_un_server_ostile_non_rovina_la_prova() {
+        use crate::formato::Operazione;
+
+        let rete_due_esploratori = || {
+            ESPLORATORI.iter().fold(ReteFinta::default(), |r, e| {
+                r.con(&format!("{e}/block-height/358391"), Ok(format!("{HASH_358391}\n").into_bytes()))
+                    .con(&format!("{e}/block/{HASH_358391}/header"), Ok(include_bytes!("../tests/fixtures/blocco-358391.hex").to_vec()))
+            })
+        };
+
+        // (1) Iniezione di un blocco durante `fissa`: va scartata, restano le attese dei server onesti.
+        let (_, vere) = risposte_vere();
+        let (_, mandato) = Prova::nuova(IN_ATTESA_TXT, NUMERO_IN_ATTESA);
+        let blocco_finto =
+            scrivi_albero(&Albero { messaggio: mandato.clone(), attestazioni: vec![Attestazione::Blocco(358391)], rami: Vec::new() }).unwrap();
+        let rete = AGGREGATORI[..3]
+            .iter()
+            .zip(&vere[..3])
+            .fold(ReteFinta::default(), |r, (a, b)| r.con(&format!("{a}/digest"), Ok(b.clone())))
+            .con(&format!("{}/digest", AGGREGATORI[3]), Ok(blocco_finto));
+        let ots = fissa(IN_ATTESA_TXT, &rete, NUMERO_IN_ATTESA).unwrap();
+        let p = Prova::leggi(&ots).unwrap();
+        assert!(p.blocchi().is_empty(), "fissa non deve accettare blocchi dagli aggregatori");
+        assert!(!p.attese().is_empty(), "fissa deve tenere le attese dei server onesti");
+
+        // Prova di partenza con due calendari (alice onesto, bob ostile) sullo stesso punto.
+        let alice = "https://alice.btc.calendar.opentimestamps.org";
+        let bob = "https://bob.btc.calendar.opentimestamps.org";
+        let (in_attesa_alice, m, seguito) = esempio_in_attesa(alice);
+        let mut p = Prova::leggi(&in_attesa_alice).unwrap();
+        p.albero.trova_mut(&m).unwrap().aggiungi(Attestazione::InAttesa(bob.into()));
+        let in_attesa = p.scrivi().unwrap();
+
+        // (2) Blocco falso a un'altezza più bassa da bob: si ripiega sul blocco vero 358391 di alice.
+        let blocco_basso = scrivi_albero(&Albero {
+            messaggio: m.clone(),
+            attestazioni: Vec::new(),
+            rami: vec![(
+                Operazione::Sha256,
+                Albero { messaggio: Sha256::digest(&m).to_vec(), attestazioni: vec![Attestazione::Blocco(1)], rami: Vec::new() },
+            )],
+        })
+        .unwrap();
+        let rete = rete_due_esploratori()
+            .con(&format!("{alice}/timestamp/{}", esadecimale(&m)), Ok(seguito.clone()))
+            .con(&format!("{bob}/timestamp/{}", esadecimale(&m)), Ok(blocco_basso));
+        let c = controlla(ESEMPIO_TXT, &in_attesa, &rete).unwrap();
+        assert_eq!(c.stato, Stato::Confermata { ora: 1_432_827_678, altezza: 358391 });
+
+        // (3) Blocco futuro non verificato da bob: non deve svuotare le attese per il controllo dopo.
+        let blocco_futuro = scrivi_albero(&Albero {
+            messaggio: m.clone(),
+            attestazioni: Vec::new(),
+            rami: vec![(
+                Operazione::Sha256,
+                Albero { messaggio: Sha256::digest(&m).to_vec(), attestazioni: vec![Attestazione::Blocco(999_999_999)], rami: Vec::new() },
+            )],
+        })
+        .unwrap();
+        let rete1 = ReteFinta::default()
+            .con(&format!("{alice}/timestamp/{}", esadecimale(&m)), Err(ErroreRete::NonTrovato))
+            .con(&format!("{bob}/timestamp/{}", esadecimale(&m)), Ok(blocco_futuro));
+        let c1 = controlla(ESEMPIO_TXT, &in_attesa, &rete1).unwrap();
+        let dopo = c1.aggiornata.as_deref().unwrap_or(&in_attesa);
+        let rete2 = rete_due_esploratori().con(&format!("{alice}/timestamp/{}", esadecimale(&m)), Ok(seguito));
+        let c2 = controlla(ESEMPIO_TXT, dopo, &rete2).unwrap();
+        assert_eq!(c2.stato, Stato::Confermata { ora: 1_432_827_678, altezza: 358391 });
+
+        // (4) Catena di 255 Sha256 da bob: la prova aggiornata, se c'è, deve restare leggibile.
+        let mut passi = vec![m.clone()];
+        for _ in 0..255 {
+            passi.push(Sha256::digest(passi.last().unwrap()).to_vec());
+        }
+        let mut profonda = Albero { messaggio: passi.pop().unwrap(), attestazioni: vec![Attestazione::InAttesa(bob.into())], rami: Vec::new() };
+        while let Some(msg) = passi.pop() {
+            profonda = Albero { messaggio: msg, attestazioni: Vec::new(), rami: vec![(Operazione::Sha256, profonda)] };
+        }
+        let rete_profonda = ReteFinta::default()
+            .con(&format!("{alice}/timestamp/{}", esadecimale(&m)), Err(ErroreRete::NonTrovato))
+            .con(&format!("{bob}/timestamp/{}", esadecimale(&m)), Ok(scrivi_albero(&profonda).unwrap()));
+        let c = controlla(ESEMPIO_TXT, &in_attesa, &rete_profonda).unwrap();
+        if let Some(a) = &c.aggiornata {
+            assert!(Prova::leggi(a).is_ok(), "la prova aggiornata non deve superare il limite di profondità");
+        }
+
+        // (5) Un aggregatore con 8 attese finte non deve escludere i calendari degli altri aggregatori.
+        let mut tante = Albero::nuovo(mandato.clone());
+        for i in 1..=8 {
+            tante.aggiungi(Attestazione::InAttesa(format!("https://finto{i}.calendar.opentimestamps.org")));
+        }
+        let rete_fissa = AGGREGATORI[1..]
+            .iter()
+            .zip(&vere[1..])
+            .fold(ReteFinta::default().con(&format!("{}/digest", AGGREGATORI[0]), Ok(scrivi_albero(&tante).unwrap())), |r, (a, b)| {
+                r.con(&format!("{a}/digest"), Ok(b.clone()))
+            });
+        let ots = fissa(IN_ATTESA_TXT, &rete_fissa, NUMERO_IN_ATTESA).unwrap();
+        let rete_controllo = ReteFinta::default();
+        let _ = controlla(IN_ATTESA_TXT, &ots, &rete_controllo).unwrap();
+        let chiamate = rete_controllo.chiamate();
+        assert!(
+            chiamate.iter().any(|u| !u.starts_with("https://finto")),
+            "un solo aggregatore con 8 attese non deve escludere i calendari onesti: {chiamate:?}"
+        );
     }
 }

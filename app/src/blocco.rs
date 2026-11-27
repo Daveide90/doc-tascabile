@@ -12,6 +12,7 @@ use tascabile_touch::tema::{self, Carattere};
 use tascabile_touch::{Peso, Pulsante, icone};
 
 use crate::{Errore, TascabileApp, impostazioni};
+use tascabile_touch::t;
 
 pub(crate) const BLOCCATA: &str = "Tascabile è bloccata";
 const SPIEGA_BLOCCATA: &str = "Si apre con l'impronta o il PIN del telefono.";
@@ -300,16 +301,19 @@ impl TascabileApp {
         let ctx = ui.ctx().clone();
         let testo = self.blocco.messaggio.unwrap_or(SPIEGA_BLOCCATA);
         let mut sblocca = false;
-        ui.scope_builder(egui::UiBuilder::new().max_rect(zona.shrink2(egui::vec2(24.0, 0.0))).layout(egui::Layout::top_down(egui::Align::Center)), |ui| {
-            ui.add_space((zona.height() * 0.28).max(24.0));
-            ui.label(RichText::new(icone::LOCK).font(Carattere::Icona.font(&ctx, 48.0)).color(tema::INCHIOSTRO));
-            ui.add_space(16.0);
-            ui.label(RichText::new(BLOCCATA).font(Carattere::Titolo.font(&ctx, 24.0)).color(tema::INCHIOSTRO));
-            ui.add_space(8.0);
-            ui.add(egui::Label::new(RichText::new(testo).font(Carattere::Testo.font(&ctx, 16.0)).color(tema::MATITA)).wrap());
-            ui.add_space(24.0);
-            sblocca = ui.add(Pulsante::new(SBLOCCA, Peso::Principale).icona(icone::LOCK_OPEN)).clicked();
-        });
+        ui.scope_builder(
+            egui::UiBuilder::new().max_rect(zona.shrink2(egui::vec2(24.0, 0.0))).layout(egui::Layout::top_down(egui::Align::Center)),
+            |ui| {
+                ui.add_space((zona.height() * 0.28).max(24.0));
+                ui.label(RichText::new(icone::LOCK).font(Carattere::Icona.font(&ctx, 48.0)).color(tema::inchiostro()));
+                ui.add_space(16.0);
+                ui.label(RichText::new(t(BLOCCATA)).font(Carattere::Titolo.font(&ctx, 24.0)).color(tema::inchiostro()));
+                ui.add_space(8.0);
+                ui.add(egui::Label::new(RichText::new(t(testo)).font(Carattere::Testo.font(&ctx, 16.0)).color(tema::matita())).wrap());
+                ui.add_space(24.0);
+                sblocca = ui.add(Pulsante::new(SBLOCCA, Peso::Principale).icona(icone::LOCK_OPEN)).clicked();
+            },
+        );
         if sblocca {
             self.con_l_impronta(PerCosa::Sblocca);
         }

@@ -72,11 +72,23 @@ impl FileDelDocumento {
         v.push(tascabile_files::cartella_tascabile(radice).join(format!("{nome}.ots")));
         v
     }
+}
 
-    /// La prova che c'è già, se c'è.
-    fn prova(&self, radice: &Path) -> Option<PathBuf> {
-        self.posti(radice).into_iter().find(|p| p.is_file())
-    }
+/// Misura e data di modifica di un file, per sapere se è cambiato senza rileggerlo a ogni frame.
+type StatoFile = (u64, Option<std::time::SystemTime>);
+
+fn stato_file(p: &Path) -> Option<StatoFile> {
+    let m = std::fs::metadata(p).ok()?;
+    m.is_file().then(|| (m.len(), m.modified().ok()))
+}
+
+/// Chiave della cache per il controllo d'impronta della prova di ripiego in Documents/Tascabile.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ChiaveCacheProva {
+    chiave: String,
+    posto: PathBuf,
+    stato_ots: StatoFile,
+    stato_doc: Option<StatoFile>,
 }
 
 /// Com'è andato il lavoro sul thread.
@@ -93,6 +105,8 @@ pub(crate) enum ErroreLavoro {
     Lettura,
     /// La prova non si scrive in nessuno dei posti.
     Scrittura,
+    /// Fermato da chi usa l'app prima di finire.
+    Annullato,
     Data(ErroreData),
 }
 
@@ -125,11 +139,19 @@ pub(crate) struct DataDelDocumento {
     lavoro: Option<(Lavoro<Esito>, &'static str)>,
     /// Il controllo che aspetta il consenso: il file e la sua prova.
     da_controllare: Option<(FileDelDocumento, PathBuf)>,
+    /// Cache dell'ultimo controllo d'impronta sulla prova di ripiego in Documents/Tascabile.
+    cache_prova: std::cell::RefCell<Option<(ChiaveCacheProva, bool)>>,
 }
 
 impl DataDelDocumento {
     pub(crate) fn nuova() -> Self {
-        Self { foglio: FoglioDalFondo::new(egui::Id::new("foglio_data")), contenuto: None, lavoro: None, da_controllare: None }
+        Self {
+            foglio: FoglioDalFondo::new(egui::Id::new("foglio_data")),
+            contenuto: None,
+            lavoro: None,
+            da_controllare: None,
+            cache_prova: std::cell::RefCell::new(None),
+        }
     }
 }
 
@@ -159,16 +181,16 @@ impl tascabile_prova_data::Rete for ReteApp {
 /// «28/10/2026 alle 21:12», nell'ora italiana.
 fn quando(secondi_utc: u32) -> String {
     let l = Locale::da_utc(u64::from(secondi_utc));
-    format!("{:02}/{:02}/{} alle {}:{:02}", l.giorno, l.mese, l.anno, l.ora, l.minuti)
+    tascabile_touch::tf!("{}/{}/{} alle {}:{}", format!("{:02}", l.giorno), format!("{:02}", l.mese), l.anno, l.ora, format!("{:02}", l.minuti))
 }
 
 /// Il nome del file della prova e dove sta, per i messaggi: «Contratto.pdf.ots, accanto al file».
 fn dove_sta(posto: &Path, radice: &Path) -> String {
     let nome = posto.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     if posto.starts_with(tascabile_files::cartella_tascabile(radice)) {
-        format!("{nome}, in Documents/Tascabile")
+        tascabile_touch::tf!("{}, in Documents/Tascabile", nome)
     } else {
-        format!("{nome}, accanto al file")
+        tascabile_touch::tf!("{}, accanto al file", nome)
     }
 }
 
@@ -238,9 +260,9 @@ pub(crate) fn rinomina_il_timestamp(vecchio: &Path, nuovo: &Path, radice: &Path)
     if !prova.is_file() {
         return TimestampRinominato::Nessuno;
     }
-    let sua = leggi_la_prova(&prova).ok().and_then(|byte| tascabile_prova_data::Prova::leggi(&byte).ok()).is_some_and(|p| {
-        let impronta = tascabile_prova_data::formato::esadecimale(p.impronta());
-        tascabile_files::ImprontaFile::del_file(nuovo).is_ok_and(|i| i.sha256 == impronta)
+    let sua = impronta_della_prova(&prova).is_some_and(|impronta| {
+        let hex = tascabile_prova_data::formato::esadecimale(&impronta);
+        tascabile_files::ImprontaFile::del_file(nuovo).is_ok_and(|i| i.sha256 == hex)
     });
     if !sua {
         return TimestampRinominato::Nessuno;
@@ -253,7 +275,7 @@ fn esito_da_mostrare(esito: &Esito, radice: &Path) -> (String, String) {
     match esito {
         Ok(Lavorato::Fissata { posto }) => (
             TIMESTAMP_CREATO.into(),
-            format!(
+            tascabile_touch::tf!(
                 "Il timestamp è salvato: {}. La conferma arriva entro qualche ora: poi, dallo stesso menu, «Controlla il timestamp».",
                 dove_sta(posto, radice)
             ),
@@ -261,7 +283,7 @@ fn esito_da_mostrare(esito: &Esito, radice: &Path) -> (String, String) {
         Ok(Lavorato::Controllata { stato, posto }) => match stato {
             Stato::Confermata { ora, .. } => (
                 TIMESTAMP_CONFERMATO.into(),
-                format!(
+                tascabile_touch::tf!(
                     "Il file esisteva già così com'è il {}: lo conferma la blockchain. Chiunque può controllarlo col timestamp, {}.",
                     quando(*ora),
                     dove_sta(posto, radice)
@@ -280,8 +302,9 @@ fn esito_da_mostrare(esito: &Esito, radice: &Path) -> (String, String) {
         },
         Err(ErroreLavoro::Data(ErroreData::PocheRisposte(n))) => (
             SENZA_RETE.into(),
-            format!(
-                "Hanno risposto {n} server su {}, e ne servono almeno {}: sei collegato a internet? Riprova fra poco.",
+            tascabile_touch::tf!(
+                "Hanno risposto {} server su {}, e ne servono almeno {}: sei collegato a internet? Riprova fra poco.",
+                n,
                 tascabile_prova_data::server::AGGREGATORI.len(),
                 tascabile_prova_data::server::RISPOSTE_MINIME
             ),
@@ -297,6 +320,7 @@ fn esito_da_mostrare(esito: &Esito, radice: &Path) -> (String, String) {
         Err(ErroreLavoro::Scrittura) => {
             (TIMESTAMP_CHE_NON_VA.into(), "Non riesco a salvare il timestamp, né accanto al file né in Documents/Tascabile.".into())
         }
+        Err(ErroreLavoro::Annullato) => (TIMESTAMP_CON_BLOCKCHAIN.into(), String::new()),
     }
 }
 
@@ -311,6 +335,7 @@ fn riga_diagnosi(esito: &Esito) -> String {
         Err(ErroreLavoro::Data(e)) => format!("data: non riuscita ({e})"),
         Err(ErroreLavoro::Lettura) => "data: lettura non riuscita".into(),
         Err(ErroreLavoro::Scrittura) => "data: prova non scritta".into(),
+        Err(ErroreLavoro::Annullato) => "data: annullata".into(),
     }
 }
 
@@ -366,11 +391,45 @@ impl TascabileApp {
         }
     }
 
-    /// La voce del menu: «Controlla il timestamp» se accanto al file c'è la sua prova.
-    pub(crate) fn voce_della_data(&self) -> &'static str {
+    /// La prova che c'è già per `f`: accanto al file vale per posto; in Documents/Tascabile (posto
+    /// di ripiego) vale solo se l'impronta SHA-256 della prova è quella del documento, con una
+    /// piccola cache per non ricalcolare a ogni fotogramma.
+    fn prova_del_documento(&self, f: &FileDelDocumento) -> Option<PathBuf> {
         let radice = self.piattaforma.radice_archivio();
+        let mut posti = f.posti(&radice).into_iter();
+        if !f.uri()
+            && let Some(accanto) = posti.next()
+            && accanto.is_file()
+        {
+            return Some(accanto);
+        }
+        let ripiego = posti.next()?;
+        let stato_ots = stato_file(&ripiego)?;
+        // Per un URI il contenuto non ha una data di modifica: vale la chiave (lo stesso URI nella sessione).
+        let stato_doc = if f.uri() { None } else { Some(stato_file(Path::new(&f.chiave))?) };
+        let chiave_cache = ChiaveCacheProva { chiave: f.chiave.clone(), posto: ripiego.clone(), stato_ots, stato_doc };
+        if let Some((c, valida)) = self.data.cache_prova.borrow().as_ref()
+            && *c == chiave_cache
+        {
+            return valida.then_some(ripiego);
+        }
+        let valida = impronta_della_prova(&ripiego).is_some_and(|impronta| {
+            let hex = tascabile_prova_data::formato::esadecimale(&impronta);
+            if f.uri() {
+                // Gli stessi byte che userebbe il timestamp (`byte_subito`), letti solo quando la cache cambia.
+                self.piattaforma.read_uri(&f.chiave).is_ok_and(|b| tascabile_files::ImprontaFile::di(&b).sha256 == hex)
+            } else {
+                tascabile_files::ImprontaFile::del_file(Path::new(&f.chiave)).is_ok_and(|i| i.sha256 == hex)
+            }
+        });
+        *self.data.cache_prova.borrow_mut() = Some((chiave_cache, valida));
+        valida.then_some(ripiego)
+    }
+
+    /// La voce del menu: «Controlla il timestamp» se c'è già una prova valida per questo file.
+    pub(crate) fn voce_della_data(&self) -> &'static str {
         match self.file_per_la_data() {
-            Ok(f) if f.prova(&radice).is_some() => CONTROLLA_IL_TIMESTAMP,
+            Ok(f) if self.prova_del_documento(&f).is_some() => CONTROLLA_IL_TIMESTAMP,
             _ => TIMESTAMP_CON_BLOCKCHAIN,
         }
     }
@@ -393,8 +452,7 @@ impl TascabileApp {
             self.avviso_breve.avvisa(RETE_SPENTA);
             return;
         }
-        let radice = self.piattaforma.radice_archivio();
-        match f.prova(&radice) {
+        match self.prova_del_documento(&f) {
             Some(posto) => {
                 diagnosi("data: si chiede il consenso alla rete per il controllo");
                 self.data.da_controllare = Some((f, posto));
@@ -426,19 +484,26 @@ impl TascabileApp {
         }
         let rete = ReteApp(self.piattaforma.rete());
         // Il consenso è il tocco su «Crea il timestamp», dopo la spiegazione: la rete si apre per
-        // questo lavoro e si richiude alla fine (`passo_data`).
+        // questo lavoro e si richiude alla fine (`passo_data`) o se chi usa l'app annulla.
         self.piattaforma.consenti_rete(true);
         let posti = f.posti(&self.piattaforma.radice_archivio());
         let chiave = f.chiave.clone();
         diagnosi("data: fisso la data");
         let lavoro = Lavoro::avvia("data-fissa", ctx, move |avanti| -> Esito {
-            avanti(0, 2);
+            if !avanti(0, 2) {
+                return Err(ErroreLavoro::Annullato);
+            }
             let byte = match subito {
                 Some(b) => b,
                 None => std::fs::read(&chiave).map_err(|_| ErroreLavoro::Lettura)?,
             };
+            if !avanti(0, 2) {
+                return Err(ErroreLavoro::Annullato);
+            }
             let prova = tascabile_prova_data::fissa(&byte, &rete, numero).map_err(ErroreLavoro::Data)?;
-            avanti(1, 2);
+            if !avanti(1, 2) {
+                return Err(ErroreLavoro::Annullato);
+            }
             let posto = scrivi_nuova(&posti, &prova).ok_or(ErroreLavoro::Scrittura)?;
             Ok(Lavorato::Fissata { posto })
         });
@@ -458,14 +523,21 @@ impl TascabileApp {
         let chiave = f.chiave.clone();
         diagnosi("data: controllo la data");
         let lavoro = Lavoro::avvia("data-controlla", ctx, move |avanti| -> Esito {
-            avanti(0, 2);
+            if !avanti(0, 2) {
+                return Err(ErroreLavoro::Annullato);
+            }
             let byte = match subito {
                 Some(b) => b,
                 None => std::fs::read(&chiave).map_err(|_| ErroreLavoro::Lettura)?,
             };
             let prova = leggi_la_prova(&posto)?;
+            if !avanti(0, 2) {
+                return Err(ErroreLavoro::Annullato);
+            }
             let c = tascabile_prova_data::controlla(&byte, &prova, &rete).map_err(ErroreLavoro::Data)?;
-            avanti(1, 2);
+            if !avanti(1, 2) {
+                return Err(ErroreLavoro::Annullato);
+            }
             // Il seguito dei server va nella prova: la volta dopo non serve chiederlo.
             if let Some(aggiornata) = c.aggiornata {
                 tascabile_word::salva::scrivi_atomico(&posto, &aggiornata).map_err(|_| ErroreLavoro::Scrittura)?;
@@ -496,17 +568,20 @@ impl TascabileApp {
         self.piattaforma.consenti_rete(false);
         diagnosi(format!("data: lavoro finito in {secondi:.1} s"));
         match esito {
-            // Annullato: l'esito arriva lo stesso, ma chi ha annullato non lo vuole.
+            // Annullato: il lavoro si è fermato e chi ha annullato non vuole l'esito.
             _ if fermato => diagnosi("data: annullata"),
+            Some(Err(ErroreLavoro::Annullato)) => diagnosi("data: annullata"),
             Some(e) => self.mostra_esito(e),
             None => self.mostra_esito(Err(ErroreLavoro::Lettura)),
         }
     }
 
-    /// Indietro: chiude il foglio, o lascia andare il lavoro in corso. Vero se è stato usato qui.
+    /// Indietro: chiude il foglio, o ferma il lavoro in corso chiudendo subito la rete. Vero se è
+    /// stato usato qui.
     pub(crate) fn indietro_data(&mut self) -> bool {
         if let Some((l, _)) = self.data.lavoro.as_ref() {
             l.ferma();
+            self.piattaforma.consenti_rete(false);
             return true;
         }
         if self.data.foglio.indietro() {
@@ -539,6 +614,7 @@ impl TascabileApp {
             let testo = if *titolo == TIMESTAMP_CON_BLOCKCHAIN { "Mando l'impronta del file ai server" } else { "Chiedo la conferma ai server" };
             if mostra_barra(ctx, "lavoro_data", titolo, testo, l.frazione(), l.fermato()) {
                 l.ferma();
+                self.piattaforma.consenti_rete(false);
             }
         }
         let contenuto = self.data.contenuto.clone();
@@ -557,7 +633,7 @@ impl TascabileApp {
                             if i > 0 {
                                 ui.add_space(10.0);
                             }
-                            ui.label(RichText::new(*p).font(font.clone()).color(tema::INCHIOSTRO));
+                            ui.label(RichText::new(tascabile_touch::t(p)).font(font.clone()).color(tema::inchiostro()));
                         }
                         ui.add_space(16.0);
                         let fissa = ui.add(Pulsante::new(CREA_IL_TIMESTAMP, Peso::Principale).icona(icone::SCHEDULE)).clicked();
@@ -565,7 +641,7 @@ impl TascabileApp {
                         fissa
                     }
                     Some(Contenuto::Esito { testo, .. }) => {
-                        ui.label(RichText::new(testo.as_str()).font(font).color(tema::INCHIOSTRO));
+                        ui.label(RichText::new(testo.as_str()).font(font).color(tema::inchiostro()));
                         ui.add_space(12.0);
                         false
                     }
@@ -590,6 +666,16 @@ impl TascabileApp {
 /// Al più tanti byte letti da una prova .ots: quelle vere sono di qualche KB, una costruita apposta
 /// può avere migliaia di rami (revisione del 31/10, punto 7).
 const PROVA_MASSIMA: u64 = 64 * 1024;
+/// Bastano i primi byte di un `.ots` per leggere intestazione (31), versione, tipo (1), impronta
+/// SHA-256 (32) e almeno il primo byte dell'albero (66 byte in tutto).
+const TESTA_PROVA: u64 = 128;
+
+fn impronta_della_prova(posto: &Path) -> Option<[u8; 32]> {
+    use std::io::Read;
+    let mut v = Vec::new();
+    std::fs::File::open(posto).and_then(|f| f.take(TESTA_PROVA).read_to_end(&mut v)).ok()?;
+    tascabile_prova_data::Prova::impronta_del_file(&v).ok()
+}
 
 fn leggi_la_prova(posto: &Path) -> Result<Vec<u8>, ErroreLavoro> {
     use std::io::Read;
@@ -619,7 +705,9 @@ mod test {
         let u = FileDelDocumento { chiave: "content://com.whatsapp/x".into(), nome: "Referto.pdf".into() };
         assert_eq!(u.posti(radice), [PathBuf::from("/storage/emulated/0/Documents/Tascabile/Referto.pdf.ots")]);
         // Il nome mandato da un'altra app: solo il nome del file (revisione del 31/10, punto 7).
-        for (nome, ots) in [("../../Download/Finto.pdf", "Finto.pdf.ots"), ("/storage/emulated/0/Download/Altro.pdf", "Altro.pdf.ots"), ("..", "documento.ots")] {
+        for (nome, ots) in
+            [("../../Download/Finto.pdf", "Finto.pdf.ots"), ("/storage/emulated/0/Download/Altro.pdf", "Altro.pdf.ots"), ("..", "documento.ots")]
+        {
             let f = FileDelDocumento { chiave: "content://x/1".into(), nome: nome.into() };
             assert_eq!(f.posti(radice), [PathBuf::from("/storage/emulated/0/Documents/Tascabile").join(ots)], "{nome}");
         }

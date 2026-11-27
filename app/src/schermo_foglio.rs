@@ -18,6 +18,7 @@ use tascabile_touch::tema::{self, Carattere};
 use tascabile_touch::{BarraAlta, Chip, PulsanteIcona, icone};
 
 use crate::{Da, Errore, Schermata, TascabileApp, adesso, home};
+use tascabile_touch::t;
 
 pub(crate) const INDIETRO: &str = "Indietro";
 pub(crate) const CHIUDI_CELLA: &str = "Chiudi la cella";
@@ -152,7 +153,14 @@ impl TascabileApp {
                 self.foglio = Some(FoglioAperto::nuovo(cartella, a.nome.clone(), a.chiave.clone()));
                 self.vai(Schermata::Foglio);
                 match a.chiave {
-                    Some(chiave) => self.home.ricorda(Recente { chiave, nome: a.nome, tipo: Tipo::Foglio, aperto_alle: adesso(), pagine: Some(schede), impronta: None }),
+                    Some(chiave) => self.home.ricorda(Recente {
+                        chiave,
+                        nome: a.nome,
+                        tipo: Tipo::Foglio,
+                        aperto_alle: adesso(),
+                        pagine: Some(schede),
+                        impronta: None,
+                    }),
                     None => diagnosi("recenti: percorso che non è UTF-8, non ricordato"),
                 }
             }
@@ -188,11 +196,12 @@ impl TascabileApp {
         let zona = ctx.content_rect();
         egui::Area::new(Id::new("apertura_foglio")).order(egui::Order::Foreground).fixed_pos(zona.min).show(ctx, |ui| {
             ui.allocate_rect(Rect::from_min_size(zona.min, zona.size()), Sense::click_and_drag());
-            let g = ui.painter().layout_no_wrap(APRO.to_string(), Carattere::Grassetto.font(ui.ctx(), 15.0), Color32::WHITE);
+            let g = ui.painter().layout_no_wrap(t(APRO).to_string(), Carattere::Grassetto.font(ui.ctx(), 15.0), tema::sull_indicatore());
             let pillola = Rect::from_center_size(zona.center(), vec2(g.size().x + 32.0, 44.0));
-            ui.painter().rect_filled(pillola, 22.0, tema::INDICATORE);
+            ui.painter().rect_filled(pillola, 22.0, tema::indicatore());
             ui.painter().galley(pillola.center() - g.size() / 2.0, g, Color32::PLACEHOLDER);
-            ui.interact(pillola, Id::new("apertura_foglio_testo"), Sense::hover()).widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, APRO));
+            ui.interact(pillola, Id::new("apertura_foglio_testo"), Sense::hover())
+                .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(APRO)));
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         });
     }
@@ -209,9 +218,11 @@ impl TascabileApp {
         let nome = home::nome_da_mostrare(&f.nome, Tipo::Foglio).to_string();
         let sotto = match f.cartella.schede.len() {
             1 => "Foglio di calcolo · sola lettura".to_string(),
-            n => format!("Foglio di calcolo · {n} fogli · sola lettura"),
+            n => tascabile_touch::tf!("Foglio di calcolo · {} fogli · sola lettura", n),
         };
-        let r = ui.scope_builder(UiBuilder::new().max_rect(barra), |ui| BarraAlta::new(&nome).indietro(INDIETRO).sottotitolo(&sotto).mostra(ui)).inner;
+        let r = ui
+            .scope_builder(UiBuilder::new().max_rect(barra), |ui| BarraAlta::nome_proprio(&nome).indietro(INDIETRO).sottotitolo(&sotto).mostra(ui))
+            .inner;
         let schede = f.cartella.schede.len() > 1;
         let fondo = if schede { zona.bottom() - ALTO_SCHEDE } else { zona.bottom() };
         let griglia = Rect::from_min_max(pos2(zona.left(), barra.bottom()), pos2(zona.right(), fondo));
@@ -219,18 +230,21 @@ impl TascabileApp {
         let mut scheda = None;
         if schede {
             let fila = Rect::from_min_max(pos2(zona.left(), fondo), zona.max);
-            ui.painter().rect_filled(fila, 0.0, tema::CARTA);
-            ui.painter().line_segment([fila.left_top(), fila.right_top()], Stroke::new(1.0, tema::FILO));
+            ui.painter().rect_filled(fila, 0.0, tema::carta());
+            ui.painter().line_segment([fila.left_top(), fila.right_top()], Stroke::new(1.0, tema::filo()));
             ui.scope_builder(UiBuilder::new().max_rect(fila.shrink2(vec2(8.0, 8.0))), |ui| {
-                egui::ScrollArea::horizontal().id_salt("schede_del_foglio").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
-                    ui.horizontal_centered(|ui| {
-                        for i in 0..f.cartella.schede.len() {
-                            if ui.add(Chip::new(f.cartella.nome_scheda(i)).acceso(i == f.scheda)).clicked() {
-                                scheda = Some(i);
+                egui::ScrollArea::horizontal()
+                    .id_salt("schede_del_foglio")
+                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                    .show(ui, |ui| {
+                        ui.horizontal_centered(|ui| {
+                            for i in 0..f.cartella.schede.len() {
+                                if ui.add(Chip::new(f.cartella.nome_scheda(i)).acceso(i == f.scheda)).clicked() {
+                                    scheda = Some(i);
+                                }
                             }
-                        }
+                        });
                     });
-                });
             });
         }
         if let Some(i) = scheda {
@@ -241,22 +255,32 @@ impl TascabileApp {
         let mut chiudi = false;
         if let Some(d) = &f.dettaglio {
             let largo = zona.width().min(480.0) - 24.0;
-            let testo = ui.painter().layout(d.testo.clone(), Carattere::Testo.font(ui.ctx(), 16.0), tema::INCHIOSTRO, largo - 32.0);
-            let formula = d.formula.as_ref().map(|t| ui.painter().layout(t.clone(), FontId::monospace(14.0), tema::MATITA, largo - 32.0));
+            let testo = ui.painter().layout(d.testo.clone(), Carattere::Testo.font(ui.ctx(), 16.0), tema::inchiostro(), largo - 32.0);
+            let formula = d.formula.as_ref().map(|t| ui.painter().layout(t.clone(), FontId::monospace(14.0), tema::matita(), largo - 32.0));
             let alto = 16.0 + 24.0 + 8.0 + testo.size().y + formula.as_ref().map_or(0.0, |g| g.size().y + 8.0) + 16.0;
             let pannello = Rect::from_min_size(pos2(zona.center().x - largo / 2.0, fondo - alto - 12.0), vec2(largo, alto));
             tema::dipingi_ombra(ui.painter(), pannello, egui::CornerRadius::same(16), &tema::OMBRA_FLOTTANTE);
-            ui.painter().rect_filled(pannello, 16.0, tema::FOGLIO);
+            ui.painter().rect_filled(pannello, 16.0, tema::foglio());
             let _ = ui.interact(pannello, Id::new("cella_del_foglio"), Sense::click());
-            ui.painter().text(pannello.left_top() + vec2(16.0, 16.0), Align2::LEFT_TOP, &d.dove, Carattere::Grassetto.font(ui.ctx(), 15.0), tema::BLU);
+            ui.painter().text(
+                pannello.left_top() + vec2(16.0, 16.0),
+                Align2::LEFT_TOP,
+                &d.dove,
+                Carattere::Grassetto.font(ui.ctx(), 15.0),
+                tema::blu(),
+            );
             let mut y = pannello.top() + 16.0 + 24.0 + 8.0;
             let alto_testo = testo.size().y;
-            ui.painter().galley(pos2(pannello.left() + 16.0, y), testo, tema::INCHIOSTRO);
-            ui.interact(Rect::from_min_size(pos2(pannello.left() + 16.0, y), vec2(largo - 32.0, alto_testo.max(16.0))), Id::new("cella_testo"), Sense::hover())
-                .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, &d.testo));
+            ui.painter().galley(pos2(pannello.left() + 16.0, y), testo, tema::inchiostro());
+            ui.interact(
+                Rect::from_min_size(pos2(pannello.left() + 16.0, y), vec2(largo - 32.0, alto_testo.max(16.0))),
+                Id::new("cella_testo"),
+                Sense::hover(),
+            )
+            .widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, tascabile_touch::t(&d.testo)));
             y += alto_testo + 8.0;
             if let Some(g) = formula {
-                ui.painter().galley(pos2(pannello.left() + 16.0, y), g, tema::MATITA);
+                ui.painter().galley(pos2(pannello.left() + 16.0, y), g, tema::matita());
             }
             let x = Rect::from_min_size(pos2(pannello.right() - 8.0 - tema::PULSANTE, pannello.top() + 4.0), Vec2::splat(tema::PULSANTE));
             chiudi = ui.put(x, PulsanteIcona::new(icone::CLOSE, CHIUDI_CELLA)).clicked();
@@ -344,7 +368,7 @@ impl Vista {
 fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
     let celle = Rect::from_min_max(dove.min + vec2(LARGO_RIGHE, ALTO_COLONNE), dove.max);
     let risposta = ui.interact(celle, Id::new("griglia_del_foglio"), Sense::click_and_drag());
-    risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, GRIGLIA));
+    risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Other, true, tascabile_touch::t(GRIGLIA)));
     // Il pizzico ingrandisce attorno alle dita; il dito scorre.
     let (zoom_delta, centro) = ui.input(|i| (i.zoom_delta(), i.multi_touch().map(|m| m.center_pos).or(i.pointer.hover_pos())));
     if (zoom_delta - 1.0).abs() > 1e-3 {
@@ -381,7 +405,7 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
         f.dettaglio = Some(d);
     }
     let painter = ui.painter_at(dove);
-    painter.rect_filled(dove, 0.0, tema::FOGLIO);
+    painter.rect_filled(dove, 0.0, tema::pagina::FOGLIO);
     let f: &FoglioAperto = f;
     let sh = f.foglio();
     let (fr, fc, _, _) = bloccate(sh, &f.assi);
@@ -425,10 +449,16 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
     }
     // Le linee delle righe e colonne bloccate, un poco più scure.
     if v.ferme.y > 0.0 {
-        painter.line_segment([pos2(celle.left(), celle.top() + v.ferme.y), pos2(celle.right(), celle.top() + v.ferme.y)], Stroke::new(1.5, tema::MATITA));
+        painter.line_segment(
+            [pos2(celle.left(), celle.top() + v.ferme.y), pos2(celle.right(), celle.top() + v.ferme.y)],
+            Stroke::new(1.5, tema::pagina::MATITA),
+        );
     }
     if v.ferme.x > 0.0 {
-        painter.line_segment([pos2(celle.left() + v.ferme.x, celle.top()), pos2(celle.left() + v.ferme.x, celle.bottom())], Stroke::new(1.5, tema::MATITA));
+        painter.line_segment(
+            [pos2(celle.left() + v.ferme.x, celle.top()), pos2(celle.left() + v.ferme.x, celle.bottom())],
+            Stroke::new(1.5, tema::pagina::MATITA),
+        );
     }
     // Le intestazioni: le lettere delle colonne in alto, i numeri delle righe a sinistra. Ferme e
     // che scorrono, ognuna nella sua striscia; solo le visibili, fino all'ultima del foglio.
@@ -451,7 +481,7 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
             let (a, b) = (v.x(scorre, f.assi.colonne.start(c) as f32), v.x(scorre, f.assi.colonne.start(c + 1) as f32));
             pa.line_segment([pos2(b, alto.top()), pos2(b, alto.bottom())], Stroke::new(1.0, RIGA_GRIGLIA));
             if b - a > 14.0 {
-                pa.text(pos2((a + b) / 2.0, alto.center().y), Align2::CENTER_CENTER, tascabile_foglio::nome_colonna(c), font.clone(), tema::MATITA);
+                pa.text(pos2((a + b) / 2.0, alto.center().y), Align2::CENTER_CENTER, tascabile_foglio::nome_colonna(c), font.clone(), tema::matita());
             }
         }
     }
@@ -462,7 +492,7 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
             let (a, b) = (v.y(scorre, f.assi.righe.start(r) as f32), v.y(scorre, f.assi.righe.start(r + 1) as f32));
             ps.line_segment([pos2(sinistra.left(), b), pos2(sinistra.right(), b)], Stroke::new(1.0, RIGA_GRIGLIA));
             if b - a > 10.0 {
-                ps.text(pos2(sinistra.center().x, (a + b) / 2.0), Align2::CENTER_CENTER, (r + 1).to_string(), font.clone(), tema::MATITA);
+                ps.text(pos2(sinistra.center().x, (a + b) / 2.0), Align2::CENTER_CENTER, (r + 1).to_string(), font.clone(), tema::matita());
             }
         }
     }
@@ -477,7 +507,12 @@ fn disegna_griglia(ui: &mut egui::Ui, f: &mut FoglioAperto, dove: Rect) {
             pos2(v.x(sx, f.assi.colonne.start(area.end.col + 1) as f32), v.y(sy, f.assi.righe.start(area.end.row + 1) as f32)),
         );
         let ((xa, xb), (ya, yb)) = (v.striscia_x(sx), v.striscia_y(sy));
-        ui.painter_at(Rect::from_min_max(pos2(xa, ya), pos2(xb, yb))).rect_stroke(rett, 0.0, Stroke::new(2.0, tema::BLU), egui::StrokeKind::Inside);
+        ui.painter_at(Rect::from_min_max(pos2(xa, ya), pos2(xb, yb))).rect_stroke(
+            rett,
+            0.0,
+            Stroke::new(2.0, tema::pagina::BLU),
+            egui::StrokeKind::Inside,
+        );
     }
 }
 
@@ -520,11 +555,12 @@ fn disegna_casella(ui: &egui::Ui, p: &egui::Painter, clip: Rect, k: &Casella, a_
         let margine = 2.0 * z;
         let rientro = f32::from(k.rientro) * 9.0 * z;
         let largo = (rett.width() - 2.0 * margine - rientro).max(1.0);
-        let mut g = if k.a_capo { p.layout(k.testo.clone(), font.clone(), colore, largo) } else { p.layout_no_wrap(k.testo.clone(), font.clone(), colore) };
+        let mut g =
+            if k.a_capo { p.layout(k.testo.clone(), font.clone(), colore, largo) } else { p.layout_no_wrap(k.testo.clone(), font.clone(), colore) };
         // Un numero che non sta nella colonna: i cancelletti, come Excel.
         let spazio = Rect::from_min_max(pos2(a_schermo(k.spazio[0], 0.0).x, rett.top()), pos2(a_schermo(k.spazio[1], 0.0).x, rett.bottom()));
         if k.numero && k.spazio == [k.rett[0], k.rett[2]] && g.size().x > largo {
-            let cancelletto = p.layout_no_wrap("#".into(), font.clone(), colore).size().x.max(1.0);
+            let cancelletto = p.layout_no_wrap(t("#").into(), font.clone(), colore).size().x.max(1.0);
             g = p.layout_no_wrap("#".repeat((largo / cancelletto).floor().max(1.0) as usize), font, colore);
         }
         let x = match k.orizzontale {
@@ -550,7 +586,12 @@ fn disegna_casella(ui: &egui::Ui, p: &egui::Painter, clip: Rect, k: &Casella, a_
             pt.line_segment([pos2(x, y + alto / 2.0), pos2(x + larghezza, y + alto / 2.0)], Stroke::new(1.0, colore));
         }
     }
-    let linee = [(rett.left_top(), rett.left_bottom()), (rett.left_top(), rett.right_top()), (rett.right_top(), rett.right_bottom()), (rett.left_bottom(), rett.right_bottom())];
+    let linee = [
+        (rett.left_top(), rett.left_bottom()),
+        (rett.left_top(), rett.right_top()),
+        (rett.right_top(), rett.right_bottom()),
+        (rett.left_bottom(), rett.right_bottom()),
+    ];
     for (b, (a, c)) in k.bordi.iter().zip(linee) {
         if let Some(b) = b {
             p.line_segment([a, c], Stroke::new((b.spessore * z).max(1.0), Color32::from_rgb(b.colore[0], b.colore[1], b.colore[2])));

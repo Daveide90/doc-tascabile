@@ -24,6 +24,7 @@ use tascabile_touch::{
 use tascabile_word::modelli::Modello;
 
 use crate::quando::{self, Locale};
+use tascabile_touch::t;
 
 /// Il file dei recenti, nella cartella dell'app.
 pub const FILE_RECENTI: &str = "recenti.json";
@@ -68,13 +69,13 @@ pub const SOPRA_IL_NUOVO: f32 = tema::MARGINE_LARGO + tema::NUOVO;
 /// L'etichetta del pulsante del menu di un recente (per l'accessibilità e le prove), col nome
 /// come lo mostra la Home.
 pub fn etichetta_menu(nome: &str) -> String {
-    format!("Altre azioni: {nome}")
+    tascabile_touch::tf!("Altre azioni: {}", nome)
 }
 
 /// L'etichetta del menu di un file in una cartella, per l'accessibilità e le prove: diversa da
 /// quella dei recenti, dove lo stesso file può stare anche lui.
 pub fn etichetta_menu_file(nome: &str) -> String {
-    format!("Azioni del file: {nome}")
+    tascabile_touch::tf!("Azioni del file: {}", nome)
 }
 
 /// Il nome di un documento nella Home, come nel bozzetto: senza l'estensione, che il riquadro del
@@ -144,7 +145,7 @@ fn numero_di_file(n: Option<usize>) -> String {
     match n {
         None => "Non si legge".to_string(),
         Some(0) => "Nessun file".to_string(),
-        Some(n) => format!("{n} file"),
+        Some(n) => tascabile_touch::tf!("{} file", n),
     }
 }
 
@@ -152,7 +153,7 @@ fn numero_di_file(n: Option<usize>) -> String {
 pub fn misura(byte: u64) -> String {
     const KB: u64 = 1024;
     match byte {
-        b if b < KB => format!("{b} byte"),
+        b if b < KB => tascabile_touch::tf!("{} byte", b),
         b if b < KB * KB => format!("{} KB", b.div_ceil(KB)),
         b => format!("{:.1} MB", b as f64 / (KB * KB) as f64).replace('.', ","),
     }
@@ -191,11 +192,11 @@ impl Filtro {
 
 /// Lo spazio fra i chip di una fila e il margine dentro ciascuno (i due lati insieme), perché
 /// `quanti` chip coi testi larghi in tutto `testi` stiano in `largo`. Se ci stanno, le misure di
-/// sempre; se no si stringono, mai sotto i 6 dp fra un chip e l'altro e i 10 per lato dentro:
+/// sempre; se no si stringono, mai sotto i 6 dp fra un chip e l'altro e gli 8 per lato dentro:
 /// sotto, la fila scorre.
 fn misure_dei_chip(largo: f32, testi: f32, quanti: usize) -> (f32, f32) {
     const SPAZIO_STRETTO: f32 = 6.0;
-    const MARGINE_STRETTO: f32 = 20.0;
+    const MARGINE_STRETTO: f32 = 16.0;
     let n = quanti as f32;
     let fra = (n - 1.0).max(0.0);
     if quanti == 0 || testi + n * Chip::MARGINE + fra * tema::SPAZIO <= largo {
@@ -370,7 +371,10 @@ impl Home {
         self.file = if self.accesso {
             // Solo i file che l'app apre: gli altri non si vedono (richiesta dell'autore, 3/11: «se un file non lo
             // leggiamo deve sparire»).
-            self.scorciatoie.iter().map(|s| elenca(&s.percorso).ok().map(|v| v.into_iter().filter(|v| !v.cartella && si_apre(v.tipo)).collect())).collect()
+            self.scorciatoie
+                .iter()
+                .map(|s| elenca(&s.percorso).ok().map(|v| v.into_iter().filter(|v| !v.cartella && si_apre(v.tipo)).collect()))
+                .collect()
         } else {
             Vec::new()
         };
@@ -438,8 +442,8 @@ impl Home {
     fn luogo(&self, chiave: &str) -> (&'static str, String) {
         if e_uri(chiave) {
             return match provenienza(chiave) {
-                Some(app) => (icona_della_scorciatoia(app), format!("da {app}")),
-                None => (icone::APPS, "da un'altra app".to_string()),
+                Some(app) => (icona_della_scorciatoia(app), tascabile_touch::tf!("da {}", app)),
+                None => (icone::APPS, t("da un'altra app").to_string()),
             };
         }
         let cartella = Path::new(chiave).parent().unwrap_or(Path::new(""));
@@ -474,7 +478,7 @@ impl Home {
             return unisci(&s.nome, resto);
         }
         match cartella.strip_prefix(&self.radice) {
-            Ok(resto) if resto.as_os_str().is_empty() => NOME_RADICE.to_string(),
+            Ok(resto) if resto.as_os_str().is_empty() => t(NOME_RADICE).to_string(),
             Ok(resto) => unisci("", resto),
             Err(_) => cartella.display().to_string(),
         }
@@ -683,16 +687,19 @@ impl Home {
                 // oltre lo schermo (0.9.0, segnalazione dell'autore del 3/11).
                 let testi: f32 = Filtro::CHIP.iter().map(|(_, nome)| Chip::new(nome).larghezza_del_testo(ui)).sum();
                 let (spazio, margine) = misure_dei_chip(ui.available_width(), testi, Filtro::CHIP.len());
-                ScrollArea::horizontal().id_salt("chip_della_home").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = spazio;
-                        for (f, nome) in Filtro::CHIP {
-                            if ui.add(Chip::new(nome).margine(margine).acceso(self.filtro == f)).clicked() {
-                                self.filtro = f;
+                ScrollArea::horizontal().id_salt("chip_della_home").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(
+                    ui,
+                    |ui| {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = spazio;
+                            for (f, nome) in Filtro::CHIP {
+                                if ui.add(Chip::new(nome).margine(margine).acceso(self.filtro == f)).clicked() {
+                                    self.filtro = f;
+                                }
                             }
-                        }
-                    });
-                });
+                        });
+                    },
+                );
             });
             ui.add_space(4.0);
             if self.filtro_attivo() {
@@ -729,7 +736,7 @@ impl Home {
             con_margini(ui, tema::MARGINE, |ui| {
                 Scheda::new().margine(Margin::same(18)).show(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(RichText::new("Qui compaiono i documenti aperti di recente.").color(tema::MATITA));
+                    ui.label(RichText::new(t("Qui compaiono i documenti aperti di recente.")).color(tema::matita()));
                 });
             });
             return;
@@ -812,7 +819,7 @@ impl Home {
         let file: Vec<(Voce, usize)> = file.into_iter().map(|(v, i)| (v.clone(), i)).collect();
         if recenti.is_empty() && file.is_empty() {
             ui.add_space(16.0);
-            con_margini(ui, tema::MARGINE_TITOLO, |ui| ui.label(RichText::new("Nessun documento trovato.").color(tema::MATITA)));
+            con_margini(ui, tema::MARGINE_TITOLO, |ui| ui.label(RichText::new(t("Nessun documento trovato.")).color(tema::matita())));
             return;
         }
         if !recenti.is_empty() {
@@ -830,7 +837,7 @@ impl Home {
                         let dove = if data.is_empty() { s.nome.clone() } else { format!("{} · {data}", s.nome) };
                         let spenta = !si_apre(v.tipo);
                         let etichetta = etichetta_menu_file(&v.nome);
-                        let mut voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), nome_da_mostrare(&v.nome, v.tipo))
+                        let mut voce = tascabile_touch::Voce::nome_proprio(tipo_della_voce(v.tipo), nome_da_mostrare(&v.nome, v.tipo))
                             .dove(icona_della_scorciatoia(&s.nome), &dove)
                             .spenta(spenta)
                             .ultima(k + 1 == file.len());
@@ -851,7 +858,7 @@ impl Home {
             if altri > 0 {
                 ui.add_space(8.0);
                 let testo = format!("E altri {altri}: scrivi qualche lettera in più per trovarli.");
-                con_margini(ui, tema::MARGINE_TITOLO, |ui| ui.label(RichText::new(testo).color(tema::MATITA)));
+                con_margini(ui, tema::MARGINE_TITOLO, |ui| ui.label(RichText::new(testo).color(tema::matita())));
             }
         }
     }
@@ -912,7 +919,11 @@ impl Home {
         let mut ordine_scelto = None;
         let mut menu_file = None;
         ui.spacing_mut().item_spacing = Vec2::ZERO;
-        let barra = BarraAlta::new(&titolo).indietro("Indietro").sottotitolo(&sotto).azione(PulsanteIcona::new(icone::SEARCH, CERCA_PULSANTE)).mostra(ui);
+        let barra = BarraAlta::nome_proprio(&titolo)
+            .indietro("Indietro")
+            .sottotitolo(&sotto)
+            .azione(PulsanteIcona::new(icone::SEARCH, CERCA_PULSANTE))
+            .mostra(ui);
         indietro |= barra.indietro;
         cerca |= barra.azione.is_some();
         if self.cerca_in_cartella {
@@ -942,7 +953,7 @@ impl Home {
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = tema::SPAZIO;
-                ui.label(RichText::new(ORDINA).font(Carattere::Testo.font(ui.ctx(), 13.0)).color(tema::MATITA));
+                ui.label(RichText::new(t(ORDINA)).font(Carattere::Testo.font(ui.ctx(), 13.0)).color(tema::matita()));
                 for (nome, o) in [(ORDINE_MODIFICA, Ordine::Modifica), (ORDINE_NOME, Ordine::Nome)] {
                     if ui.add(Chip::new(nome).acceso(ordine == o)).clicked() {
                         ordine_scelto = Some(o);
@@ -960,18 +971,23 @@ impl Home {
                     // La ricerca, o tutti i file insieme: con la sottocartella dove stanno.
                     if !cercato.is_empty() || tutti_insieme {
                         let Some(tutti) = cartella.tutti.as_deref() else {
-                            Frame::NONE.inner_margin(Margin::same(18)).show(ui, |ui| ui.label(RichText::new(CERCO_I_DOCUMENTI).color(tema::MATITA)));
+                            Frame::NONE
+                                .inner_margin(Margin::same(18))
+                                .show(ui, |ui| ui.label(RichText::new(t(CERCO_I_DOCUMENTI)).color(tema::matita())));
                             return;
                         };
                         let trovati: Vec<&Voce> = tutti.iter().filter(|v| cercato.is_empty() || nome_contiene(&v.nome, &cercato)).collect();
                         if trovati.is_empty() {
                             let testo = if cercato.is_empty() { "Nessun documento qui." } else { "Nessun documento trovato." };
-                            Frame::NONE.inner_margin(Margin::same(18)).show(ui, |ui| ui.label(RichText::new(testo).color(tema::MATITA)));
+                            Frame::NONE.inner_margin(Margin::same(18)).show(ui, |ui| ui.label(RichText::new(testo).color(tema::matita())));
                         }
                         for (i, v) in trovati.iter().enumerate() {
                             let dove = dove_nella_cartella(&cartella.percorso, v, &oggi);
                             let etichetta = etichetta_menu_file(&v.nome);
-                            let voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), &v.nome).dove(icone::SCHEDULE, &dove).menu(&etichetta).ultima(i + 1 == trovati.len());
+                            let voce = tascabile_touch::Voce::nome_proprio(tipo_della_voce(v.tipo), &v.nome)
+                                .dove(icone::SCHEDULE, &dove)
+                                .menu(&etichetta)
+                                .ultima(i + 1 == trovati.len());
                             match voce_file_se_visibile(ui, voce) {
                                 Some(ToccoRecente::Apri) => *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() }),
                                 Some(ToccoRecente::Menu(r)) => menu_file = Some((v.percorso.clone(), v.nome.clone(), r.right_top())),
@@ -988,16 +1004,18 @@ impl Home {
                     match &cartella.voci {
                         Err(e) => {
                             let testo = format!("Non riesco a leggere questa cartella ({:?}).", e.kind());
-                            Frame::NONE.inner_margin(Margin::same(18)).show(ui, |ui| ui.colored_label(tema::ROSSO, testo));
+                            Frame::NONE.inner_margin(Margin::same(18)).show(ui, |ui| ui.colored_label(tema::rosso(), testo));
                         }
                         Ok(_) if voci.is_empty() => {
-                            Frame::NONE.inner_margin(Margin::same(18)).show(ui, |ui| ui.label(RichText::new("Cartella vuota.").color(tema::MATITA)));
+                            Frame::NONE
+                                .inner_margin(Margin::same(18))
+                                .show(ui, |ui| ui.label(RichText::new(t("Cartella vuota.")).color(tema::matita())));
                         }
                         Ok(_) => {
                             for (i, v) in voci.iter().enumerate() {
                                 let ultima = i + 1 == voci.len();
                                 if v.cartella {
-                                    let voce = tascabile_touch::Voce::new(tascabile_touch::Tipo::Cartella, &v.nome).ultima(ultima);
+                                    let voce = tascabile_touch::Voce::nome_proprio(tascabile_touch::Tipo::Cartella, &v.nome).ultima(ultima);
                                     if mostra_se_visibile(ui, voce) {
                                         vai = Some(v.percorso.clone());
                                     }
@@ -1005,9 +1023,14 @@ impl Home {
                                 }
                                 let dove = dove_del_file(v, &oggi);
                                 let etichetta = etichetta_menu_file(&v.nome);
-                                let voce = tascabile_touch::Voce::new(tipo_della_voce(v.tipo), &v.nome).dove(icone::SCHEDULE, &dove).menu(&etichetta).ultima(ultima);
+                                let voce = tascabile_touch::Voce::nome_proprio(tipo_della_voce(v.tipo), &v.nome)
+                                    .dove(icone::SCHEDULE, &dove)
+                                    .menu(&etichetta)
+                                    .ultima(ultima);
                                 match voce_file_se_visibile(ui, voce) {
-                                    Some(ToccoRecente::Apri) => *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() }),
+                                    Some(ToccoRecente::Apri) => {
+                                        *azione = Some(Azione::ApriFile { percorso: v.percorso.clone(), nome: v.nome.clone() })
+                                    }
                                     Some(ToccoRecente::Menu(r)) => menu_file = Some((v.percorso.clone(), v.nome.clone(), r.right_top())),
                                     None => {}
                                 }
@@ -1053,7 +1076,11 @@ impl Home {
     fn mostra_foglio_nuovo(&mut self, ctx: &egui::Context) -> Option<Azione> {
         let scelto = self.foglio_nuovo.mostra(ctx, "Nuovo", |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
-            if tascabile_touch::Voce::new(tascabile_touch::Tipo::Pdf, "Scansiona").sotto("Foto dei fogli in un PDF, col testo che si cerca").mostra(ui).aperta() {
+            if tascabile_touch::Voce::new(tascabile_touch::Tipo::Pdf, "Scansiona")
+                .sotto("Foto dei fogli in un PDF, col testo che si cerca")
+                .mostra(ui)
+                .aperta()
+            {
                 return Some(Azione::Scansiona);
             }
             if tascabile_touch::Voce::new(tascabile_touch::Tipo::Word, DOCUMENTO_VUOTO).sotto("Un documento Word vuoto").mostra(ui).aperta() {
@@ -1067,7 +1094,13 @@ impl Home {
                     Modello::Lettera => icone::MAIL,
                     Modello::Lezione => icone::SCHOOL,
                 };
-                if tascabile_touch::Voce::new(tascabile_touch::Tipo::Word, m.nome()).icona(icona).sotto(m.sotto()).ultima(i == ultimo).mostra(ui).aperta() {
+                if tascabile_touch::Voce::new(tascabile_touch::Tipo::Word, m.nome())
+                    .icona(icona)
+                    .sotto(m.sotto())
+                    .ultima(i == ultimo)
+                    .mostra(ui)
+                    .aperta()
+                {
                     return Some(Azione::NuovoDaModello(m));
                 }
             }
@@ -1154,11 +1187,12 @@ fn mostra_se_visibile(ui: &mut Ui, voce: tascabile_touch::Voce<'_>) -> bool {
 /// WhatsApp · ieri 19:40 · 3 pagine»), per una presentazione quante slide.
 pub fn riga_del_recente(posto: &str, quando: &str, r: &Recente) -> String {
     match (r.tipo, r.pagine) {
-        (Tipo::Pdf, Some(1)) => format!("{posto} · {quando} · 1 pagina"),
-        (Tipo::Pdf, Some(n)) => format!("{posto} · {quando} · {n} pagine"),
-        (Tipo::Presentazione, Some(n)) => format!("{posto} · {quando} · {n} slide"),
-        (Tipo::Foglio, Some(1)) => format!("{posto} · {quando} · 1 foglio"),
-        (Tipo::Foglio, Some(n)) => format!("{posto} · {quando} · {n} fogli"),
+        (Tipo::Pdf, Some(1)) => format!("{posto} · {quando} · {}", t("1 pagina")),
+        (Tipo::Pdf, Some(n)) => format!("{posto} · {quando} · {}", tascabile_touch::tf!("{} pagine", n)),
+        (Tipo::Presentazione, Some(1)) => format!("{posto} · {quando} · {}", t("1 slide")),
+        (Tipo::Presentazione, Some(n)) => format!("{posto} · {quando} · {}", tascabile_touch::tf!("{} slide", n)),
+        (Tipo::Foglio, Some(1)) => format!("{posto} · {quando} · {}", t("1 foglio")),
+        (Tipo::Foglio, Some(n)) => format!("{posto} · {quando} · {}", tascabile_touch::tf!("{} fogli", n)),
         _ => format!("{posto} · {quando}"),
     }
 }
@@ -1167,7 +1201,7 @@ pub fn riga_del_recente(posto: &str, quando: &str, r: &Recente) -> String {
 fn voce_recente(ui: &mut Ui, r: &Recente, icona: &str, dove: &str, ultima: bool) -> Option<ToccoRecente> {
     let nome = nome_da_mostrare(&r.nome, r.tipo);
     let etichetta = etichetta_menu(nome);
-    let risposta = tascabile_touch::Voce::new(tipo_della_voce(r.tipo), nome).dove(icona, dove).menu(&etichetta).ultima(ultima).mostra(ui);
+    let risposta = tascabile_touch::Voce::nome_proprio(tipo_della_voce(r.tipo), nome).dove(icona, dove).menu(&etichetta).ultima(ultima).mostra(ui);
     if risposta.menu_toccato() {
         return risposta.menu.map(|m| ToccoRecente::Menu(m.rect));
     }
@@ -1195,20 +1229,20 @@ fn dove_del_file(v: &Voce, oggi: &Locale) -> String {
 
 /// Il sottotitolo della barra di una cartella: «2 cartelle · 12 file», «Vuota», «Non si legge».
 fn conteggio(voci: &io::Result<Vec<Voce>>) -> String {
-    let Ok(voci) = voci else { return "Non si legge".to_string() };
+    let Ok(voci) = voci else { return t("Non si legge").to_string() };
     let cartelle = voci.iter().filter(|v| v.cartella).count();
     // Solo i file che l'app apre: gli altri non si vedono.
     let file = voci.iter().filter(|v| !v.cartella && si_apre(v.tipo)).count();
     let mut pezzi = Vec::new();
     match cartelle {
         0 => {}
-        1 => pezzi.push("1 cartella".to_string()),
-        n => pezzi.push(format!("{n} cartelle")),
+        1 => pezzi.push(t("1 cartella").to_string()),
+        n => pezzi.push(tascabile_touch::tf!("{} cartelle", n)),
     }
     if file > 0 {
-        pezzi.push(format!("{file} file"));
+        pezzi.push(tascabile_touch::tf!("{} file", file));
     }
-    if pezzi.is_empty() { "Vuota".to_string() } else { pezzi.join(" · ") }
+    if pezzi.is_empty() { t("Vuota").to_string() } else { pezzi.join(" · ") }
 }
 
 /// La testa della Home: «Doc Tascabile.» in Fraunces con «Doc» e il punto in blu, sotto la data;
@@ -1217,11 +1251,11 @@ fn testa(ui: &mut Ui, data: &str) -> bool {
     let ctx = ui.ctx().clone();
     let font = Carattere::Titolo.font(&ctx, 36.0);
     let mut job = egui::text::LayoutJob::default();
-    for (pezzo, colore) in [("Doc", tema::BLU), (" Tascabile", tema::INCHIOSTRO), (".", tema::BLU)] {
+    for (pezzo, colore) in [("Doc", tema::blu()), (" Tascabile", tema::inchiostro()), (".", tema::blu())] {
         job.append(pezzo, 0.0, egui::TextFormat { font_id: font.clone(), color: colore, extra_letter_spacing: -1.35, ..Default::default() });
     }
     let titolo = ui.painter().layout_job(job);
-    let data = ui.painter().layout_no_wrap(data.to_owned(), Carattere::Testo.font(&ctx, 14.0), tema::MATITA);
+    let data = ui.painter().layout_no_wrap(data.to_owned(), Carattere::Testo.font(&ctx, 14.0), tema::matita());
     // `.home-testa`: 14 dp sopra, 6 sotto; il titolo alto 36 × 1,05, la data 4 sotto.
     let alto_testo = 37.8 + 4.0 + data.size().y;
     let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 14.0 + alto_testo.max(tema::PULSANTE) + 6.0), Sense::hover());
@@ -1231,11 +1265,11 @@ fn testa(ui: &mut Ui, data: &str) -> bool {
     let posto_titolo = Rect::from_min_size(pos2(x, y_titolo), titolo.size());
     ui.painter().galley(posto_titolo.min, titolo, Color32::PLACEHOLDER);
     ui.interact(posto_titolo, ui.id().with("titolo"), Sense::hover())
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "Doc Tascabile"));
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t("Doc Tascabile")));
     let posto_data = Rect::from_min_size(pos2(x, rect.top() + 14.0 + 37.8 + 4.0), data.size());
     ui.painter().galley(posto_data.min, data.clone(), Color32::PLACEHOLDER);
     ui.interact(posto_data, ui.id().with("data"), Sense::hover())
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, data.text()));
+        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t(data.text())));
     let posto = Rect::from_min_size(pos2(rect.right() - 12.0 - tema::PULSANTE, rect.top() + 14.0), Vec2::splat(tema::PULSANTE));
     let mut angolo = ui.new_child(UiBuilder::new().max_rect(posto));
     angolo.add(PulsanteIcona::new(icone::SETTINGS, "Impostazioni")).clicked()
@@ -1251,18 +1285,16 @@ fn riquadro_accesso(ui: &mut Ui, azione: &mut Option<Azione>) {
             let ctx = ui.ctx().clone();
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 10.0;
-                ui.label(RichText::new(icone::FOLDER_OPEN).font(Carattere::Icona.font(&ctx, tema::ICONA)).color(tema::BLU));
-                ui.label(RichText::new("Serve l'accesso ai file").font(Carattere::Grassetto.font(&ctx, 17.0)).color(tema::INCHIOSTRO));
+                ui.label(RichText::new(icone::FOLDER_OPEN).font(Carattere::Icona.font(&ctx, tema::ICONA)).color(tema::blu()));
+                ui.label(RichText::new(t("Serve l'accesso ai file")).font(Carattere::Grassetto.font(&ctx, 17.0)).color(tema::inchiostro()));
             });
             ui.label(
                 // Corto: a 372 dp il testo di prima andava su sei righe, e il «Nuovo» copriva il menu
                 // del quarto recente (0.8.3).
-                RichText::new(
-                    "Per aprire i documenti del telefono e gli allegati di WhatsApp. In rete va solo l'impronta di un file, se ne \
-                     crei il timestamp.",
-                )
+                RichText::new(t("Per aprire i documenti del telefono e gli allegati di WhatsApp. In rete va solo l'impronta di un file, se ne \
+                     crei il timestamp."))
                 .font(Carattere::Testo.font(&ctx, 15.0))
-                .color(tema::MATITA),
+                .color(tema::matita()),
             );
             if ui.add(Pulsante::new("Concedi", Peso::Principale)).clicked() {
                 *azione = Some(Azione::ConcediAccesso);
@@ -1289,8 +1321,9 @@ mod test {
         // 360 dp (324): ancora dentro.
         let (spazio, margine) = misure_dei_chip(324.0, 193.0, 5);
         assert!(margine >= 20.0 && 193.0 + 5.0 * margine + 4.0 * spazio <= 324.0);
-        // Più stretto ancora: il minimo, e la fila scorre.
-        assert_eq!(misure_dei_chip(280.0, 193.0, 5), (6.0, 20.0));
+        // Più stretto ancora: il minimo (8 dp per lato dalla 0.10.0, per i chip spagnoli a 372 dp),
+        // e la fila scorre.
+        assert_eq!(misure_dei_chip(280.0, 193.0, 5), (6.0, 16.0));
         // Giusto giusto: non si stringe.
         assert_eq!(misure_dei_chip(193.0 + 5.0 * 28.0 + 4.0 * 8.0, 193.0, 5), (tema::SPAZIO, Chip::MARGINE));
         assert_eq!(misure_dei_chip(100.0, 0.0, 0), (tema::SPAZIO, Chip::MARGINE));
@@ -1482,7 +1515,14 @@ mod test {
     #[test]
     fn un_file_di_una_sottocartella_dice_dove_sta() {
         let oggi = Locale::da_utc(0);
-        let v = |p: &str| Voce { nome: "R.docx".into(), percorso: PathBuf::from(p), cartella: false, tipo: Tipo::Documento, byte: 2048, modificato: None };
+        let v = |p: &str| Voce {
+            nome: "R.docx".into(),
+            percorso: PathBuf::from(p),
+            cartella: false,
+            tipo: Tipo::Documento,
+            byte: 2048,
+            modificato: None,
+        };
         assert_eq!(dove_nella_cartella(Path::new("/r/Download"), &v("/r/Download/Lavoro/Turni/R.docx"), &oggi), "Lavoro/Turni · 2 KB");
         assert_eq!(dove_nella_cartella(Path::new("/r/Download"), &v("/r/Download/R.docx"), &oggi), "2 KB");
     }

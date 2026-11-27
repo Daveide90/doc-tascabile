@@ -23,7 +23,7 @@ const SCHERMO: egui::Vec2 = egui::vec2(412.0, 915.0);
 fn telefono<S: 'static>(mut app: impl FnMut(&mut Ui, &mut S) + 'static, stato: S) -> Harness<'static, S> {
     let tutto = move |ui: &mut Ui, s: &mut S| {
         let zona = ui.ctx().content_rect();
-        ui.painter().rect_filled(zona, 0.0, tema::CARTA);
+        ui.painter().rect_filled(zona, 0.0, tema::carta());
         ui.scope_builder(UiBuilder::new().max_rect(zona), |ui| app(ui, s));
     };
     let mut h = Harness::builder().with_size(SCHERMO).with_pixels_per_point(2.625).with_step_dt(1.0 / 60.0).wgpu().build_ui_state(tutto, stato);
@@ -52,7 +52,7 @@ fn barra_del_documento(ui: &mut Ui) {
     BarraAlta::new("Relazione turno notte")
         .indietro("Indietro")
         .sottotitolo("Salvato · Documenti")
-        .stato(icone::CHECK_CIRCLE, tema::VERDE)
+        .stato(icone::CHECK_CIRCLE, tema::verde())
         .azione(PulsanteIcona::new(icone::UNDO, "Annulla"))
         .azione(PulsanteIcona::new(icone::REDO, "Ripeti").spento(true))
         .azione(PulsanteIcona::new(icone::MORE_VERT, "Menu"))
@@ -81,7 +81,7 @@ fn pagina(ui: &mut Ui, zona: Rect) -> (std::sync::Arc<egui::Galley>, egui::Pos2)
     let raggio = CornerRadius { nw: tema::RAGGIO_PAGINA, ne: tema::RAGGIO_PAGINA, sw: 0, se: 0 };
     let foglio = Rect::from_min_max(foglio.min, pos2(zona.right() - 10.0, zona.bottom()));
     tema::dipingi_ombra(ui.painter(), foglio, raggio, &tema::OMBRA);
-    ui.painter().rect_filled(foglio, raggio, tema::FOGLIO);
+    ui.painter().rect_filled(foglio, raggio, tema::foglio());
     let titoli = Color32::from_rgb(0x1F, 0x3B, 0x63);
     let testo = Color32::from_rgb(0x22, 0x22, 0x22);
     let largo = foglio.width() - 48.0;
@@ -159,7 +159,7 @@ fn galleria(ui: &mut Ui, avviso: &mut AvvisoBreve) {
     // Un paragrafo con una parte selezionata su due righe, le gocce e la barra del contesto.
     ui.add_space(86.0);
     let testo = "Notte regolare. Alle 2:30 rivalutazione del dolore al letto 12 con NRS 6, somministrata la terapia al bisogno come da prescrizione.";
-    let g = ui.painter().layout(testo.to_owned(), FontId::proportional(16.5), tema::INCHIOSTRO, zona.width() - 2.0 * 34.0);
+    let g = ui.painter().layout(testo.to_owned(), FontId::proportional(16.5), tema::inchiostro(), zona.width() - 2.0 * 34.0);
     let origine = pos2(zona.left() + 34.0, ui.cursor().top());
     let punto = |parola: &str, dopo: bool| {
         let i = testo.find(parola).unwrap() + if dopo { parola.len() } else { 0 };
@@ -169,11 +169,11 @@ fn galleria(ui: &mut Ui, avviso: &mut AvvisoBreve) {
     let riga_a =
         Rect::from_min_max(a.min, pos2(origine.x + g.rows.iter().find(|r| r.rect().top() + origine.y == a.top()).unwrap().rect().right(), a.max.y));
     let riga_b = Rect::from_min_max(pos2(origine.x, b.top()), b.max);
-    ui.painter().rect_filled(riga_a, 2.0, tema::SELEZIONE);
-    ui.painter().rect_filled(riga_b, 2.0, tema::SELEZIONE);
-    ui.painter().galley(origine, g.clone(), tema::INCHIOSTRO);
-    goccia(ui.painter(), Maniglia::Inizio, Bordo { x: a.left(), cima: a.top(), fondo: a.bottom() }, tema::BLU);
-    goccia(ui.painter(), Maniglia::Fine, Bordo { x: b.right(), cima: b.top(), fondo: b.bottom() }, tema::BLU);
+    ui.painter().rect_filled(riga_a, 2.0, tema::selezione());
+    ui.painter().rect_filled(riga_b, 2.0, tema::selezione());
+    ui.painter().galley(origine, g.clone(), tema::inchiostro());
+    goccia(ui.painter(), Maniglia::Inizio, Bordo { x: a.left(), cima: a.top(), fondo: a.bottom() }, tema::blu());
+    goccia(ui.painter(), Maniglia::Fine, Bordo { x: b.right(), cima: b.top(), fondo: b.bottom() }, tema::blu());
     BarraContesto::new()
         .azione(icone::CONTENT_CUT, "Taglia")
         .azione(icone::CONTENT_COPY, "Copia")
@@ -205,12 +205,12 @@ fn galleria_dei_componenti() {
     // I colori pieni del tema arrivano a schermo così come sono: la carta, il foglio delle
     // schede, il blu di «Nuovo», lo scuro della barra del contesto, i fondi tenui dei tipi.
     for (nome, colore, almeno) in [
-        ("carta", tema::CARTA, 100_000),
-        ("foglio", tema::FOGLIO, 100_000),
-        ("blu", tema::BLU, 20_000),
-        ("scuro", tema::SCURO, 20_000),
-        ("rosso tenue", tema::ROSSO_TENUE, 5_000),
-        ("ocra tenue", tema::OCRA_TENUE, 5_000),
+        ("carta", tema::carta(), 100_000),
+        ("foglio", tema::foglio(), 100_000),
+        ("blu", tema::blu(), 20_000),
+        ("scuro", tema::scuro(), 20_000),
+        ("rosso tenue", tema::rosso_tenue(), 5_000),
+        ("ocra tenue", tema::ocra_tenue(), 5_000),
     ] {
         let n = pixel_di(&img, colore);
         assert!(n >= almeno, "{nome}: {n} pixel");

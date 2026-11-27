@@ -19,6 +19,7 @@ use tascabile_word::vista::{Modo, colore_carta};
 use crate::foglio_immagine::{self, IMMAGINE};
 use crate::foglio_tabella::{self, NellaGriglia, TABELLA};
 use crate::{Comando, Dopo, Fuoco, Schermata, TascabileApp, home};
+use tascabile_touch::t;
 
 /// Le etichette dei pulsanti della barra alta (per l'accessibilità e per le prove).
 pub(crate) const INDIETRO: &str = "Indietro";
@@ -277,9 +278,9 @@ impl TascabileApp {
             return ("Modifiche non salvate".to_string(), false);
         }
         match &a.editor.origine {
-            Origine::File(p) => (format!("Salvato · {}", self.home.dove(&p.to_string_lossy())), true),
+            Origine::File(p) => (tascabile_touch::tf!("Salvato · {}", self.home.dove(&p.to_string_lossy())), true),
             // Arrivato da un'altra app: «Salva» ne fa una copia nel telefono.
-            Origine::Uri { uri, .. } => (format!("Aperto {}", self.home.dove(uri)), false),
+            Origine::Uri { uri, .. } => (tascabile_touch::tf!("Aperto {}", self.home.dove(uri)), false),
             Origine::Nuovo | Origine::Recuperato { .. } => ("Non ancora salvato".to_string(), false),
         }
     }
@@ -292,9 +293,9 @@ impl TascabileApp {
         let ripeti = self.editor().is_some_and(|e| e.s.can_redo()) && !in_pagina;
         let nome = self.nome_da_mostrare();
         let (stato, salvato) = self.stato_del_documento();
-        let mut barra = BarraAlta::new(&nome).indietro(INDIETRO).sottotitolo(&stato);
+        let mut barra = BarraAlta::nome_proprio(&nome).indietro(INDIETRO).sottotitolo(&stato);
         if salvato {
-            barra = barra.stato(icone::CHECK_CIRCLE, tema::VERDE);
+            barra = barra.stato(icone::CHECK_CIRCLE, tema::verde());
         }
         let r = barra
             .azione(PulsanteIcona::new(icone::UNDO, ANNULLA).spento(!annulla))
@@ -424,7 +425,10 @@ impl TascabileApp {
     fn messaggi(&mut self, ui: &mut egui::Ui) {
         let Some(e) = self.editor() else { return };
         let righe: Vec<(String, egui::Color32)> =
-            [e.protezione().map(|p| (p.to_string(), tema::OCRA)), e.ponte.avviso.clone().map(|a| (a, tema::ROSSO))].into_iter().flatten().collect();
+            [e.protezione().map(|p| (p.to_string(), tema::ocra())), e.ponte.avviso.clone().map(|a| (a, tema::rosso()))]
+                .into_iter()
+                .flatten()
+                .collect();
         if righe.is_empty() {
             return;
         }
@@ -620,7 +624,7 @@ impl TascabileApp {
     fn apri_informazioni(&mut self) {
         let cartella = match self.aperto.as_ref().map(|a| &a.editor.origine) {
             Some(Origine::File(p)) => self.home.dove(&p.to_string_lossy()),
-            Some(Origine::Uri { uri, .. }) => format!("Arrivato {}, non è salvato nel telefono", self.home.dove(uri)),
+            Some(Origine::Uri { uri, .. }) => tascabile_touch::tf!("Arrivato {}, non è salvato nel telefono", self.home.dove(uri)),
             Some(Origine::Nuovo | Origine::Recuperato { .. }) | None => "Non ancora salvato".to_string(),
         };
         let Some(e) = self.editor_mut() else { return };
@@ -642,7 +646,7 @@ impl TascabileApp {
         let c = info.conteggi;
         let righe = [
             ("Parole", numero(c.parole)),
-            ("Caratteri", format!("{}, {} senza spazi", numero(c.caratteri), numero(c.caratteri_senza_spazi))),
+            ("Caratteri", tascabile_touch::tf!("{}, {} senza spazi", numero(c.caratteri), numero(c.caratteri_senza_spazi))),
             ("Paragrafi", numero(c.paragrafi)),
             ("Pagine", numero(c.pagine)),
             ("Cartella", info.cartella),
@@ -665,9 +669,9 @@ const RIENTRO_TITOLO: f32 = 20.0;
 fn riga_titolo(ui: &mut egui::Ui, t: &Titolo, ultima: bool) -> egui::Response {
     let ctx = ui.ctx().clone();
     let (carattere, misura, colore) = match t.livello {
-        0 => (Carattere::Grassetto, 16.0, tema::INCHIOSTRO),
-        1 => (Carattere::Testo, 16.0, tema::INCHIOSTRO),
-        _ => (Carattere::Testo, 15.0, tema::MATITA),
+        0 => (Carattere::Grassetto, 16.0, tema::inchiostro()),
+        1 => (Carattere::Testo, 16.0, tema::inchiostro()),
+        _ => (Carattere::Testo, 15.0, tema::matita()),
     };
     let largo = ui.available_width();
     let rientro = 4.0 + RIENTRO_TITOLO * f32::from(t.livello.min(4));
@@ -675,13 +679,13 @@ fn riga_titolo(ui: &mut egui::Ui, t: &Titolo, ultima: bool) -> egui::Response {
     job.wrap = egui::text::TextWrapping::truncate_at_width(largo - rientro - 8.0);
     let g = ui.painter().layout_job(job);
     let (rect, r) = ui.allocate_exact_size(egui::vec2(largo, tema::PULSANTE.max(g.size().y + 16.0)), egui::Sense::click());
-    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &t.testo));
+    r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tascabile_touch::t(&t.testo)));
     if r.is_pointer_button_down_on() {
-        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::PREMUTO);
+        ui.painter().rect_filled(rect, CornerRadius::same(tema::RAGGIO_SEGMENTO), tema::premuto());
     }
     ui.painter().galley(pos2(rect.left() + rientro, rect.center().y - g.size().y / 2.0), g, colore);
     if !ultima {
-        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::FILO);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left(), rect.bottom() - 1.0), rect.max), 0.0, tema::filo());
     }
     r
 }
@@ -692,14 +696,14 @@ fn indice_vuoto(ui: &mut egui::Ui) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 12.0;
-        ui.label(RichText::new(icone::TOC).font(Carattere::Icona.font(&ctx, tema::ICONA)).color(tema::MATITA));
-        ui.label(RichText::new("Nessun titolo").font(Carattere::Grassetto.font(&ctx, 16.0)).color(tema::INCHIOSTRO));
+        ui.label(RichText::new(icone::TOC).font(Carattere::Icona.font(&ctx, tema::ICONA)).color(tema::matita()));
+        ui.label(RichText::new(t("Nessun titolo")).font(Carattere::Grassetto.font(&ctx, 16.0)).color(tema::inchiostro()));
     });
     ui.add_space(6.0);
     ui.label(
-        RichText::new("I paragrafi con lo stile Titolo 1, Titolo 2 o Titolo 3 (dal foglio «Aa») compaiono qui.")
+        RichText::new(t("I paragrafi con lo stile Titolo 1, Titolo 2 o Titolo 3 (dal foglio «Aa») compaiono qui."))
             .font(Carattere::Testo.font(&ctx, 15.0))
-            .color(tema::MATITA),
+            .color(tema::matita()),
     );
     ui.add_space(8.0);
 }
@@ -711,14 +715,14 @@ pub(crate) fn riga_informazione(ui: &mut egui::Ui, etichetta: &str, valore: &str
     let r = ui
         .horizontal(|ui| {
             ui.set_min_height(tema::PULSANTE);
-            ui.label(RichText::new(etichetta).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::MATITA));
+            ui.label(RichText::new(t(etichetta)).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::matita()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.add(egui::Label::new(RichText::new(valore).font(Carattere::Grassetto.font(&ctx, 15.0)).color(tema::INCHIOSTRO)).truncate());
+                ui.add(egui::Label::new(RichText::new(t(valore)).font(Carattere::Grassetto.font(&ctx, 15.0)).color(tema::inchiostro())).truncate());
             });
         })
         .response
         .rect;
     if !ultima {
-        ui.painter().rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, tema::FILO);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(r.left(), r.bottom() - 1.0), r.max), 0.0, tema::filo());
     }
 }

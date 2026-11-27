@@ -11,6 +11,7 @@ use tascabile_touch::{
 use tascabile_word::tabella::{Bordi, COLONNE_MASSIME, ComandoTabella, InfoTabella, RIGHE_MASSIME};
 
 use crate::{Schermata, TascabileApp};
+use tascabile_touch::t;
 
 /// Le voci della barra della tabella (nome sulla barra, che è anche l'etichetta).
 pub(crate) const RIGA_SOPRA: &str = "Riga sopra";
@@ -71,7 +72,7 @@ pub(crate) fn pagina_della_griglia(ui: &mut egui::Ui, scelta: (usize, usize)) ->
     let ctx = ui.ctx().clone();
     let mut fatto = None;
     ui.spacing_mut().item_spacing.y = 12.0;
-    ui.label(RichText::new(misura_tabella(scelta.0, scelta.1)).font(Carattere::Grassetto.font(&ctx, 16.0)).color(tema::INCHIOSTRO));
+    ui.label(RichText::new(misura_tabella(scelta.0, scelta.1)).font(Carattere::Grassetto.font(&ctx, 16.0)).color(tema::inchiostro()));
     if let Some(m) = GrigliaTabella::new(RIGHE_MASSIME, COLONNE_MASSIME, scelta).mostra(ui) {
         fatto = Some(NellaGriglia::Misura(m));
     }
@@ -218,9 +219,9 @@ impl TascabileApp {
                     scelto = Some(ComandoTabella::Sfondo(SFONDI[i].2));
                 }
                 ui.label(
-                    RichText::new("Lo sfondo va sulle celle scelte, o su quella del cursore.")
+                    RichText::new(t("Lo sfondo va sulle celle scelte, o su quella del cursore."))
                         .font(Carattere::Testo.font(ui.ctx(), 13.0))
-                        .color(tema::MATITA),
+                        .color(tema::matita()),
                 );
                 scelto
             })

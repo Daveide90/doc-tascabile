@@ -20,16 +20,18 @@ pub use apertura::{Cartella, Genere, LIMITE_MB, sembra_foglio};
 pub fn caratteri_delle_celle() -> Vec<(&'static str, &'static [u8])> {
     let nomi = [("Regular", CARLITO[0]), ("Bold", CARLITO[1]), ("Italic", CARLITO[2]), ("Bold Italic", CARLITO[3])];
     nomi.iter()
-        .filter_map(|(stile, nome)| deckcraft_fonts::CRAFT_FONTS.iter().find(|f| f.family == "Carlito" && f.style == *stile).map(|f| (*nome, f.bytes)))
+        .filter_map(|(stile, nome)| {
+            deckcraft_fonts::CRAFT_FONTS.iter().find(|f| f.family == "Carlito" && f.style == *stile).map(|f| (*nome, f.bytes))
+        })
         .collect()
 }
 
 /// Le famiglie dei caratteri delle celle: tondo, grassetto, corsivo, grassetto corsivo.
 pub const CARLITO: [&str; 4] = ["carlito", "carlito-grassetto", "carlito-corsivo", "carlito-grassetto-corsivo"];
-pub use vista::{Allinea, Assi, Bordo, Casella, Dettaglio, dettaglio, nome_colonna};
 /// I tipi di GridCraft che servono all'app per la griglia.
 pub use gridcraft_core::{CellRef, RangeRef};
 pub use gridcraft_model::Sheet;
+pub use vista::{Allinea, Assi, Bordo, Casella, Dettaglio, dettaglio, nome_colonna};
 
 #[cfg(test)]
 mod test {

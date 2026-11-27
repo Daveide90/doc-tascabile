@@ -121,7 +121,7 @@ fn aspetti(s: &wordcraft_engine::Session) -> Vec<AspettoCampione> {
 fn contenuto(ui: &mut egui::Ui, f: &Formato, campioni: &[AspettoCampione], tavolozza: &mut Option<QualeTavolozza>) -> Option<(&'static str, Value)> {
     let mut scelto = None;
     etichetta_sezione(ui, "Stile");
-    fila_scorrevole(ui, "stili_aa", tema::FOGLIO, |ui| {
+    fila_scorrevole(ui, "stili_aa", tema::foglio(), |ui| {
         for ((nome, comando, nome_stile, misura), a) in STILI.iter().zip(campioni) {
             let acceso = f.stile == id_dello_stile(comando) || f.nome_stile.eq_ignore_ascii_case(nome_stile);
             if ui.add(Campione::new(nome, a.carattere, *misura, a.colore).acceso(acceso)).clicked() {

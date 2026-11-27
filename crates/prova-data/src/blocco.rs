@@ -5,10 +5,11 @@
 
 use sha2::{Digest, Sha256};
 
-/// Il lavoro più piccolo che si accetta: l'obiettivo sotto 2^192, cioè almeno 64 bit a zero in
-/// testa all'impronta del blocco. Tutti i blocchi dal 2014 ne hanno di più (quello del 2015
-/// dell'esempio pubblico 67); OpenTimestamps è del 2016.
-const BYTE_A_ZERO: usize = 8;
+/// Il lavoro minimo richiesto a seconda dell'altezza del blocco, in bit a zero in testa
+/// all'obiettivo (256 meno la lunghezza in bit): valori qualche bit sotto la difficoltà reale di
+/// quelle epoche, così un'intestazione su misura costa quanto un blocco vero (il blocco 358391 del
+/// 2015 ha 67 bit).
+const SOGLIE_LAVORO: [(u64, u32); 4] = [(850_000, 76), (700_000, 74), (500_000, 70), (0, 64)];
 
 /// Perché un'intestazione non va.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,6 +22,8 @@ pub enum ErroreBlocco {
     LavoroNonTorna,
     /// L'obiettivo è troppo facile per un blocco vero.
     PocoLavoro,
+    /// Gli esploratori danno blocchi diversi per la stessa altezza.
+    EsploratoriDiscordi,
 }
 
 impl std::fmt::Display for ErroreBlocco {
@@ -30,6 +33,7 @@ impl std::fmt::Display for ErroreBlocco {
             ErroreBlocco::RadiceDiversa => "il blocco non contiene la prova",
             ErroreBlocco::LavoroNonTorna => "il lavoro del blocco non torna",
             ErroreBlocco::PocoLavoro => "il blocco ha troppo poco lavoro",
+            ErroreBlocco::EsploratoriDiscordi => "gli esploratori danno blocchi diversi",
         })
     }
 }
@@ -70,9 +74,33 @@ fn obiettivo(bit: u32) -> Option<[u8; 32]> {
     Some(t)
 }
 
-/// Controlla l'intestazione `intestazione` per la radice `radice` (il messaggio della prova, nell'ordine
-/// dell'intestazione).
+/// Bit a zero in testa all'obiettivo `t` (256 meno la lunghezza in bit di `t`).
+fn bit_a_zero(t: &[u8; 32]) -> u32 {
+    let mut n = 0u32;
+    for &b in t {
+        if b == 0 {
+            n += 8;
+        } else {
+            n += b.leading_zeros();
+            break;
+        }
+    }
+    n
+}
+
+fn bit_minimi(altezza: u64) -> u32 {
+    SOGLIE_LAVORO.iter().find_map(|&(da, bit)| (altezza >= da).then_some(bit)).unwrap_or(64)
+}
+
+/// Controlla l'intestazione `intestazione` per la radice `radice` (il messaggio della prova,
+/// nell'ordine dell'intestazione), con la soglia minima base di 64 bit.
 pub fn controlla_intestazione(intestazione: &[u8], radice: &[u8]) -> Result<BloccoControllato, ErroreBlocco> {
+    controlla_intestazione_all_altezza(intestazione, radice, 0)
+}
+
+/// Controlla l'intestazione `intestazione` per la radice `radice` all'altezza `altezza`, chiedendo
+/// un lavoro minimo adeguato all'epoca del blocco.
+pub fn controlla_intestazione_all_altezza(intestazione: &[u8], radice: &[u8], altezza: u64) -> Result<BloccoControllato, ErroreBlocco> {
     let h: &[u8; 80] = intestazione.try_into().map_err(|_| ErroreBlocco::Lunghezza)?;
     if &h[36..68] != radice {
         return Err(ErroreBlocco::RadiceDiversa);
@@ -85,7 +113,7 @@ pub fn controlla_intestazione(intestazione: &[u8], radice: &[u8]) -> Result<Bloc
     if impronta > t {
         return Err(ErroreBlocco::LavoroNonTorna);
     }
-    if t[..BYTE_A_ZERO].iter().any(|b| *b != 0) {
+    if bit_a_zero(&t) < bit_minimi(altezza) {
         return Err(ErroreBlocco::PocoLavoro);
     }
     let ora = u32::from_le_bytes([h[68], h[69], h[70], h[71]]);

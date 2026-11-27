@@ -35,10 +35,10 @@ impl<'a> PulsanteIcona<'a> {
     pub fn new(icona: &'a str, etichetta: &'a str) -> Self {
         Self {
             segno: icona,
-            etichetta,
+            etichetta: crate::lingua::t(etichetta),
             carattere: Carattere::Icona,
             misura: tema::ICONA,
-            colore: tema::INCHIOSTRO,
+            colore: tema::inchiostro(),
             acceso: None,
             spento: false,
             su_velo: false,
@@ -85,17 +85,17 @@ impl<'a> PulsanteIcona<'a> {
     /// Disegna il pulsante in `rect`, già preso; `raggio` è quello del fondo.
     fn dipingi(&self, ui: &Ui, rect: Rect, raggio: u8, r: &Response) {
         let acceso = self.acceso == Some(true);
-        let (fondo_acceso, premuto) = if self.su_velo { (tema::FOGLIO, tema::PREMUTO_VELO) } else { (tema::BLU_TENUE, tema::PREMUTO) };
+        let (fondo_acceso, premuto) = if self.su_velo { (tema::foglio(), tema::premuto_velo()) } else { (tema::blu_tenue(), tema::premuto()) };
         let fondo =
-            if r.is_pointer_button_down_on() { Some(if acceso { tema::PREMUTO_VELO } else { premuto }) } else { acceso.then_some(fondo_acceso) };
+            if r.is_pointer_button_down_on() { Some(if acceso { tema::premuto_velo() } else { premuto }) } else { acceso.then_some(fondo_acceso) };
         let p = ui.painter();
         if let Some(fondo) = fondo {
             p.rect_filled(rect, CornerRadius::same(raggio), fondo);
         }
         let colore = if self.spento {
-            tema::SPENTO
+            tema::spento()
         } else if acceso {
-            tema::BLU
+            tema::blu()
         } else {
             self.colore
         };
@@ -144,7 +144,7 @@ impl<'a> Chip<'a> {
     pub const MARGINE: f32 = 28.0;
 
     pub fn new(testo: &'a str) -> Self {
-        Self { testo, icona: None, acceso: false, margine: Self::MARGINE }
+        Self { testo: crate::lingua::t(testo), icona: None, acceso: false, margine: Self::MARGINE }
     }
 
     /// Un margine più stretto di [`Chip::MARGINE`] (i due lati insieme), per una fila che se no
@@ -156,7 +156,7 @@ impl<'a> Chip<'a> {
 
     /// Quanto è largo ciò che c'è scritto, senza il margine: serve a chi mette i chip in fila.
     pub fn larghezza_del_testo(&self, ui: &Ui) -> f32 {
-        self.riga(ui, tema::INCHIOSTRO).larghezza()
+        self.riga(ui, tema::inchiostro()).larghezza()
     }
 
     fn riga(&self, ui: &Ui, colore: Color32) -> Riga {
@@ -178,7 +178,7 @@ impl<'a> Chip<'a> {
 
 impl Widget for Chip<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
-        let colore = if self.acceso { tema::FOGLIO } else { tema::INCHIOSTRO };
+        let colore = if self.acceso { tema::foglio() } else { tema::inchiostro() };
         let riga = self.riga(ui, colore);
         let (rect, r) = ui.allocate_exact_size(vec2(riga.larghezza() + self.margine, tema::CHIP), Sense::click());
         info(&r, true, Some(self.acceso), self.testo);
@@ -186,12 +186,12 @@ impl Widget for Chip<'_> {
             let p = ui.painter();
             let raggio = CornerRadius::same((tema::CHIP / 2.0) as u8);
             if self.acceso {
-                p.rect_filled(rect, raggio, tema::INCHIOSTRO);
+                p.rect_filled(rect, raggio, tema::inchiostro());
             } else {
                 if r.is_pointer_button_down_on() {
-                    p.rect_filled(rect, raggio, tema::PREMUTO);
+                    p.rect_filled(rect, raggio, tema::premuto());
                 }
-                p.rect_stroke(rect, raggio, Stroke::new(1.0, tema::FILO), StrokeKind::Inside);
+                p.rect_stroke(rect, raggio, Stroke::new(1.0, tema::filo()), StrokeKind::Inside);
             }
             riga.dipingi_al_centro(p, rect);
         }
@@ -223,7 +223,7 @@ pub struct Pulsante<'a> {
 
 impl<'a> Pulsante<'a> {
     pub fn new(testo: &'a str, peso: Peso) -> Self {
-        Self { testo, peso, icona: None, acceso: None, larghezza: None, spento: false }
+        Self { testo: crate::lingua::t(testo), peso, icona: None, acceso: None, larghezza: None, spento: false }
     }
 
     /// Spento: il testo grigio, senza fondo, e non si tocca (Sostituisci senza risultati).
@@ -255,7 +255,8 @@ impl Pulsante<'_> {
     pub fn larghezza_per(&self, ui: &Ui) -> f32 {
         self.larghezza.unwrap_or_else(|| {
             let font = Carattere::Grassetto.font(ui.ctx(), 15.0);
-            Riga::new(ui, self.icona.map(|i| (i, Carattere::Icona, tema::ICONA)), Some((self.testo, font)), 8.0, tema::INCHIOSTRO).larghezza() + 40.0
+            Riga::new(ui, self.icona.map(|i| (i, Carattere::Icona, tema::ICONA)), Some((self.testo, font)), 8.0, tema::inchiostro()).larghezza()
+                + 40.0
         })
     }
 }
@@ -264,12 +265,12 @@ impl Widget for Pulsante<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let acceso = self.acceso == Some(true);
         let (fondo, premuto, colore, alto, raggio) = match self.peso {
-            Peso::Principale => (Some(tema::BLU), tema::PREMUTO_BLU, tema::FOGLIO, tema::PULSANTE, 24),
-            Peso::Testo => (None, tema::BLU_TENUE, tema::BLU, tema::PULSANTE, 24),
-            Peso::Tenue if acceso => (Some(tema::BLU_TENUE), tema::PREMUTO_VELO, tema::BLU, tema::PULSANTE_LARGO, tema::RAGGIO_GRUPPO),
-            Peso::Tenue => (Some(tema::VELO), tema::PREMUTO_VELO, tema::INCHIOSTRO, tema::PULSANTE_LARGO, tema::RAGGIO_GRUPPO),
+            Peso::Principale => (Some(tema::blu()), tema::premuto_blu(), tema::foglio(), tema::PULSANTE, 24),
+            Peso::Testo => (None, tema::blu_tenue(), tema::blu(), tema::PULSANTE, 24),
+            Peso::Tenue if acceso => (Some(tema::blu_tenue()), tema::premuto_velo(), tema::blu(), tema::PULSANTE_LARGO, tema::RAGGIO_GRUPPO),
+            Peso::Tenue => (Some(tema::velo()), tema::premuto_velo(), tema::inchiostro(), tema::PULSANTE_LARGO, tema::RAGGIO_GRUPPO),
         };
-        let (fondo, colore) = if self.spento { (None, tema::SPENTO) } else { (fondo, colore) };
+        let (fondo, colore) = if self.spento { (None, tema::spento()) } else { (fondo, colore) };
         let font = Carattere::Grassetto.font(ui.ctx(), 15.0);
         let riga = Riga::new(ui, self.icona.map(|i| (i, Carattere::Icona, tema::ICONA)), Some((self.testo, font)), 8.0, colore);
         let largo = self.larghezza.unwrap_or(riga.larghezza() + 40.0);
@@ -296,7 +297,7 @@ pub struct PulsanteNuovo<'a> {
 
 impl<'a> PulsanteNuovo<'a> {
     pub fn new(testo: &'a str) -> Self {
-        Self { testo, icona: crate::icone::ADD }
+        Self { testo: crate::lingua::t(testo), icona: crate::icone::ADD }
     }
 
     pub fn icona(mut self, icona: &'a str) -> Self {
@@ -308,14 +309,14 @@ impl<'a> PulsanteNuovo<'a> {
     /// già: va chiamata dopo il resto della schermata.
     pub fn mostra(self, ui: &mut Ui, zona: Rect) -> Response {
         let font = Carattere::Grassetto.font(ui.ctx(), 16.0);
-        let riga = Riga::new(ui, Some((self.icona, Carattere::Icona, tema::ICONA)), Some((self.testo, font)), 10.0, tema::FOGLIO);
+        let riga = Riga::new(ui, Some((self.icona, Carattere::Icona, tema::ICONA)), Some((self.testo, font)), 10.0, tema::foglio());
         let misura = vec2(18.0 + riga.larghezza() + 22.0, tema::NUOVO);
         let rect = Rect::from_min_size(zona.right_bottom() - vec2(tema::MARGINE_LARGO, tema::MARGINE_LARGO) - misura, misura);
         let r = ui.interact(rect, ui.id().with(("nuovo", self.testo)), Sense::click());
         info(&r, true, None, self.testo);
         let p = ui.painter();
         tema::dipingi_ombra(p, rect, tema::RAGGIO_NUOVO, &tema::OMBRA_NUOVO);
-        let fondo = if r.is_pointer_button_down_on() { tema::PREMUTO_BLU } else { tema::BLU };
+        let fondo = if r.is_pointer_button_down_on() { tema::premuto_blu() } else { tema::blu() };
         p.rect_filled(rect, CornerRadius::same(tema::RAGGIO_NUOVO), fondo);
         riga.dipingi(p, rect.left() + 18.0, rect.center().y);
         r
@@ -346,10 +347,10 @@ mod test {
         nodo.click();
         h.run_steps(2);
         assert_eq!(*h.state(), 1);
-        assert_eq!(colore_del_testo(&h, icone::FORMAT_ITALIC), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, icone::FORMAT_ITALIC), Some(tema::inchiostro()));
         assert_eq!(famiglia_del_testo(&h, icone::FORMAT_ITALIC), Some(Carattere::Icona.famiglia()));
         // Senza fondo, a riposo.
-        assert!(riempiti(&h, tema::BLU_TENUE).is_empty());
+        assert!(riempiti(&h, tema::blu_tenue()).is_empty());
     }
 
     #[test]
@@ -367,11 +368,11 @@ mod test {
         nodo.click();
         h.run_steps(2);
         assert_eq!(*h.state(), 0);
-        assert_eq!(colore_del_testo(&h, "Tutti"), Some(tema::SPENTO));
+        assert_eq!(colore_del_testo(&h, "Tutti"), Some(tema::spento()));
         // Acceso è blu e si tocca.
         let h = banco(|ui, _: &mut ()| _ = ui.add(Pulsante::new("Tutti", Peso::Testo)), ());
         assert!(!h.get_by_label("Tutti").accesskit_node().is_disabled());
-        assert_eq!(colore_del_testo(&h, "Tutti"), Some(tema::BLU));
+        assert_eq!(colore_del_testo(&h, "Tutti"), Some(tema::blu()));
     }
 
     #[test]
@@ -379,10 +380,10 @@ mod test {
         let h = banco(|ui, _: &mut ()| _ = ui.add(PulsanteIcona::new(icone::FORMAT_BOLD, "Grassetto").acceso(true)), ());
         let nodo = h.get_by_label("Grassetto");
         assert_eq!(nodo.accesskit_node().toggled(), Some(Toggled::True));
-        let fondi = riempiti(&h, tema::BLU_TENUE);
+        let fondi = riempiti(&h, tema::blu_tenue());
         assert_eq!(fondi.len(), 1, "{fondi:?}");
         assert_eq!(fondi[0], nodo.rect());
-        assert_eq!(colore_del_testo(&h, icone::FORMAT_BOLD), Some(tema::BLU));
+        assert_eq!(colore_del_testo(&h, icone::FORMAT_BOLD), Some(tema::blu()));
     }
 
     #[test]
@@ -400,7 +401,7 @@ mod test {
         nodo.click();
         h.run_steps(2);
         assert_eq!(*h.state(), 0);
-        assert_eq!(colore_del_testo(&h, icone::REDO), Some(tema::SPENTO));
+        assert_eq!(colore_del_testo(&h, icone::REDO), Some(tema::spento()));
     }
 
     #[test]
@@ -426,14 +427,14 @@ mod test {
         let tutti = h.get_by_label("Tutti");
         assert_eq!(tutti.rect().height(), tema::CHIP);
         assert_eq!(tutti.accesskit_node().toggled(), Some(Toggled::True));
-        assert_eq!(colore_del_testo(&h, "Tutti"), Some(tema::FOGLIO));
-        assert_eq!(colore_del_testo(&h, "PDF"), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, "Tutti"), Some(tema::foglio()));
+        assert_eq!(colore_del_testo(&h, "PDF"), Some(tema::inchiostro()));
         assert_eq!(famiglia_del_testo(&h, "PDF"), Some(Carattere::Grassetto.famiglia()));
-        assert_eq!(riempiti(&h, tema::INCHIOSTRO), vec![tutti.rect()]);
+        assert_eq!(riempiti(&h, tema::inchiostro()), vec![tutti.rect()]);
         h.get_by_label("PDF").click();
         h.run_steps(2);
         assert_eq!(*h.state(), 1);
-        assert_eq!(colore_del_testo(&h, "PDF"), Some(tema::FOGLIO));
+        assert_eq!(colore_del_testo(&h, "PDF"), Some(tema::foglio()));
     }
 
     #[test]
@@ -453,13 +454,13 @@ mod test {
             },
             Vec::new(),
         );
-        assert_eq!(colore_del_testo(&h, "Salva"), Some(tema::FOGLIO));
-        assert_eq!(riempiti(&h, tema::BLU), vec![h.get_by_label("Salva").rect()]);
-        assert_eq!(colore_del_testo(&h, "Annulla"), Some(tema::BLU));
-        assert_eq!(colore_del_testo(&h, "Puntato"), Some(tema::BLU));
-        assert_eq!(colore_del_testo(&h, icone::FORMAT_LIST_BULLETED), Some(tema::BLU));
-        assert_eq!(riempiti(&h, tema::BLU_TENUE), vec![h.get_by_label("Puntato").rect()]);
-        assert_eq!(colore_del_testo(&h, "Numerato"), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, "Salva"), Some(tema::foglio()));
+        assert_eq!(riempiti(&h, tema::blu()), vec![h.get_by_label("Salva").rect()]);
+        assert_eq!(colore_del_testo(&h, "Annulla"), Some(tema::blu()));
+        assert_eq!(colore_del_testo(&h, "Puntato"), Some(tema::blu()));
+        assert_eq!(colore_del_testo(&h, icone::FORMAT_LIST_BULLETED), Some(tema::blu()));
+        assert_eq!(riempiti(&h, tema::blu_tenue()), vec![h.get_by_label("Puntato").rect()]);
+        assert_eq!(colore_del_testo(&h, "Numerato"), Some(tema::inchiostro()));
         let numerato = h.get_by_label("Numerato").rect();
         assert_eq!(numerato.size(), egui::vec2(180.0, tema::PULSANTE_LARGO));
         assert!(h.get_by_label("Salva").rect().height() >= tema::PULSANTE);
@@ -483,9 +484,9 @@ mod test {
         assert_eq!(r.height(), tema::NUOVO);
         assert_eq!(r.right(), SCHERMO.x - tema::MARGINE_LARGO);
         assert_eq!(r.bottom(), SCHERMO.y - tema::MARGINE_LARGO);
-        assert_eq!(riempiti(&h, tema::BLU), vec![r]);
-        assert_eq!(colore_del_testo(&h, "Nuovo"), Some(tema::FOGLIO));
-        assert_eq!(colore_del_testo(&h, icone::ADD), Some(tema::FOGLIO));
+        assert_eq!(riempiti(&h, tema::blu()), vec![r]);
+        assert_eq!(colore_del_testo(&h, "Nuovo"), Some(tema::foglio()));
+        assert_eq!(colore_del_testo(&h, icone::ADD), Some(tema::foglio()));
         h.get_by_label("Nuovo").click();
         h.run_steps(2);
         assert_eq!(*h.state(), 1);

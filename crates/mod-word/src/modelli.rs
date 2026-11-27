@@ -4,6 +4,7 @@
 //! grassetto, le sezioni coi loro titoli e gli elenchi. Nessun dato di nessuno. Si apre come un
 //! documento nuovo: «Salva» chiede dove, col nome dal titolo.
 
+use tascabile_touch::Lingua;
 use wordcraft_engine::Session;
 
 use crate::documento::{self, ErroreApertura};
@@ -41,29 +42,48 @@ impl Modello {
         }
     }
 
-    /// Il .docx incluso nell'app.
-    pub fn byte(self) -> &'static [u8] {
-        match self {
-            Modello::Verbale => include_bytes!("../modelli/verbale.docx"),
-            Modello::Relazione => include_bytes!("../modelli/relazione.docx"),
-            Modello::Lettera => include_bytes!("../modelli/lettera.docx"),
-            Modello::Lezione => include_bytes!("../modelli/lezione.docx"),
+    /// Il .docx incluso nell'app, nella lingua `lingua` (0.10.0: un modello per lingua).
+    pub fn byte(self, lingua: Lingua) -> &'static [u8] {
+        use Lingua::*;
+        match (self, lingua) {
+            (Modello::Verbale, Italiano) => include_bytes!("../modelli/verbale.docx"),
+            (Modello::Relazione, Italiano) => include_bytes!("../modelli/relazione.docx"),
+            (Modello::Lettera, Italiano) => include_bytes!("../modelli/lettera.docx"),
+            (Modello::Lezione, Italiano) => include_bytes!("../modelli/lezione.docx"),
+            (Modello::Verbale, Inglese) => include_bytes!("../modelli/verbale-en.docx"),
+            (Modello::Relazione, Inglese) => include_bytes!("../modelli/relazione-en.docx"),
+            (Modello::Lettera, Inglese) => include_bytes!("../modelli/lettera-en.docx"),
+            (Modello::Lezione, Inglese) => include_bytes!("../modelli/lezione-en.docx"),
+            (Modello::Verbale, Spagnolo) => include_bytes!("../modelli/verbale-es.docx"),
+            (Modello::Relazione, Spagnolo) => include_bytes!("../modelli/relazione-es.docx"),
+            (Modello::Lettera, Spagnolo) => include_bytes!("../modelli/lettera-es.docx"),
+            (Modello::Lezione, Spagnolo) => include_bytes!("../modelli/lezione-es.docx"),
         }
     }
 
-    /// Il nome del file nella cartella dei modelli.
-    pub fn file(self) -> &'static str {
-        match self {
-            Modello::Verbale => "verbale.docx",
-            Modello::Relazione => "relazione.docx",
-            Modello::Lettera => "lettera.docx",
-            Modello::Lezione => "lezione.docx",
+    /// Il nome del file nella cartella dei modelli, nella lingua `lingua`.
+    pub fn file(self, lingua: Lingua) -> String {
+        let base = match self {
+            Modello::Verbale => "verbale",
+            Modello::Relazione => "relazione",
+            Modello::Lettera => "lettera",
+            Modello::Lezione => "lezione",
+        };
+        match lingua {
+            Lingua::Italiano => format!("{base}.docx"),
+            l => format!("{base}-{}.docx", l.codice()),
         }
     }
 
-    /// Il documento nuovo dal modello, col cursore in fondo al primo campo da riempire.
+    /// Il documento nuovo dal modello, nella lingua dell'app, col cursore in fondo al primo
+    /// campo da riempire.
     pub fn apri(self) -> Result<Session, ErroreApertura> {
-        let mut s = documento::apri_byte(self.file(), self.byte())?;
+        self.apri_in(tascabile_touch::lingua::attiva())
+    }
+
+    /// Il documento nuovo dal modello nella lingua `lingua`.
+    pub fn apri_in(self, lingua: Lingua) -> Result<Session, ErroreApertura> {
+        let mut s = documento::apri_byte(&self.file(lingua), self.byte(lingua))?;
         if let Some(pos) = primo_campo(&s) {
             let _ = s.run("caret.set", &serde_json::json!({ "pos": pos }));
         }
@@ -182,13 +202,14 @@ impl Modello {
         }
     }
 
-    /// Il modello scritto dal motore, da un documento nuovo in italiano: prima i paragrafi con lo
-    /// stile, l'allineamento e il testo, poi gli elenchi, un gruppo di voci vicine alla volta (un
-    /// Invio su una voce vuota chiuderebbe l'elenco, come in Word).
-    fn scrivi(self) -> Session {
+    /// Il modello scritto dal motore, da un documento nuovo nella lingua `lingua`, coi testi
+    /// tradotti dalle tabelle dell'app: prima i paragrafi con lo stile, l'allineamento e il testo,
+    /// poi gli elenchi, un gruppo di voci vicine alla volta (un Invio su una voce vuota chiuderebbe
+    /// l'elenco, come in Word).
+    fn scrivi(self, lingua: Lingua) -> Session {
         use serde_json::json;
         use wordcraft_engine::doc::Pos;
-        let mut s = documento::nuovo();
+        let mut s = documento::nuovo_in(lingua);
         let esegui = |s: &mut Session, id: &str, p: serde_json::Value| {
             s.run(id, &p).unwrap_or_else(|e| panic!("{id}: {e}"));
         };
@@ -202,10 +223,12 @@ impl Modello {
                 Riga::Sezione(t) => ("para.heading2", t),
                 Riga::Campo(t) | Riga::Testo(t) | Riga::ADestra(t) | Riga::Puntato(t) | Riga::Numerato(t) => ("para.normal", t),
             };
+            let testo = tascabile_touch::lingua::in_lingua(testo, lingua);
             esegui(&mut s, stile, json!({}));
             let allinea = if matches!(riga, Riga::ADestra(_)) { "right" } else { "left" };
             esegui(&mut s, "para.align", json!({ "value": allinea }));
             if let Riga::Campo(nome) = *riga {
+                let nome = tascabile_touch::lingua::in_lingua(nome, lingua);
                 let inizio = s.sel.focus.clone();
                 esegui(&mut s, "text.insert", json!({ "text": nome, "raw": true }));
                 let fine = s.sel.focus.clone();
@@ -262,21 +285,39 @@ mod test {
             .collect()
     }
 
-    /// I .docx inclusi sono quelli che il motore scrive adesso. Con TASCABILE_RIFAI_MODELLI=1 la
-    /// prova li riscrive in crates/mod-word/modelli.
+    /// I .docx inclusi sono quelli che il motore scrive adesso, in ogni lingua. Con
+    /// TASCABILE_RIFAI_MODELLI=1 la prova li riscrive in crates/mod-word/modelli.
     #[test]
     fn i_modelli_inclusi_sono_quelli_scritti_dal_motore() {
         let cartella = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("modelli");
-        for m in Modello::TUTTI {
-            let scritto = m.scrivi();
-            if std::env::var_os("TASCABILE_RIFAI_MODELLI").is_some() {
-                let byte = wordcraft_engine::io::save_bytes(m.file(), &scritto.doc).unwrap();
-                std::fs::write(cartella.join(m.file()), byte).unwrap();
-                continue;
+        for lingua in Lingua::TUTTE {
+            for m in Modello::TUTTI {
+                let scritto = m.scrivi(lingua);
+                if std::env::var_os("TASCABILE_RIFAI_MODELLI").is_some() {
+                    let byte = wordcraft_engine::io::save_bytes(&m.file(lingua), &scritto.doc).unwrap();
+                    std::fs::write(cartella.join(m.file(lingua)), byte).unwrap();
+                    continue;
+                }
+                assert_eq!(scritto.doc.body.len(), m.righe().len(), "{}: un paragrafo per riga", m.nome());
+                let incluso = m.apri_in(lingua).unwrap_or_else(|e| panic!("{}: {e}", m.nome()));
+                assert_eq!(contenuto(&incluso), contenuto(&scritto), "{} {lingua:?}: da rifare con TASCABILE_RIFAI_MODELLI=1", m.nome());
             }
-            assert_eq!(scritto.doc.body.len(), m.righe().len(), "{}: un paragrafo per riga", m.nome());
-            let incluso = m.apri().unwrap_or_else(|e| panic!("{}: {e}", m.nome()));
-            assert_eq!(contenuto(&incluso), contenuto(&scritto), "{}: da rifare con TASCABILE_RIFAI_MODELLI=1", m.nome());
+        }
+    }
+
+    /// Ogni testo dei modelli ha la sua traduzione: un modello inglese o spagnolo senza parole
+    /// italiane.
+    #[test]
+    fn i_testi_dei_modelli_sono_tradotti() {
+        for m in Modello::TUTTI {
+            for riga in m.righe() {
+                let (Riga::Titolo(t) | Riga::Sezione(t) | Riga::Campo(t) | Riga::Testo(t) | Riga::ADestra(t) | Riga::Puntato(t) | Riga::Numerato(t)) =
+                    *riga;
+                if t.is_empty() {
+                    continue;
+                }
+                assert!(tascabile_touch::lingua::tradotto(t), "«{t}» senza traduzione");
+            }
         }
     }
 

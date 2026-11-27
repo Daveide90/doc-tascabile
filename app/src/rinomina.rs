@@ -19,6 +19,7 @@ use tascabile_word::salva::Origine;
 
 use crate::fissa_data::{TimestampRinominato, rinomina_il_timestamp};
 use crate::{Errore, Fuoco, TascabileApp, home};
+use tascabile_touch::t;
 
 /// Il titolo del foglio, la voce dei menu.
 pub(crate) const RINOMINA: &str = home::RINOMINA;
@@ -123,9 +124,9 @@ impl TascabileApp {
                 self.chiudi_rinomina();
                 let nome = nuovo.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
                 self.avviso_breve.avvisa(match timestamp {
-                    TimestampRinominato::Nessuno => format!("Rinominato: {nome}"),
-                    TimestampRinominato::Seguito => format!("Rinominato: {nome}, col suo timestamp"),
-                    TimestampRinominato::Rimasto => format!("Rinominato: {nome}. Il suo timestamp è rimasto col nome di prima."),
+                    TimestampRinominato::Nessuno => tascabile_touch::tf!("Rinominato: {}", nome),
+                    TimestampRinominato::Seguito => tascabile_touch::tf!("Rinominato: {}, col suo timestamp", nome),
+                    TimestampRinominato::Rimasto => tascabile_touch::tf!("Rinominato: {}. Il suo timestamp è rimasto col nome di prima.", nome),
                 });
             }
             Err(ErroreRinomina::Uguale) => {
@@ -206,7 +207,7 @@ impl TascabileApp {
             .mostra(ctx, RINOMINA, |ui| {
                 let ctx = ui.ctx().clone();
                 let mut s = None;
-                ui.label(RichText::new(SPIEGA).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::MATITA));
+                ui.label(RichText::new(t(SPIEGA)).font(Carattere::Testo.font(&ctx, 15.0)).color(tema::matita()));
                 ui.add_space(12.0);
                 if ui.allocate_ui(vec2(ui.available_width(), tema::PULSANTE), |ui| campo.mostra(ui, NOME_NUOVO).clicked()).inner {
                     s = Some(false);

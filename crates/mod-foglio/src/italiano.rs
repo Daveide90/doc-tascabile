@@ -126,9 +126,7 @@ pub fn separatori(t: &str) -> String {
 fn nomi(t: &str) -> String {
     let mut fuori = String::with_capacity(t.len());
     let mut parola = String::new();
-    let traduci = |p: &str| -> String {
-        MESI.iter().chain(&GIORNI).find(|(en, _)| *en == p).map_or_else(|| p.to_string(), |(_, it)| it.to_string())
-    };
+    let traduci = |p: &str| -> String { MESI.iter().chain(&GIORNI).find(|(en, _)| *en == p).map_or_else(|| p.to_string(), |(_, it)| it.to_string()) };
     for ch in t.chars() {
         if ch.is_ascii_alphabetic() {
             parola.push(ch);

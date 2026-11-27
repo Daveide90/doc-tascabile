@@ -1,7 +1,8 @@
 //! Componenti per il dito, comuni ai moduli di Tascabile: il tema dei bozzetti (colori, misure,
 //! ombre, caratteri, icone e stile di egui), i componenti della nuova grafica (pulsanti, barre,
 //! schede ed elenchi, menu, controlli dei fogli, dialoghi e avvisi), il foglio che sale dal fondo,
-//! le maniglie della selezione con le gocce e la lente, il campo di testo con la tastiera.
+//! le maniglie della selezione con le gocce e la lente, il campo di testo con la tastiera; le
+//! lingue dell'app (`lingua`), coi componenti che traducono da soli i testi che ricevono.
 
 mod barre;
 mod campo;
@@ -12,6 +13,7 @@ mod elenco;
 mod foglio;
 pub mod icone;
 mod icone_tabella;
+pub mod lingua;
 mod maniglie;
 #[cfg(test)]
 mod prova;
@@ -27,6 +29,7 @@ pub use controlli::{
 pub use dialogo::{AvvisoBreve, DURATA_AVVISO, DURATA_CON_AZIONE, Dialogo, RispostaDialogo};
 pub use elenco::{Menu, RispostaVoce, SceltaMenu, Scheda, SchedaCartella, Tipo, Voce, premuto};
 pub use foglio::FoglioDalFondo;
+pub use lingua::{Lingua, t};
 pub use maniglie::{
     Bordo, CENTRO_GOCCIA_CURSORE, GOCCIA, INGRANDIMENTO, LENTE, Maniglia, ManigliaCursore, ManigliaMisura, Maniglie, PRESA, RAGGIO, RAGGIO_MISURA,
     RIQUADRO, Trascinamento, TrascinamentoCursore, TrascinamentoMisura, goccia, goccia_cursore, lente, lente_con, rettangolo_goccia, riquadro_misura,

@@ -54,7 +54,13 @@ pub struct RispostaBarraAlta {
 const PRINCIPALE_DAL_BORDO: f32 = 8.0;
 
 impl<'a> BarraAlta<'a> {
+    /// Una barra col titolo `titolo`, tradotto nella lingua dell'app (vedi [`crate::lingua`]).
     pub fn new(titolo: &'a str) -> Self {
+        Self::nome_proprio(crate::lingua::t(titolo))
+    }
+
+    /// Una barra col titolo com'è: il nome di un documento o di una cartella, che non si traduce.
+    pub fn nome_proprio(titolo: &'a str) -> Self {
         Self { titolo, sottotitolo: None, stato: None, indietro: None, azioni: Vec::new(), principale: None }
     }
 
@@ -66,12 +72,12 @@ impl<'a> BarraAlta<'a> {
 
     /// La freccia indietro a sinistra, con questa etichetta per l'accessibilità.
     pub fn indietro(mut self, etichetta: &'a str) -> Self {
-        self.indietro = Some(etichetta);
+        self.indietro = Some(crate::lingua::t(etichetta));
         self
     }
 
     pub fn sottotitolo(mut self, sottotitolo: &'a str) -> Self {
-        self.sottotitolo = Some(sottotitolo);
+        self.sottotitolo = Some(crate::lingua::t(sottotitolo));
         self
     }
 
@@ -95,7 +101,7 @@ impl<'a> BarraAlta<'a> {
 
     fn dentro(self, ui: &mut Ui, rect: Rect) -> RispostaBarraAlta {
         let response = ui.allocate_rect(rect, Sense::hover());
-        ui.painter().rect_filled(rect, 0.0, tema::CARTA);
+        ui.painter().rect_filled(rect, 0.0, tema::carta());
         let mut sinistra = rect.left() + tema::MARGINE_LARGO;
         let mut indietro = false;
         if let Some(etichetta) = self.indietro {
@@ -131,10 +137,10 @@ impl<'a> BarraAlta<'a> {
         };
         let largo = destra - sinistra;
         let ctx = ui.ctx().clone();
-        let titolo = testo_tagliato(ui, self.titolo, Carattere::Grassetto.font(&ctx, 17.0), tema::INCHIOSTRO, largo);
+        let titolo = testo_tagliato(ui, self.titolo, Carattere::Grassetto.font(&ctx, 17.0), tema::inchiostro(), largo);
         let icona = self.stato.map(|(i, c)| ui.painter().layout_no_wrap(i.to_owned(), Carattere::IconaPiena.font(&ctx, 14.0), c));
         let davanti = icona.as_ref().map_or(0.0, |g| g.size().x + 4.0);
-        let sotto = self.sottotitolo.map(|s| testo_tagliato(ui, s, Carattere::Testo.font(&ctx, 12.5), tema::MATITA, largo - davanti));
+        let sotto = self.sottotitolo.map(|s| testo_tagliato(ui, s, Carattere::Testo.font(&ctx, 12.5), tema::matita(), largo - davanti));
         let alto_sotto = match (&sotto, &icona) {
             (Some(s), Some(i)) => s.size().y.max(i.size().y),
             (Some(s), None) => s.size().y,
@@ -219,7 +225,7 @@ impl<'a> BarraFlottante<'a> {
         let mut ui = ui.new_child(UiBuilder::new().max_rect(rect).id_salt("barra flottante"));
         let raggio = CornerRadius::same(self.raggio.unwrap_or((rect.height() / 2.0) as u8));
         tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA_FLOTTANTE);
-        ui.painter().rect_filled(rect, raggio, tema::FOGLIO);
+        ui.painter().rect_filled(rect, raggio, tema::foglio());
         ui.allocate_rect(rect, Sense::click());
         let interno = rect.shrink2(vec2(6.0, 0.0));
         // I pulsanti sono di 48 dp; se così non resta lo stacco fra un elemento e l'altro (a 372
@@ -249,7 +255,7 @@ impl<'a> BarraFlottante<'a> {
                     n += 1;
                 }
                 Elemento::Separatore => {
-                    ui.painter().rect_filled(Rect::from_min_size(pos2(x, rect.center().y - 14.0), vec2(1.0, 28.0)), 0.0, tema::FILO);
+                    ui.painter().rect_filled(Rect::from_min_size(pos2(x, rect.center().y - 14.0), vec2(1.0, 28.0)), 0.0, tema::filo());
                 }
             }
             x += w + passo;
@@ -280,7 +286,7 @@ impl<'a> BarraVoci<'a> {
 
     /// Una voce con la sua icona e il suo nome (anche per l'accessibilità).
     pub fn voce(mut self, icona: &'a str, nome: &'a str) -> Self {
-        self.voci.push((icona, nome));
+        self.voci.push((icona, crate::lingua::t(nome)));
         self
     }
 
@@ -304,7 +310,7 @@ impl<'a> BarraVoci<'a> {
         let mut ui = ui.new_child(UiBuilder::new().max_rect(rect).id_salt("barra delle voci"));
         let raggio = CornerRadius::same(tema::RAGGIO_VOCI);
         tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA_FLOTTANTE);
-        ui.painter().rect_filled(rect, raggio, tema::FOGLIO);
+        ui.painter().rect_filled(rect, raggio, tema::foglio());
         ui.allocate_rect(rect, Sense::click());
         let ctx = ui.ctx().clone();
         let interno = rect.shrink2(vec2(4.0, 6.0));
@@ -317,12 +323,12 @@ impl<'a> BarraVoci<'a> {
             info(&r, true, self.accesa.map(|_| accesa), nome);
             let pillola = Rect::from_center_size(posto.center(), vec2(VOCE_ACCESA.min(largo), posto.height()));
             if accesa {
-                ui.painter().rect_filled(pillola, tema::RAGGIO_VOCE, tema::ROSSO_TENUE);
+                ui.painter().rect_filled(pillola, tema::RAGGIO_VOCE, tema::rosso_tenue());
             } else if r.is_pointer_button_down_on() {
-                ui.painter().rect_filled(posto, tema::RAGGIO_VOCE, tema::PREMUTO);
+                ui.painter().rect_filled(posto, tema::RAGGIO_VOCE, tema::premuto());
             }
             // `.modo`: l'icona da 22, 2 dp, il nome in grassetto da 12, in grigio (rosso se acceso).
-            let colore = if accesa { tema::ROSSO } else { tema::MATITA };
+            let colore = if accesa { tema::rosso() } else { tema::matita() };
             let g_icona = ui.painter().layout_no_wrap(icona.to_owned(), Carattere::Icona.font(&ctx, 22.0), colore);
             let g_nome = testo_tagliato(&ui, nome, Carattere::Grassetto.font(&ctx, 12.0), colore, largo - 4.0);
             let alto = g_icona.size().y + 2.0 + g_nome.size().y;
@@ -371,12 +377,14 @@ impl<'a> BarraScorrevole<'a> {
 
     /// Una voce con la sua icona e il suo nome; `spenta` non si tocca.
     pub fn voce(mut self, icona: &'a str, nome: &'a str, spenta: bool) -> Self {
+        let nome = crate::lingua::t(nome);
         self.voci.push(VoceScorrevole { icona, nome, etichetta: nome, acceso: None, spento: spenta });
         self
     }
 
     /// Un interruttore: `nome` sulla barra, `etichetta` per l'accessibilità.
     pub fn interruttore(mut self, icona: &'a str, nome: &'a str, etichetta: &'a str, acceso: bool) -> Self {
+        let (nome, etichetta) = (crate::lingua::t(nome), crate::lingua::t(etichetta));
         self.voci.push(VoceScorrevole { icona, nome, etichetta, acceso: Some(acceso), spento: false });
         self
     }
@@ -387,23 +395,23 @@ impl<'a> BarraScorrevole<'a> {
         let mut ui = ui.new_child(UiBuilder::new().max_rect(rect).id_salt("barra scorrevole"));
         let raggio = CornerRadius::same(tema::RAGGIO_VOCI);
         tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA_FLOTTANTE);
-        ui.painter().rect_filled(rect, raggio, tema::FOGLIO);
+        ui.painter().rect_filled(rect, raggio, tema::foglio());
         ui.allocate_rect(rect, Sense::click());
         let interno = rect.shrink2(vec2(10.0, 6.0));
         let ctx = ui.ctx().clone();
         let mut scelto = None;
         ui.scope_builder(UiBuilder::new().max_rect(interno), |ui| {
             ui.set_clip_rect(interno);
-            crate::controlli::fila_scorrevole(ui, "voci della barra scorrevole", tema::FOGLIO, |ui| {
+            crate::controlli::fila_scorrevole(ui, "voci della barra scorrevole", tema::foglio(), |ui| {
                 ui.spacing_mut().item_spacing.x = 0.0;
                 for (i, v) in self.voci.into_iter().enumerate() {
                     let acceso = v.acceso == Some(true);
                     let colore = if v.spento {
-                        tema::SPENTO
+                        tema::spento()
                     } else if acceso {
-                        tema::BLU
+                        tema::blu()
                     } else {
-                        tema::MATITA
+                        tema::matita()
                     };
                     let g_icona = ui.painter().layout_no_wrap(v.icona.to_owned(), Carattere::Icona.font(&ctx, 22.0), colore);
                     let g_nome = ui.painter().layout_no_wrap(v.nome.to_owned(), Carattere::Grassetto.font(&ctx, 12.0), colore);
@@ -412,9 +420,9 @@ impl<'a> BarraScorrevole<'a> {
                     let (posto, r) = ui.allocate_exact_size(vec2(largo, interno.height()), senso);
                     info(&r, !v.spento, v.acceso, v.etichetta);
                     if r.is_pointer_button_down_on() {
-                        ui.painter().rect_filled(posto, tema::RAGGIO_VOCE, if acceso { tema::PREMUTO_VELO } else { tema::PREMUTO });
+                        ui.painter().rect_filled(posto, tema::RAGGIO_VOCE, if acceso { tema::premuto_velo() } else { tema::premuto() });
                     } else if acceso {
-                        ui.painter().rect_filled(posto, tema::RAGGIO_VOCE, tema::BLU_TENUE);
+                        ui.painter().rect_filled(posto, tema::RAGGIO_VOCE, tema::blu_tenue());
                     }
                     let alto = g_icona.size().y + 2.0 + g_nome.size().y;
                     let cima = posto.center().y - alto / 2.0;
@@ -463,7 +471,7 @@ impl<'a> BarraContesto<'a> {
 
     /// Un'azione con la sua icona; con l'icona vuota solo l'etichetta (una parola da scegliere).
     pub fn azione(mut self, icona: &'a str, etichetta: &'a str) -> Self {
-        self.azioni.push((icona, etichetta));
+        self.azioni.push((icona, crate::lingua::t(etichetta)));
         self
     }
 
@@ -489,7 +497,7 @@ impl<'a> BarraContesto<'a> {
             .iter()
             .map(|&(i, e)| {
                 let icona = (!i.is_empty()).then_some((i, Carattere::Icona, 20.0));
-                Riga::dal_contesto(ctx, icona, Some((e, font.clone())), 6.0, tema::FOGLIO)
+                Riga::dal_contesto(ctx, icona, Some((e, font.clone())), 6.0, tema::foglio())
             })
             .collect()
     }
@@ -574,7 +582,7 @@ impl<'a> BarraContesto<'a> {
         let mut ui = ui.new_child(UiBuilder::new().max_rect(rect).id_salt("barra del contesto"));
         let raggio = CornerRadius::same((tema::CONTESTO / 2.0) as u8);
         tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA_CONTESTO);
-        ui.painter().rect_filled(rect, raggio, tema::SCURO);
+        ui.painter().rect_filled(rect, raggio, tema::scuro());
         ui.allocate_rect(rect, Sense::click());
         let mut scelto = None;
         let mut righe: Vec<Option<Riga>> = righe.into_iter().map(Some).collect();
@@ -583,7 +591,11 @@ impl<'a> BarraContesto<'a> {
             if f > 0 {
                 // La linea sottile fra una fila e l'altra.
                 let y = rect.top() + tema::CONTESTO * f as f32;
-                ui.painter().rect_filled(Rect::from_min_max(pos2(rect.left() + 16.0, y), pos2(rect.right() - 16.0, y + 1.0)), 0.0, tema::FILO_SCURO);
+                ui.painter().rect_filled(
+                    Rect::from_min_max(pos2(rect.left() + 16.0, y), pos2(rect.right() - 16.0, y + 1.0)),
+                    0.0,
+                    tema::filo_scuro(),
+                );
             }
             let mut x = rect.left() + 6.0;
             for i in fila.clone() {
@@ -593,7 +605,7 @@ impl<'a> BarraContesto<'a> {
                 let r = ui.allocate_rect(az, Sense::click());
                 info(&r, true, None, etichetta);
                 if r.is_pointer_button_down_on() {
-                    ui.painter().rect_filled(az, 22.0, tema::PREMUTO_SCURO);
+                    ui.painter().rect_filled(az, 22.0, tema::premuto_scuro());
                 }
                 riga.dipingi(ui.painter(), az.left() + 12.0, az.center().y);
                 if r.clicked() {
@@ -601,7 +613,7 @@ impl<'a> BarraContesto<'a> {
                 }
                 x = az.right();
                 if i + 1 < fila.end {
-                    ui.painter().rect_filled(Rect::from_min_size(pos2(x, meta - 12.0), vec2(1.0, 24.0)), 0.0, tema::FILO_SCURO);
+                    ui.painter().rect_filled(Rect::from_min_size(pos2(x, meta - 12.0), vec2(1.0, 24.0)), 0.0, tema::filo_scuro());
                     x += 1.0;
                 }
             }
@@ -611,15 +623,16 @@ impl<'a> BarraContesto<'a> {
             let y = rect.top() + tema::CONTESTO * file.len().max(1) as f32 + RIGA_COLORI / 2.0 - 6.0;
             let primo = rect.center().x - (self.colori.len() as f32 - 1.0) * PASSO_COLORI / 2.0;
             for (i, (colore, nome)) in self.colori.iter().enumerate() {
+                let nome = crate::lingua::t(nome);
                 let c = pos2(primo + i as f32 * PASSO_COLORI, y);
                 let r = ui.allocate_rect(Rect::from_center_size(c, Vec2::splat(PASSO_COLORI)), Sense::click());
                 let acceso = self.colore == Some(i);
                 info(&r, true, Some(acceso), nome);
                 if r.is_pointer_button_down_on() {
-                    ui.painter().circle_filled(c, RAGGIO_COLORE + 7.0, tema::PREMUTO_SCURO);
+                    ui.painter().circle_filled(c, RAGGIO_COLORE + 7.0, tema::premuto_scuro());
                 }
                 if acceso {
-                    ui.painter().circle_stroke(c, RAGGIO_COLORE + 4.0, egui::Stroke::new(2.0, tema::FOGLIO));
+                    ui.painter().circle_stroke(c, RAGGIO_COLORE + 4.0, egui::Stroke::new(2.0, tema::foglio()));
                 }
                 ui.painter().circle_filled(c, RAGGIO_COLORE, *colore);
                 if r.clicked() {
@@ -645,7 +658,7 @@ mod test {
         BarraAlta::new(titolo)
             .indietro("Indietro")
             .sottotitolo("Salvato · Documenti")
-            .stato(icone::CHECK_CIRCLE, tema::VERDE)
+            .stato(icone::CHECK_CIRCLE, tema::verde())
             .azione(PulsanteIcona::new(icone::UNDO, "Annulla"))
             .azione(PulsanteIcona::new(icone::REDO, "Ripeti").spento(true))
             .azione(PulsanteIcona::new(icone::MORE_VERT, "Menu"))
@@ -671,7 +684,7 @@ mod test {
         );
         let barra = h.state().rect.unwrap();
         assert_eq!(barra, egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(SCHERMO.x, tema::BARRA_ALTA)));
-        assert!(riempiti(&h, tema::CARTA).contains(&barra));
+        assert!(riempiti(&h, tema::carta()).contains(&barra));
         let indietro = h.get_by_label("Indietro").rect();
         let menu = h.get_by_label("Menu").rect();
         assert_eq!(indietro.left(), 4.0);
@@ -683,9 +696,9 @@ mod test {
         let sotto = rettangolo_del_testo(&h, "Salvato · Documenti").unwrap();
         assert!(titolo.left() >= indietro.right() && titolo.bottom() <= sotto.top(), "{titolo:?} {sotto:?}");
         assert_eq!(famiglia_del_testo(&h, "Relazione turno notte"), Some(Carattere::Grassetto.famiglia()));
-        assert_eq!(colore_del_testo(&h, "Relazione turno notte"), Some(tema::INCHIOSTRO));
-        assert_eq!(colore_del_testo(&h, "Salvato · Documenti"), Some(tema::MATITA));
-        assert_eq!(colore_del_testo(&h, icone::CHECK_CIRCLE), Some(tema::VERDE));
+        assert_eq!(colore_del_testo(&h, "Relazione turno notte"), Some(tema::inchiostro()));
+        assert_eq!(colore_del_testo(&h, "Salvato · Documenti"), Some(tema::matita()));
+        assert_eq!(colore_del_testo(&h, icone::CHECK_CIRCLE), Some(tema::verde()));
         assert_eq!(famiglia_del_testo(&h, icone::CHECK_CIRCLE), Some(Carattere::IconaPiena.famiglia()));
         h.get_by_label("Relazione turno notte");
         h.get_by_label("Annulla").click();
@@ -778,17 +791,17 @@ mod test {
             },
             Vec::new(),
         );
-        assert_eq!(riempiti(&h, tema::FOGLIO), vec![posto]);
+        assert_eq!(riempiti(&h, tema::foglio()), vec![posto]);
         let aa = h.get_by_label("Formato").rect();
         let inserisci = h.get_by_label("Inserisci").rect();
         assert_eq!(aa.left(), posto.left() + 6.0);
         assert_eq!(inserisci.right(), posto.right() - 6.0);
         assert_eq!(aa.center().y, posto.center().y);
         // Due separatori sottili, color filo.
-        let fili = riempiti(&h, tema::FILO);
+        let fili = riempiti(&h, tema::filo());
         assert_eq!(fili.len(), 2, "{fili:?}");
         assert!(fili.iter().all(|f| f.width() == 1.0 && f.height() == 28.0), "{fili:?}");
-        assert_eq!(riempiti(&h, tema::BLU_TENUE), vec![h.get_by_label("Grassetto").rect()]);
+        assert_eq!(riempiti(&h, tema::blu_tenue()), vec![h.get_by_label("Grassetto").rect()]);
         // L'indice conta solo i pulsanti.
         h.get_by_label("Corsivo").click();
         h.run_steps(2);
@@ -822,7 +835,7 @@ mod test {
                 let h = banco(move |ui, _: &mut ()| _ = if quale == 0 { barra_di_formato() } else { organizza() }.mostra(ui, posto), ());
                 let nomi: &[&str] = if quale == 0 { &nomi_formato } else { &nomi_organizza };
                 let mut pezzi: Vec<egui::Rect> = nomi.iter().map(|n| h.get_by_label(n).rect()).collect();
-                let fili = riempiti(&h, tema::FILO);
+                let fili = riempiti(&h, tema::filo());
                 for r in &pezzi {
                     assert!(r.width() >= 40.0 && r.width() <= tema::PULSANTE && (r.width() - r.height()).abs() < 1.0, "{larga}: {r:?}");
                     assert!(r.left() >= posto.left() && r.right() <= posto.right(), "{larga}: {r:?} fuori da {posto:?}");
@@ -837,7 +850,7 @@ mod test {
                     assert!(stacco >= 3.9, "{larga} dp, tastiera {tastiera}, barra {quale}: {stacco} dp fra {:?} e {:?}", coppia[0], coppia[1]);
                 }
                 // Il cerchio del pulsante acceso è grande quanto il pulsante.
-                let acceso = riempiti(&h, tema::BLU_TENUE);
+                let acceso = riempiti(&h, tema::blu_tenue());
                 assert_eq!(acceso.len(), 1);
                 assert!(acceso[0].width() <= tema::PULSANTE && acceso[0].width() >= 40.0, "{acceso:?}");
             }
@@ -854,7 +867,7 @@ mod test {
         let fondo = forme(&h)
             .into_iter()
             .find_map(|s| match s {
-                egui::Shape::Rect(r) if r.fill == tema::FOGLIO && r.blur_width == 0.0 => Some(r),
+                egui::Shape::Rect(r) if r.fill == tema::foglio() && r.blur_width == 0.0 => Some(r),
                 _ => None,
             })
             .expect("il fondo della barra");
@@ -873,7 +886,7 @@ mod test {
         assert_eq!(posto, egui::Rect::from_min_max(egui::pos2(12.0, SCHERMO.y - 12.0 - 64.0), egui::pos2(SCHERMO.x - 12.0, SCHERMO.y - 12.0)));
         let barra = || BarraVoci::new().voce(icone::GRID_VIEW, "Miniature").voce(icone::TOC, "Indice").voce(icone::NUMBERS, "Vai a pagina");
         let mut h = banco(move |ui, scelti: &mut Vec<usize>| scelti.extend(barra().mostra(ui, posto)), Vec::new());
-        assert_eq!(riempiti(&h, tema::FOGLIO), vec![posto]);
+        assert_eq!(riempiti(&h, tema::foglio()), vec![posto]);
         // Le tre voci si dividono la barra, alla stessa altezza; il nome sta sotto l'icona, grigio.
         let voci = ["Miniature", "Indice", "Vai a pagina"].map(|n| h.get_by_label(n).rect());
         assert!((voci[1].center().x - posto.center().x).abs() < 0.5, "{voci:?}");
@@ -881,7 +894,7 @@ mod test {
         for nome in ["Miniature", "Indice", "Vai a pagina"] {
             let testo = rettangolo_del_testo(&h, nome).unwrap();
             assert!(testo.top() > posto.center().y - 4.0, "{nome}: {testo:?}");
-            assert_eq!(colore_del_testo(&h, nome), Some(tema::MATITA));
+            assert_eq!(colore_del_testo(&h, nome), Some(tema::matita()));
         }
         let icona = rettangolo_del_testo(&h, icone::TOC).unwrap();
         assert!(icona.bottom() <= rettangolo_del_testo(&h, "Indice").unwrap().top() + 1.0);
@@ -897,14 +910,14 @@ mod test {
         let posto = BarraVoci::posto(zona);
         let barra = || BarraVoci::new().voce(icone::CHROME_READER_MODE, "Leggi").voce(icone::APPS, "Strumenti").accesa(Some(0));
         let mut h = banco(move |ui, scelti: &mut Vec<usize>| scelti.extend(barra().mostra(ui, posto)), Vec::new());
-        let accesi = riempiti(&h, tema::ROSSO_TENUE);
+        let accesi = riempiti(&h, tema::rosso_tenue());
         assert_eq!(accesi.len(), 1, "{accesi:?}");
         let leggi = h.get_by_label("Leggi").rect();
         assert!((accesi[0].width() - 72.0).abs() < 0.5 && (accesi[0].center().x - leggi.center().x).abs() < 0.5, "{:?} {leggi:?}", accesi[0]);
         assert!(accesi[0].height() >= 48.0 && posto.contains_rect(accesi[0]), "{:?}", accesi[0]);
-        assert_eq!(colore_del_testo(&h, "Leggi"), Some(tema::ROSSO));
-        assert_eq!(colore_del_testo(&h, icone::CHROME_READER_MODE), Some(tema::ROSSO));
-        assert_eq!(colore_del_testo(&h, "Strumenti"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "Leggi"), Some(tema::rosso()));
+        assert_eq!(colore_del_testo(&h, icone::CHROME_READER_MODE), Some(tema::rosso()));
+        assert_eq!(colore_del_testo(&h, "Strumenti"), Some(tema::matita()));
         assert_eq!(h.get_by_label("Leggi").accesskit_node().toggled(), Some(Toggled::True));
         assert_eq!(h.get_by_label("Strumenti").accesskit_node().toggled(), Some(Toggled::False));
         h.get_by_label("Strumenti").click();
@@ -926,7 +939,7 @@ mod test {
                 .interruttore(icone::TABLE_ROWS, "Intestazione", "Intestazione ripetuta", true)
         };
         let mut h = banco(move |ui, scelti: &mut Vec<(usize, egui::Rect)>| scelti.extend(barra().mostra(ui, posto)), Vec::new());
-        assert!(riempiti(&h, tema::FOGLIO).contains(&posto), "la pillola bianca");
+        assert!(riempiti(&h, tema::foglio()).contains(&posto), "la pillola bianca");
         // Le voci stanno in fila, alte quanto la barra meno il bordo, larghe almeno 64 dp e di più
         // col nome lungo; il nome sotto l'icona.
         let riga = h.get_by_label("Riga sopra").rect();
@@ -936,9 +949,9 @@ mod test {
         assert!((dividi.width() - 64.0).abs() < 0.5 && colonna.width() > riga.width() + 30.0, "{dividi:?} {riga:?} {colonna:?}");
         assert!(rettangolo_del_testo(&h, "Riga sopra").unwrap().top() > riga.center().y - 4.0);
         // Spenta: grigia e non si tocca. Interruttore acceso: blu tenue, icona e nome blu.
-        assert_eq!(colore_del_testo(&h, "Unisci"), Some(tema::SPENTO));
+        assert_eq!(colore_del_testo(&h, "Unisci"), Some(tema::spento()));
         assert!(h.get_by_label("Unisci").accesskit_node().is_disabled());
-        assert_eq!(colore_del_testo(&h, "Intestazione"), Some(tema::BLU));
+        assert_eq!(colore_del_testo(&h, "Intestazione"), Some(tema::blu()));
         assert_eq!(h.get_by_label("Intestazione ripetuta").accesskit_node().toggled(), Some(Toggled::True));
         // Le ultime voci sono oltre il bordo: si arriva col dito che scorre.
         let ultima = h.get_by_label("Intestazione ripetuta").rect();
@@ -1000,18 +1013,18 @@ mod test {
             },
             Vec::new(),
         );
-        let scuri = riempiti(&h, tema::SCURO);
+        let scuri = riempiti(&h, tema::scuro());
         assert_eq!(scuri.len(), 1, "{scuri:?}");
         assert_eq!(scuri[0].height(), tema::CONTESTO);
         assert!(scuri[0].bottom() < sel.top());
         for etichetta in ["Taglia", "Copia", "Incolla", "Tutto"] {
-            assert_eq!(colore_del_testo(&h, etichetta), Some(tema::FOGLIO), "{etichetta}");
+            assert_eq!(colore_del_testo(&h, etichetta), Some(tema::foglio()), "{etichetta}");
             assert!(scuri[0].contains_rect(h.get_by_label(etichetta).rect()), "{etichetta}");
         }
         assert_eq!(famiglia_del_testo(&h, "Copia"), Some(Carattere::Grassetto.famiglia()));
-        assert_eq!(colore_del_testo(&h, icone::CONTENT_COPY), Some(tema::FOGLIO));
+        assert_eq!(colore_del_testo(&h, icone::CONTENT_COPY), Some(tema::foglio()));
         // Tre separatori fra quattro azioni.
-        assert_eq!(riempiti(&h, tema::FILO_SCURO).len(), 3);
+        assert_eq!(riempiti(&h, tema::filo_scuro()).len(), 3);
         h.get_by_label("Copia").click();
         h.run_steps(2);
         assert_eq!(h.state(), &vec![1]);
@@ -1032,7 +1045,7 @@ mod test {
             },
             Vec::new(),
         );
-        let scuri = riempiti(&h, tema::SCURO);
+        let scuri = riempiti(&h, tema::scuro());
         assert_eq!(scuri.len(), 1, "{scuri:?}");
         assert_eq!(scuri[0].height(), tema::CONTESTO + RIGA_COLORI);
         assert!(scuri[0].bottom() < sel.top());
@@ -1058,7 +1071,7 @@ mod test {
             },
             Vec::new(),
         );
-        let scuri = riempiti(&h, tema::SCURO);
+        let scuri = riempiti(&h, tema::scuro());
         assert_eq!(scuri.len(), 1, "{scuri:?}");
         assert_eq!(scuri[0].height(), 2.0 * tema::CONTESTO);
         assert!(scuri[0].width() <= 412.0 - 16.0 && scuri[0].bottom() < sel.top(), "{:?}", scuri[0]);
@@ -1081,7 +1094,7 @@ mod test {
             },
             Vec::new(),
         );
-        let scuri = riempiti(&h, tema::SCURO);
+        let scuri = riempiti(&h, tema::scuro());
         assert_eq!(scuri[0].height(), 2.0 * tema::CONTESTO);
         let (parola, aggiungi) = (h.get_by_label("perché").rect(), h.get_by_label("Aggiungi al dizionario").rect());
         assert!(aggiungi.top() >= parola.bottom(), "{parola:?} {aggiungi:?}");

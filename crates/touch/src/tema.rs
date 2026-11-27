@@ -9,68 +9,270 @@ use egui::{
     Theme, ThemePreference, Vec2, Visuals, vec2,
 };
 
-// Colori di `:root` in stile.css.
+// I colori: due tavolozze, chiara («carta e inchiostro» dei bozzetti) e scura (0.10.0). Ogni
+// punto dell'app chiede il colore alla tavolozza attiva con le funzioni qui sotto (`tema::blu()`);
+// i valori fissi della chiara restano in `chiaro`, e quelli di ciò che finisce su carta (le pagine
+// dei documenti, dei PDF, delle slide e delle firme, che restano chiare anche nel tema scuro)
+// in `pagina`.
 
-/// Il fondo dell'app.
-pub const CARTA: Color32 = Color32::from_rgb(0xF6, 0xF3, 0xEE);
-/// Superfici e pagina.
-pub const FOGLIO: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
-/// Il testo principale.
-pub const INCHIOSTRO: Color32 = Color32::from_rgb(0x1E, 0x1B, 0x18);
-/// Il testo secondario.
-pub const MATITA: Color32 = Color32::from_rgb(0x6A, 0x63, 0x5B);
-/// Le linee sottili.
-pub const FILO: Color32 = Color32::from_rgb(0xE4, 0xDE, 0xD4);
-/// Le superfici leggere: gruppi, passi, pulsanti tenui.
-pub const VELO: Color32 = Color32::from_rgb(0xED, 0xE8, 0xE0);
-/// Word e il colore dell'app.
-pub const BLU: Color32 = Color32::from_rgb(0x23, 0x46, 0xA0);
-pub const BLU_TENUE: Color32 = Color32::from_rgb(0xE3, 0xE9, 0xF7);
-/// PDF.
-pub const ROSSO: Color32 = Color32::from_rgb(0xC2, 0x41, 0x2B);
-pub const ROSSO_TENUE: Color32 = Color32::from_rgb(0xF7, 0xE4, 0xDF);
-/// Slide.
-pub const OCRA: Color32 = Color32::from_rgb(0xB7, 0x79, 0x1A);
-pub const OCRA_TENUE: Color32 = Color32::from_rgb(0xF6, 0xEB, 0xD6);
-/// Le barre scure: la barra della selezione, gli avvisi brevi.
-pub const SCURO: Color32 = Color32::from_rgb(0x2A, 0x26, 0x22);
+/// I colori di una tavolozza.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Tavolozza {
+    pub carta: Color32,
+    pub foglio: Color32,
+    pub inchiostro: Color32,
+    pub matita: Color32,
+    pub filo: Color32,
+    pub velo: Color32,
+    pub blu: Color32,
+    pub blu_tenue: Color32,
+    pub rosso: Color32,
+    pub rosso_tenue: Color32,
+    pub ocra: Color32,
+    pub ocra_tenue: Color32,
+    pub scuro: Color32,
+    pub tavolo: Color32,
+    pub indicatore: Color32,
+    pub spento: Color32,
+    pub verde: Color32,
+    pub verde_tenue: Color32,
+    pub lineetta: Color32,
+    pub velo_scuro: Color32,
+    pub selezione: Color32,
+    pub filo_scuro: Color32,
+    pub premuto: Color32,
+    pub premuto_velo: Color32,
+    pub premuto_blu: Color32,
+    pub premuto_scuro: Color32,
+}
 
-// Colori di pdf.css.
+/// La tavolozza chiara, coi valori dei bozzetti (`:root` di design/bozzetti/stile.css e pdf.css).
+pub mod chiaro {
+    use egui::Color32;
 
-/// Il tavolo sotto le pagine di un PDF (`.tavolo`): un poco più scuro della carta, perché le
-/// pagine bianche si stacchino.
-pub const TAVOLO: Color32 = Color32::from_rgb(0xE9, 0xE5, 0xDE);
-/// L'indicatore della pagina sopra il PDF (`.numero-pag`: inchiostro al 78%).
-pub const INDICATORE: Color32 = Color32::from_rgba_unmultiplied_const(30, 27, 24, 199);
-/// I risultati della ricerca sulla pagina: giallo tenue, che lascia leggere il testo sotto.
-pub const TROVATO: Color32 = Color32::from_rgba_unmultiplied_const(255, 214, 0, 80);
-/// Il risultato attuale della ricerca: più forte, verso l'arancio.
-pub const TROVATO_ATTUALE: Color32 = Color32::from_rgba_unmultiplied_const(255, 166, 0, 150);
+    // Colori di `:root` in stile.css.
 
-// Colori che stanno nelle regole di stile.css, e quelli per il dito che preme (il CSS non li ha).
+    /// Il fondo dell'app.
+    pub const CARTA: Color32 = Color32::from_rgb(0xF6, 0xF3, 0xEE);
+    /// Superfici e pagina.
+    pub const FOGLIO: Color32 = Color32::from_rgb(0xFF, 0xFF, 0xFF);
+    /// Il testo principale.
+    pub const INCHIOSTRO: Color32 = Color32::from_rgb(0x1E, 0x1B, 0x18);
+    /// Il testo secondario.
+    pub const MATITA: Color32 = Color32::from_rgb(0x6A, 0x63, 0x5B);
+    /// Le linee sottili.
+    pub const FILO: Color32 = Color32::from_rgb(0xE4, 0xDE, 0xD4);
+    /// Le superfici leggere: gruppi, passi, pulsanti tenui.
+    pub const VELO: Color32 = Color32::from_rgb(0xED, 0xE8, 0xE0);
+    /// Word e il colore dell'app.
+    pub const BLU: Color32 = Color32::from_rgb(0x23, 0x46, 0xA0);
+    pub const BLU_TENUE: Color32 = Color32::from_rgb(0xE3, 0xE9, 0xF7);
+    /// PDF.
+    pub const ROSSO: Color32 = Color32::from_rgb(0xC2, 0x41, 0x2B);
+    pub const ROSSO_TENUE: Color32 = Color32::from_rgb(0xF7, 0xE4, 0xDF);
+    /// Slide.
+    pub const OCRA: Color32 = Color32::from_rgb(0xB7, 0x79, 0x1A);
+    pub const OCRA_TENUE: Color32 = Color32::from_rgb(0xF6, 0xEB, 0xD6);
+    /// Le barre scure: la barra della selezione, gli avvisi brevi.
+    pub const SCURO: Color32 = Color32::from_rgb(0x2A, 0x26, 0x22);
 
-/// L'icona di un pulsante spento (`.ib.spento`).
-pub const SPENTO: Color32 = Color32::from_rgb(0xB9, 0xB2, 0xA8);
-/// La spunta di «Salvato» (`.barra-alta .titolo .s .i`).
-pub const VERDE: Color32 = Color32::from_rgb(0x3C, 0x8A, 0x55);
-/// Il fondo del riquadro dei fogli di calcolo.
-pub const VERDE_TENUE: Color32 = Color32::from_rgb(0xE2, 0xF0, 0xE6);
-/// La lineetta in cima al foglio dal fondo (`.maniglia`).
-pub const LINEETTA: Color32 = Color32::from_rgb(0xCF, 0xC8, 0xBD);
-/// Il velo sullo schermo sotto un foglio o un dialogo (`.velo`: inchiostro al 38%).
-pub const VELO_SCURO: Color32 = Color32::from_rgba_unmultiplied_const(30, 27, 24, 97);
-/// Il fondo del testo selezionato (`.sel`: blu al 18%).
-pub const SELEZIONE: Color32 = Color32::from_rgba_unmultiplied_const(35, 70, 160, 46);
-/// Le linee sulla barra scura (`.contesto .sep`: bianco al 18%).
-pub const FILO_SCURO: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 46);
-/// Sotto il dito, su carta e foglio.
-pub const PREMUTO: Color32 = VELO;
-/// Sotto il dito, su velo e su blu tenue.
-pub const PREMUTO_VELO: Color32 = Color32::from_rgb(0xDD, 0xD6, 0xCB);
-/// Sotto il dito, sul blu.
-pub const PREMUTO_BLU: Color32 = Color32::from_rgb(0x1A, 0x36, 0x80);
-/// Sotto il dito, sullo scuro.
-pub const PREMUTO_SCURO: Color32 = Color32::from_rgb(0x45, 0x3F, 0x39);
+    // Colori di pdf.css.
+
+    /// Il tavolo sotto le pagine di un PDF (`.tavolo`): un poco più scuro della carta, perché le
+    /// pagine bianche si stacchino.
+    pub const TAVOLO: Color32 = Color32::from_rgb(0xE9, 0xE5, 0xDE);
+    /// L'indicatore della pagina sopra il PDF (`.numero-pag`: inchiostro al 78%).
+    pub const INDICATORE: Color32 = Color32::from_rgba_unmultiplied_const(30, 27, 24, 199);
+
+    // Colori che stanno nelle regole di stile.css, e quelli per il dito che preme (il CSS non li ha).
+
+    /// L'icona di un pulsante spento (`.ib.spento`).
+    pub const SPENTO: Color32 = Color32::from_rgb(0xB9, 0xB2, 0xA8);
+    /// La spunta di «Salvato» (`.barra-alta .titolo .s .i`).
+    pub const VERDE: Color32 = Color32::from_rgb(0x3C, 0x8A, 0x55);
+    /// Il fondo del riquadro dei fogli di calcolo.
+    pub const VERDE_TENUE: Color32 = Color32::from_rgb(0xE2, 0xF0, 0xE6);
+    /// La lineetta in cima al foglio dal fondo (`.maniglia`).
+    pub const LINEETTA: Color32 = Color32::from_rgb(0xCF, 0xC8, 0xBD);
+    /// Il velo sullo schermo sotto un foglio o un dialogo (`.velo`: inchiostro al 38%).
+    pub const VELO_SCURO: Color32 = Color32::from_rgba_unmultiplied_const(30, 27, 24, 97);
+    /// Il fondo del testo selezionato (`.sel`: blu al 18%).
+    pub const SELEZIONE: Color32 = Color32::from_rgba_unmultiplied_const(35, 70, 160, 46);
+    /// Le linee sulla barra scura (`.contesto .sep`: bianco al 18%).
+    pub const FILO_SCURO: Color32 = Color32::from_rgba_unmultiplied_const(255, 255, 255, 46);
+    /// Sotto il dito, su carta e foglio.
+    pub const PREMUTO: Color32 = VELO;
+    /// Sotto il dito, su velo e su blu tenue.
+    pub const PREMUTO_VELO: Color32 = Color32::from_rgb(0xDD, 0xD6, 0xCB);
+    /// Sotto il dito, sul blu.
+    pub const PREMUTO_BLU: Color32 = Color32::from_rgb(0x1A, 0x36, 0x80);
+    /// Sotto il dito, sullo scuro.
+    pub const PREMUTO_SCURO: Color32 = Color32::from_rgb(0x45, 0x3F, 0x39);
+}
+
+/// I colori di ciò che sta su una pagina, uguali nei due temi: le pagine si vedono come verranno
+/// stampate o mandate.
+pub mod pagina {
+    pub use super::chiaro::*;
+    use egui::Color32;
+
+    /// I risultati della ricerca sulla pagina: giallo tenue, che lascia leggere il testo sotto.
+    pub const TROVATO: Color32 = Color32::from_rgba_unmultiplied_const(255, 214, 0, 80);
+    /// Il risultato attuale della ricerca: più forte, verso l'arancio.
+    pub const TROVATO_ATTUALE: Color32 = Color32::from_rgba_unmultiplied_const(255, 166, 0, 150);
+}
+
+/// La tavolozza chiara.
+pub const CHIARA: Tavolozza = Tavolozza {
+    carta: chiaro::CARTA,
+    foglio: chiaro::FOGLIO,
+    inchiostro: chiaro::INCHIOSTRO,
+    matita: chiaro::MATITA,
+    filo: chiaro::FILO,
+    velo: chiaro::VELO,
+    blu: chiaro::BLU,
+    blu_tenue: chiaro::BLU_TENUE,
+    rosso: chiaro::ROSSO,
+    rosso_tenue: chiaro::ROSSO_TENUE,
+    ocra: chiaro::OCRA,
+    ocra_tenue: chiaro::OCRA_TENUE,
+    scuro: chiaro::SCURO,
+    tavolo: chiaro::TAVOLO,
+    indicatore: chiaro::INDICATORE,
+    spento: chiaro::SPENTO,
+    verde: chiaro::VERDE,
+    verde_tenue: chiaro::VERDE_TENUE,
+    lineetta: chiaro::LINEETTA,
+    velo_scuro: chiaro::VELO_SCURO,
+    selezione: chiaro::SELEZIONE,
+    filo_scuro: chiaro::FILO_SCURO,
+    premuto: chiaro::PREMUTO,
+    premuto_velo: chiaro::PREMUTO_VELO,
+    premuto_blu: chiaro::PREMUTO_BLU,
+    premuto_scuro: chiaro::PREMUTO_SCURO,
+};
+
+/// La tavolozza scura: la stessa carta calda, di notte. Il fondo quasi nero e caldo, le superfici
+/// un poco più chiare, il testo color avorio; i colori delle tre app più chiari, perché si leggano
+/// sul fondo scuro, col testo scuro sopra quando sono un fondo (come i pulsanti blu). Le barre che
+/// nel chiaro sono scure (selezione, avvisi brevi) qui sono chiare: restano l'elemento che si stacca.
+pub const SCURA: Tavolozza = Tavolozza {
+    carta: Color32::from_rgb(0x1A, 0x18, 0x16),
+    foglio: Color32::from_rgb(0x26, 0x23, 0x1F),
+    inchiostro: Color32::from_rgb(0xEE, 0xE9, 0xE1),
+    matita: Color32::from_rgb(0xB0, 0xA8, 0x9D),
+    filo: Color32::from_rgb(0x3D, 0x38, 0x32),
+    velo: Color32::from_rgb(0x33, 0x2F, 0x2A),
+    blu: Color32::from_rgb(0x9C, 0xB4, 0xF2),
+    blu_tenue: Color32::from_rgb(0x26, 0x32, 0x52),
+    rosso: Color32::from_rgb(0xF2, 0x8F, 0x7A),
+    rosso_tenue: Color32::from_rgb(0x4A, 0x27, 0x21),
+    ocra: Color32::from_rgb(0xE6, 0xB0, 0x55),
+    ocra_tenue: Color32::from_rgb(0x46, 0x36, 0x1B),
+    scuro: Color32::from_rgb(0xE8, 0xE3, 0xDB),
+    tavolo: Color32::from_rgb(0x12, 0x11, 0x10),
+    indicatore: Color32::from_rgba_unmultiplied_const(232, 227, 219, 220),
+    spento: Color32::from_rgb(0x66, 0x5F, 0x57),
+    verde: Color32::from_rgb(0x7C, 0xC9, 0x96),
+    verde_tenue: Color32::from_rgb(0x1F, 0x3A, 0x29),
+    lineetta: Color32::from_rgb(0x55, 0x4F, 0x48),
+    velo_scuro: Color32::from_rgba_unmultiplied_const(0, 0, 0, 150),
+    selezione: Color32::from_rgba_unmultiplied_const(156, 180, 242, 70),
+    filo_scuro: Color32::from_rgba_unmultiplied_const(0, 0, 0, 46),
+    premuto: Color32::from_rgb(0x38, 0x34, 0x2E),
+    premuto_velo: Color32::from_rgb(0x45, 0x40, 0x39),
+    premuto_blu: Color32::from_rgb(0x7E, 0x99, 0xDC),
+    premuto_scuro: Color32::from_rgb(0xCC, 0xC6, 0xBC),
+};
+
+thread_local! {
+    /// Il tema scuro è acceso, per il thread che disegna (le prove girano in parallelo, ognuna sul
+    /// suo thread, e non si toccano).
+    static SCURO_ACCESO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Il tema scuro è acceso.
+pub fn e_scuro() -> bool {
+    SCURO_ACCESO.with(|s| s.get())
+}
+
+/// Accende o spegne il tema scuro; poi va riapplicato lo stile di egui ([`aggiorna_stile`]).
+pub fn imposta_scuro(scuro: bool) {
+    SCURO_ACCESO.with(|s| s.set(scuro));
+}
+
+/// Il testo sopra l'indicatore della pagina e sulle pillole del tipo «Apro…»: bianco sul
+/// grigio scuro del tema chiaro, scuro sulla pillola chiara del tema scuro.
+pub fn sull_indicatore() -> Color32 {
+    if e_scuro() { SCURA.carta } else { Color32::WHITE }
+}
+
+/// La tavolozza attiva.
+pub fn tavolozza() -> Tavolozza {
+    if e_scuro() { SCURA } else { CHIARA }
+}
+
+macro_rules! colori {
+    ($($(#[$doc:meta])* $nome:ident),* $(,)?) => {
+        $(
+            $(#[$doc])*
+            pub fn $nome() -> Color32 {
+                tavolozza().$nome
+            }
+        )*
+    };
+}
+
+colori! {
+    /// Il fondo dell'app.
+    carta,
+    /// Superfici: schede, menu, fogli, dialoghi.
+    foglio,
+    /// Il testo principale.
+    inchiostro,
+    /// Il testo secondario.
+    matita,
+    /// Le linee sottili.
+    filo,
+    /// Le superfici leggere: gruppi, passi, pulsanti tenui.
+    velo,
+    /// Word e il colore dell'app.
+    blu,
+    blu_tenue,
+    /// PDF.
+    rosso,
+    rosso_tenue,
+    /// Slide.
+    ocra,
+    ocra_tenue,
+    /// Le barre che si staccano: la barra della selezione, gli avvisi brevi.
+    scuro,
+    /// Il tavolo sotto le pagine di un PDF.
+    tavolo,
+    /// L'indicatore della pagina sopra il PDF.
+    indicatore,
+    /// L'icona di un pulsante spento.
+    spento,
+    /// La spunta di «Salvato».
+    verde,
+    verde_tenue,
+    /// La lineetta in cima al foglio dal fondo.
+    lineetta,
+    /// Il velo sullo schermo sotto un foglio o un dialogo.
+    velo_scuro,
+    /// Il fondo del testo selezionato fuori dalle pagine.
+    selezione,
+    /// Le linee sulla barra che si stacca.
+    filo_scuro,
+    /// Sotto il dito, su carta e foglio.
+    premuto,
+    /// Sotto il dito, su velo e su blu tenue.
+    premuto_velo,
+    /// Sotto il dito, sul blu.
+    premuto_blu,
+    /// Sotto il dito, sulla barra che si stacca.
+    premuto_scuro,
+}
 
 // Misure, in dp.
 
@@ -156,7 +358,7 @@ const fn strato(dy: i8, sfumatura: u8, colore: Color32) -> Shadow {
     Shadow { offset: [0, dy], blur: (sfumatura as u16 * 3 / 2) as u8, spread: 0, color: colore }
 }
 
-const fn inchiostro(alfa: u8) -> Color32 {
+const fn inchiostro_al(alfa: u8) -> Color32 {
     Color32::from_rgba_unmultiplied_const(30, 27, 24, alfa)
 }
 
@@ -165,9 +367,9 @@ const fn nero(alfa: u8) -> Color32 {
 }
 
 /// Schede, ricerca, cartelle e la pagina (`--ombra`).
-pub const OMBRA: Ombra = [strato(1, 2, inchiostro(20)), strato(6, 18, inchiostro(20))];
+pub const OMBRA: Ombra = [strato(1, 2, inchiostro_al(20)), strato(6, 18, inchiostro_al(20))];
 /// La barra di formato flottante (`.formato`).
-pub const OMBRA_FLOTTANTE: Ombra = [strato(2, 6, inchiostro(31)), strato(12, 28, inchiostro(36))];
+pub const OMBRA_FLOTTANTE: Ombra = [strato(2, 6, inchiostro_al(31)), strato(12, 28, inchiostro_al(36))];
 /// Il pulsante «Nuovo» (`.fab`), in blu.
 pub const OMBRA_NUOVO: Ombra =
     [strato(4, 10, Color32::from_rgba_unmultiplied_const(35, 70, 160, 89)), strato(10, 24, Color32::from_rgba_unmultiplied_const(35, 70, 160, 64))];
@@ -287,39 +489,40 @@ pub fn caratteri_con(altri: &[(&'static str, &'static [u8])]) -> FontDefinitions
 
 // Lo stile di egui.
 
-/// I colori di egui col tema: chiari, carta e inchiostro.
+/// I colori di egui col tema attivo: carta e inchiostro, chiari o scuri.
 pub fn visuals() -> Visuals {
-    let mut v = Visuals::light();
-    v.panel_fill = CARTA;
-    v.window_fill = FOGLIO;
+    let t = tavolozza();
+    let mut v = if e_scuro() { Visuals::dark() } else { Visuals::light() };
+    v.panel_fill = t.carta;
+    v.window_fill = t.foglio;
     v.window_stroke = Stroke::NONE;
     v.window_corner_radius = CornerRadius::same(RAGGIO_MENU);
     v.menu_corner_radius = CornerRadius::same(RAGGIO_MENU);
     v.window_shadow = OMBRA_MENU[0];
     v.popup_shadow = OMBRA_MENU[0];
-    v.extreme_bg_color = FOGLIO;
-    v.text_edit_bg_color = Some(FOGLIO);
-    v.faint_bg_color = VELO;
-    v.code_bg_color = VELO;
-    v.hyperlink_color = BLU;
-    v.warn_fg_color = OCRA;
-    v.error_fg_color = ROSSO;
-    v.weak_text_color = Some(MATITA);
-    v.selection.bg_fill = SELEZIONE;
-    v.selection.stroke = Stroke::new(1.0, BLU);
-    v.text_cursor.stroke = Stroke::new(2.0, BLU);
+    v.extreme_bg_color = t.foglio;
+    v.text_edit_bg_color = Some(t.foglio);
+    v.faint_bg_color = t.velo;
+    v.code_bg_color = t.velo;
+    v.hyperlink_color = t.blu;
+    v.warn_fg_color = t.ocra;
+    v.error_fg_color = t.rosso;
+    v.weak_text_color = Some(t.matita);
+    v.selection.bg_fill = t.selezione;
+    v.selection.stroke = Stroke::new(1.0, t.blu);
+    v.text_cursor.stroke = Stroke::new(2.0, t.blu);
     let tondo = CornerRadius::same(RAGGIO_GRUPPO);
     let w = &mut v.widgets;
-    w.noninteractive.bg_fill = FOGLIO;
-    w.noninteractive.weak_bg_fill = CARTA;
-    w.noninteractive.bg_stroke = Stroke::new(1.0, FILO);
-    w.noninteractive.fg_stroke = Stroke::new(1.0, INCHIOSTRO);
+    w.noninteractive.bg_fill = t.foglio;
+    w.noninteractive.weak_bg_fill = t.carta;
+    w.noninteractive.bg_stroke = Stroke::new(1.0, t.filo);
+    w.noninteractive.fg_stroke = Stroke::new(1.0, t.inchiostro);
     w.noninteractive.corner_radius = tondo;
-    for (stato, fondo) in [(&mut w.inactive, VELO), (&mut w.hovered, VELO), (&mut w.active, PREMUTO_VELO), (&mut w.open, VELO)] {
+    for (stato, fondo) in [(&mut w.inactive, t.velo), (&mut w.hovered, t.velo), (&mut w.active, t.premuto_velo), (&mut w.open, t.velo)] {
         stato.bg_fill = fondo;
         stato.weak_bg_fill = fondo;
         stato.bg_stroke = Stroke::NONE;
-        stato.fg_stroke = Stroke::new(1.5, INCHIOSTRO);
+        stato.fg_stroke = Stroke::new(1.5, t.inchiostro);
         stato.corner_radius = tondo;
         stato.expansion = 0.0;
     }
@@ -358,6 +561,12 @@ pub fn installa(ctx: &Context) {
 /// Come [`installa`], coi caratteri `altri` in più (vedi [`caratteri_con`]).
 pub fn installa_con(ctx: &Context, altri: &[(&'static str, &'static [u8])]) {
     ctx.set_fonts(caratteri_con(altri));
+    aggiorna_stile(ctx);
+}
+
+/// Rimette lo stile di egui coi colori del tema attivo, dopo [`imposta_scuro`]. egui tiene un
+/// solo stile, quello «chiaro»: dentro ci sono i colori del tema scelto dall'app.
+pub fn aggiorna_stile(ctx: &Context) {
     ctx.set_theme(ThemePreference::Light);
     ctx.style_mut_of(Theme::Light, applica_stile);
 }
@@ -383,6 +592,7 @@ mod test {
 
     #[test]
     fn i_colori_sono_quelli_del_bozzetto() {
+        use chiaro::*;
         let nostri = [
             ("carta", CARTA),
             ("foglio", FOGLIO),
@@ -507,6 +717,7 @@ mod test {
 
     #[test]
     fn lo_stile_e_chiaro_come_la_carta() {
+        use chiaro::*;
         let ctx = contesto_col_tema();
         assert_eq!(ctx.theme(), egui::Theme::Light);
         let st = ctx.global_style();
@@ -519,6 +730,64 @@ mod test {
         assert_eq!(st.visuals.text_cursor.stroke.color, BLU);
         assert_eq!(st.text_styles[&egui::TextStyle::Body], FontId::proportional(16.0));
         assert!(st.spacing.interact_size.y >= PULSANTE, "bersagli da dito");
+    }
+
+    /// Il tema scuro (0.10.0): egui scuro coi colori della tavolozza scura; poi di nuovo chiaro.
+    #[test]
+    fn lo_stile_scuro_ha_la_tavolozza_scura_e_torna_chiaro() {
+        let ctx = contesto_col_tema();
+        imposta_scuro(true);
+        aggiorna_stile(&ctx);
+        let st = ctx.global_style();
+        assert!(st.visuals.dark_mode);
+        assert_eq!((st.visuals.panel_fill, st.visuals.window_fill), (SCURA.carta, SCURA.foglio));
+        assert_eq!(st.visuals.widgets.noninteractive.fg_stroke.color, SCURA.inchiostro);
+        assert_eq!((carta(), blu()), (SCURA.carta, SCURA.blu));
+        imposta_scuro(false);
+        aggiorna_stile(&ctx);
+        let st = ctx.global_style();
+        assert!(!st.visuals.dark_mode);
+        assert_eq!(st.visuals.panel_fill, chiaro::CARTA);
+        assert_eq!(carta(), chiaro::CARTA);
+    }
+
+    /// Le coppie di testo e fondo di ogni tavolozza si leggono: contrasto WCAG 2.x di almeno 4,5:1
+    /// per il testo (criterio 1.4.3, livello AA), 3:1 per icone e testi grandi sui fondi colorati.
+    #[test]
+    fn i_testi_si_leggono_nelle_due_tavolozze() {
+        fn luminanza(c: Color32) -> f64 {
+            let canale = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+            };
+            0.2126 * canale(c.r()) + 0.7152 * canale(c.g()) + 0.0722 * canale(c.b())
+        }
+        fn contrasto(a: Color32, b: Color32) -> f64 {
+            let (x, y) = (luminanza(a), luminanza(b));
+            (x.max(y) + 0.05) / (x.min(y) + 0.05)
+        }
+        for (nome, t) in [("chiara", CHIARA), ("scura", SCURA)] {
+            let testi = [
+                ("inchiostro su carta", t.inchiostro, t.carta, 4.5),
+                ("inchiostro su foglio", t.inchiostro, t.foglio, 4.5),
+                ("inchiostro su velo", t.inchiostro, t.velo, 4.5),
+                ("matita su carta", t.matita, t.carta, 4.5),
+                ("matita su foglio", t.matita, t.foglio, 4.5),
+                ("blu su foglio", t.blu, t.foglio, 4.5),
+                ("blu su carta", t.blu, t.carta, 4.5),
+                ("blu su blu tenue", t.blu, t.blu_tenue, 4.5),
+                ("foglio sul blu", t.foglio, t.blu, 4.5),
+                ("rosso su foglio", t.rosso, t.foglio, 4.5),
+                ("rosso su rosso tenue", t.rosso, t.rosso_tenue, 3.0),
+                ("ocra su ocra tenue", t.ocra, t.ocra_tenue, 3.0),
+                ("verde su foglio", t.verde, t.foglio, 3.0),
+                ("foglio sullo scuro", t.foglio, t.scuro, 4.5),
+            ];
+            for (cosa, testo, fondo, soglia) in testi {
+                let c = contrasto(testo, fondo);
+                assert!(c >= soglia, "tavolozza {nome}: {cosa} {c:.2}:1, sotto {soglia}:1");
+            }
+        }
     }
 
     #[test]

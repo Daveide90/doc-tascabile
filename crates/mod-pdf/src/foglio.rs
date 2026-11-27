@@ -235,7 +235,8 @@ fn area(p: &[[f32; 2]]) -> f32 {
 /// Il punto sta dentro il poligono convesso.
 fn nel_poligono(p: &[[f32; 2]], q: [f32; 2]) -> bool {
     let n = p.len();
-    let segni: Vec<f32> = (0..n).map(|i| (p[(i + 1) % n][0] - p[i][0]) * (q[1] - p[i][1]) - (p[(i + 1) % n][1] - p[i][1]) * (q[0] - p[i][0])).collect();
+    let segni: Vec<f32> =
+        (0..n).map(|i| (p[(i + 1) % n][0] - p[i][0]) * (q[1] - p[i][1]) - (p[(i + 1) % n][1] - p[i][1]) * (q[0] - p[i][0])).collect();
     segni.iter().all(|s| *s >= 0.0) || segni.iter().all(|s| *s <= 0.0)
 }
 

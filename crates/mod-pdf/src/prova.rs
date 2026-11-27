@@ -806,7 +806,8 @@ pub const CARTA_AVORIO: [u8; 3] = [245, 237, 219];
 /// color avorio, con lo strato dell'OCR; ogni parola larga quanto le sue lettere in Helvetica, come
 /// la legge un riconoscitore vero.
 pub fn scansione_riconosciuta_su_carta() -> Vec<u8> {
-    let largo = |parola: &str| pdfcraft_engine::added_text_width(&pdfcraft_engine::AddedText { text: parola.into(), size: 16.0, ..Default::default() });
+    let largo =
+        |parola: &str| pdfcraft_engine::added_text_width(&pdfcraft_engine::AddedText { text: parola.into(), size: 16.0, ..Default::default() });
     con_lo_strato_ocr(scansione_in(image::ImageFormat::Jpeg, CARTA_AVORIO), largo)
 }
 

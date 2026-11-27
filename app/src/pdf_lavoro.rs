@@ -143,6 +143,7 @@ pub(crate) enum Strumento {
     Penna,
     Nota,
     OrganizzaPagine,
+    Ruota,
     Unisci,
     Dividi,
     Comprimi,
@@ -159,7 +160,7 @@ pub(crate) enum Strumento {
 }
 
 impl Strumento {
-    const TUTTI: [Strumento; 24] = [
+    const TUTTI: [Strumento; 25] = [
         Strumento::ModificaTesto,
         Strumento::AggiungiTesto,
         Strumento::Immagine,
@@ -171,6 +172,7 @@ impl Strumento {
         Strumento::Penna,
         Strumento::Nota,
         Strumento::OrganizzaPagine,
+        Strumento::Ruota,
         Strumento::Unisci,
         Strumento::Dividi,
         Strumento::Comprimi,
@@ -191,7 +193,7 @@ impl Strumento {
         match self {
             ModificaTesto | AggiungiTesto | Immagine | RiconosciTesto | Forme | Link => Gruppo::Modifica,
             Firma | Evidenzia | Penna | Nota => Gruppo::CompilaEAnnota,
-            OrganizzaPagine | Unisci | Dividi | Comprimi | EsportaWord | Proteggi | TogliProtezione | Oscura | Filigrana | NumeriDiPagina
+            OrganizzaPagine | Ruota | Unisci | Dividi | Comprimi | EsportaWord | Proteggi | TogliProtezione | Oscura | Filigrana | NumeriDiPagina
             | Scansiona => Gruppo::PagineEFile,
             Miniature | Indice | VaiAPagina => Gruppo::Leggi,
         }
@@ -211,6 +213,7 @@ impl Strumento {
             Penna => "Penna",
             Nota => "Nota",
             OrganizzaPagine => "Organizza pagine",
+            Ruota => crate::pdf_pagine::RUOTA_LE_PAGINE,
             Unisci => crate::pdf_pagine::UNISCI,
             Dividi => crate::pdf_pagine::DIVIDI,
             Comprimi => crate::pdf_pagine::COMPRIMI,
@@ -241,6 +244,7 @@ impl Strumento {
             Penna => icone::DRAW,
             Nota => icone::STICKY_NOTE_2,
             OrganizzaPagine => icone::VIEW_MODULE,
+            Ruota => icone::ROTATE_RIGHT,
             Unisci => icone::MERGE,
             Dividi => icone::CALL_SPLIT,
             Comprimi => icone::COMPRESS,
@@ -273,6 +277,7 @@ impl Strumento {
                 | Penna
                 | Nota
                 | OrganizzaPagine
+                | Ruota
                 | Unisci
                 | Dividi
                 | Comprimi
@@ -426,7 +431,11 @@ pub(crate) const IN_UNA_COPIA: &str = "Il salvataggio va in una copia in Documen
 
 /// Il testo di un dialogo, con la frase sulla copia se Salva non scrive sul file aperto.
 pub(crate) fn con_la_copia(testo: &str, p: &PdfAperto) -> String {
-    if salva_sul_file(p).is_some() { testo.to_string() } else { format!("{testo} {IN_UNA_COPIA}") }
+    if salva_sul_file(p).is_some() {
+        tascabile_touch::t(testo).to_string()
+    } else {
+        format!("{} {}", tascabile_touch::t(testo), tascabile_touch::t(IN_UNA_COPIA))
+    }
 }
 
 /// Salva scrive sul file aperto: è un file della memoria del telefono (non arrivato da un'altra
@@ -521,7 +530,7 @@ impl TascabileApp {
                 }
                 if let Some(perche) = perche {
                     ui.add_space(8.0);
-                    ui.label(egui::RichText::new(perche).font(Carattere::Testo.font(ui.ctx(), 15.0)).color(tema::MATITA));
+                    ui.label(egui::RichText::new(tascabile_touch::t(perche)).font(Carattere::Testo.font(ui.ctx(), 15.0)).color(tema::matita()));
                     ui.add_space(8.0);
                 }
                 scelto
@@ -537,6 +546,7 @@ impl TascabileApp {
         match s {
             Strumento::Firma => self.apri_firma_pdf(crate::pdf_firma::Dove::DaToccare),
             Strumento::OrganizzaPagine => self.apri_organizza_pdf(),
+            Strumento::Ruota => self.apri_ruota_pdf(),
             Strumento::Unisci => self.apri_unisci_pdf(None),
             Strumento::Dividi => self.apri_dividi_pdf(),
             Strumento::Comprimi => self.apri_comprimi_pdf(),
@@ -667,7 +677,7 @@ impl TascabileApp {
             },
             AzioneSalva::SalvaCopia => Destino::Copia { radice, base },
             AzioneSalva::Condividi => Destino::Condivisi { cache, nome: nome_da_condividere(&p.nome) },
-            AzioneSalva::Definitiva => Destino::Copia { radice, base: format!("{base} definitivo") },
+            AzioneSalva::Definitiva => Destino::Copia { radice, base: tascabile_touch::tf!("{} definitivo", base) },
         };
         let scrittura: Scrittura<ScrittoPdf> = Box::new(move |byte: &Arc<Vec<u8>>| {
             let esito = scrivi_pdf(destino, byte);
@@ -761,13 +771,13 @@ impl TascabileApp {
         if matches!(f.evento, Evento::Applicata { .. } | Evento::Annullata { .. } | Evento::Ripetuta { .. }) {
             self.modifica_da_copiare();
         }
-        let pagine = |t: &Toccate| t.quante().map_or_else(|| "tutte le pagine".to_string(), |n| format!("{n} pagine"));
+        let pagine = |t: &Toccate| t.quante().map_or_else(|| "tutte le pagine".to_string(), |n| tascabile_touch::tf!("{} pagine", n));
         match f.evento {
             Evento::Applicata { genere, toccate, rovinate } => {
                 if let Some(p) = self.pdf.as_mut() {
                     p.modifica.correzione = None;
                 }
-                let firme = if rovinate > 0 { format!(", {rovinate} firme non più valide") } else { String::new() };
+                let firme = if rovinate > 0 { tascabile_touch::tf!(", {} firme non più valide", rovinate) } else { String::new() };
                 diagnosi(format!("pdf: modifica ({}) applicata in {ms} ms, {} toccate{firme}", genere.nome(), pagine(&toccate)));
             }
             Evento::Rifiutata { genere, rovinate } => {
@@ -825,9 +835,11 @@ impl TascabileApp {
                     p.dopo_il_salvataggio = None;
                 }
                 self.errore = Some(match s.azione {
-                    AzioneSalva::Condividi => Errore { titolo: NON_CONDIVISO, testo: format!("Non riesco a condividere il PDF: {e}") },
-                    AzioneSalva::Definitiva => Errore { titolo: NON_SALVATO, testo: format!("Non riesco a fare la copia definitiva: {e}") },
-                    _ => Errore { titolo: NON_SALVATO, testo: format!("Non riesco a salvare: {e}") },
+                    AzioneSalva::Condividi => Errore { titolo: NON_CONDIVISO, testo: tascabile_touch::tf!("Non riesco a condividere il PDF: {}", e) },
+                    AzioneSalva::Definitiva => {
+                        Errore { titolo: NON_SALVATO, testo: tascabile_touch::tf!("Non riesco a fare la copia definitiva: {}", e) }
+                    }
+                    _ => Errore { titolo: NON_SALVATO, testo: tascabile_touch::tf!("Non riesco a salvare: {}", e) },
                 });
                 return;
             }
@@ -887,8 +899,10 @@ impl TascabileApp {
         // Un file nuovo: l'avviso ha «Condividi» (10/11).
         match (s.azione, r.come) {
             (_, Come::SulFile) => self.avviso_breve.avvisa("Salvato"),
-            (AzioneSalva::SalvaCopia, _) => self.avvisa_col_condividi(format!("Copia salvata in Documents/Tascabile: {file}"), &r.percorso),
-            _ => self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {file}"), &r.percorso),
+            (AzioneSalva::SalvaCopia, _) => {
+                self.avvisa_col_condividi(tascabile_touch::tf!("Copia salvata in Documents/Tascabile: {}", file), &r.percorso)
+            }
+            _ => self.avvisa_col_condividi(tascabile_touch::tf!("Salvato in Documents/Tascabile: {}", file), &r.percorso),
         }
         if let Some(dopo) = self.pdf.as_mut().and_then(|p| p.dopo_il_salvataggio.take()) {
             self.fai(dopo);
@@ -905,9 +919,15 @@ fn messaggio_della_modifica(genere: GenereModifica, errore: &str) -> &'static st
         "foto della scansione" => {
             "La foto di questa scansione è in un formato che non so rifare (fax, JBIG2 o JPEG 2000) o è girata nella pagina: la correzione non si fa, per non lasciare la scritta di prima nascosta sotto. Il PDF è rimasto com'era."
         }
-        "senza la foto della scansione" => "Sotto questo testo non c'è la foto di una scansione da correggere: la correzione non si fa. Il PDF è rimasto com'era.",
-        "lettere della scansione" => "Nella foto non riesco a trovare le lettere di questa riga (troppo chiare o sbiadite): la correzione non si fa. Il PDF è rimasto com'era.",
-        "riga della scansione piena" => "Il testo nuovo non entra nella riga della scansione: accorcialo un poco e riprova. Il PDF è rimasto com'era.",
+        "senza la foto della scansione" => {
+            "Sotto questo testo non c'è la foto di una scansione da correggere: la correzione non si fa. Il PDF è rimasto com'era."
+        }
+        "lettere della scansione" => {
+            "Nella foto non riesco a trovare le lettere di questa riga (troppo chiare o sbiadite): la correzione non si fa. Il PDF è rimasto com'era."
+        }
+        "riga della scansione piena" => {
+            "Il testo nuovo non entra nella riga della scansione: accorcialo un poco e riprova. Il PDF è rimasto com'era."
+        }
         "lettera fuori dal carattere della scansione" => {
             "Nel testo nuovo c'è un simbolo che il carattere della scansione non ha (le lettere italiane sì): la correzione non si fa. Il PDF è rimasto com'era."
         }
@@ -950,6 +970,7 @@ mod test {
                 "Penna",
                 "Nota",
                 "Organizza pagine",
+                "Ruota le pagine",
                 "Unisci",
                 "Dividi",
                 "Comprimi",

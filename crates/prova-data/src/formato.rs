@@ -31,6 +31,11 @@ pub const MESSAGGIO_MASSIMO: usize = 4096;
 const DATI_MASSIMI: usize = 8192;
 const INDIRIZZO_MASSIMO: usize = 1000;
 const PROFONDITA_MASSIMA: usize = 256;
+/// Il tetto condiviso di una lettura dell'albero: una prova sotto i 64 KiB con molti rami e
+/// operazioni `Rovescia` può amplificare la memoria di migliaia di volte; le prove vere hanno
+/// poche decine di nodi e qualche KiB di messaggi.
+const NODI_MASSIMI: usize = 10_000;
+const BYTE_MESSAGGI_MASSIMI: usize = 16 * 1024 * 1024;
 /// I caratteri ammessi negli indirizzi dei server (`PendingAttestation.ALLOWED_URI_CHARS`).
 const CARATTERI_DEGLI_INDIRIZZI: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._/:";
 
@@ -211,9 +216,62 @@ impl Albero {
             self.aggiungi(a);
         }
         for (op, sotto) in altro.rami {
-            self.ramo(op)?.unisci(sotto)?;
+            match self.rami.binary_search_by(|(o, _)| o.chiave().cmp(&op.chiave())) {
+                Ok(i) => self.rami[i].1.unisci(sotto)?,
+                Err(i) => {
+                    if op.applica(&self.messaggio)? != sotto.messaggio {
+                        return Err(ErroreFormato::Rovinata("unione di messaggi diversi"));
+                    }
+                    self.rami.insert(i, (op, sotto));
+                }
+            }
         }
         Ok(())
+    }
+
+    /// Mette il sottoalbero `sotto` sul ramo `op` senza ricostruirlo se il ramo non c'era; se c'era
+    /// già, unisce i due sottoalberi.
+    fn inserisci_ramo(&mut self, op: Operazione, sotto: Albero) -> Result<(), ErroreFormato> {
+        match self.rami.binary_search_by(|(o, _)| o.chiave().cmp(&op.chiave())) {
+            Ok(i) => self.rami[i].1.unisci(sotto),
+            Err(i) => {
+                self.rami.insert(i, (op, sotto));
+                Ok(())
+            }
+        }
+    }
+
+    /// Tiene solo le attestazioni `InAttesa` verso calendari fidati (al più `massimo` in tutto) e
+    /// i rami che portano ad almeno una di esse; scarta blocchi e altre attestazioni. `None` se non
+    /// resta nessuna attesa.
+    pub(crate) fn solo_attese_fidate(self, massimo: usize) -> Option<Albero> {
+        let mut rimaste = massimo;
+        self.filtra_attese(&mut rimaste)
+    }
+
+    fn filtra_attese(self, rimaste: &mut usize) -> Option<Albero> {
+        let mut attestazioni = Vec::new();
+        for a in self.attestazioni {
+            if *rimaste == 0 {
+                break;
+            }
+            if let Attestazione::InAttesa(ref u) = a
+                && fidato(u)
+            {
+                *rimaste -= 1;
+                attestazioni.push(a);
+            }
+        }
+        let mut rami = Vec::new();
+        for (op, sotto) in self.rami {
+            if *rimaste == 0 {
+                break;
+            }
+            if let Some(filtrato) = sotto.filtra_attese(rimaste) {
+                rami.push((op, filtrato));
+            }
+        }
+        if attestazioni.is_empty() && rami.is_empty() { None } else { Some(Albero { messaggio: self.messaggio, attestazioni, rami }) }
     }
 
     /// Tutte le attestazioni, ognuna col messaggio a cui si riferisce.
@@ -264,11 +322,13 @@ impl Albero {
         Ok(())
     }
 
-    /// Legge un albero del messaggio `messaggio` (`Timestamp.deserialize`).
-    fn leggi(l: &mut Lettore<'_>, messaggio: Vec<u8>, profondita: usize) -> Result<Albero, ErroreFormato> {
+    /// Legge un albero del messaggio `messaggio` (`Timestamp.deserialize`), dentro il budget
+    /// condiviso di nodi e byte di messaggi.
+    fn leggi(l: &mut Lettore<'_>, messaggio: Vec<u8>, profondita: usize, budget: &mut Budget) -> Result<Albero, ErroreFormato> {
         if profondita == 0 {
             return Err(ErroreFormato::Rovinata("troppo profonda"));
         }
+        budget.prendi(messaggio.len())?;
         let mut albero = Albero::nuovo(messaggio);
         loop {
             let mut segno = l.byte()?;
@@ -291,13 +351,34 @@ impl Albero {
                     _ => return Err(ErroreFormato::NonSupportata("operazione")),
                 };
                 let dopo = op.applica(&albero.messaggio)?;
-                let sotto = Albero::leggi(l, dopo, profondita - 1)?;
-                albero.ramo(op)?.unisci(sotto)?;
+                let sotto = Albero::leggi(l, dopo, profondita - 1, budget)?;
+                albero.inserisci_ramo(op, sotto)?;
             }
             if !altri {
                 return Ok(albero);
             }
         }
+    }
+}
+
+/// Il budget condiviso per una lettura dell'albero: nodi e somma dei byte dei messaggi.
+struct Budget {
+    nodi: usize,
+    byte: usize,
+}
+
+impl Budget {
+    fn nuovo() -> Self {
+        Self { nodi: 0, byte: 0 }
+    }
+
+    fn prendi(&mut self, byte_messaggio: usize) -> Result<(), ErroreFormato> {
+        self.nodi = self.nodi.checked_add(1).ok_or(ErroreFormato::Rovinata("troppo grande"))?;
+        self.byte = self.byte.checked_add(byte_messaggio).ok_or(ErroreFormato::Rovinata("troppo grande"))?;
+        if self.nodi > NODI_MASSIMI || self.byte > BYTE_MESSAGGI_MASSIMI {
+            return Err(ErroreFormato::Rovinata("troppo grande"));
+        }
+        Ok(())
     }
 }
 
@@ -323,6 +404,22 @@ fn leggi_attestazione(l: &mut Lettore<'_>) -> Result<Attestazione, ErroreFormato
     Ok(a)
 }
 
+/// Legge intestazione, versione, tipo d'impronta SHA-256 e i 32 byte dell'impronta.
+fn leggi_testa(l: &mut Lettore<'_>) -> Result<[u8; 32], ErroreFormato> {
+    if l.byte_fissi(INTESTAZIONE.len()).ok() != Some(INTESTAZIONE) {
+        return Err(ErroreFormato::NonEUnaProva);
+    }
+    if l.varuint()? != VERSIONE {
+        return Err(ErroreFormato::NonSupportata("versione"));
+    }
+    if l.byte()? != SHA256 {
+        return Err(ErroreFormato::NonSupportata("impronta che non è SHA-256"));
+    }
+    let mut impronta = [0u8; 32];
+    impronta.copy_from_slice(l.byte_fissi(32)?);
+    Ok(impronta)
+}
+
 /// Una prova della data: l'impronta SHA-256 del file e l'albero che parte da lì.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prova {
@@ -335,20 +432,23 @@ impl Prova {
         &self.albero.messaggio
     }
 
+    /// Legge solo intestazione, versione, tipo d'impronta e i 32 byte dell'impronta SHA-256 di un
+    /// file `.ots`, senza analizzare l'albero.
+    pub fn impronta_del_file(byte: &[u8]) -> Result<[u8; 32], ErroreFormato> {
+        let mut l = Lettore::nuovo(byte);
+        let impronta = leggi_testa(&mut l)?;
+        if l.finito() {
+            return Err(ErroreFormato::Troncata);
+        }
+        Ok(impronta)
+    }
+
     /// Legge i byte di un file `.ots`.
     pub fn leggi(byte: &[u8]) -> Result<Prova, ErroreFormato> {
         let mut l = Lettore::nuovo(byte);
-        if l.byte_fissi(INTESTAZIONE.len()).ok() != Some(INTESTAZIONE) {
-            return Err(ErroreFormato::NonEUnaProva);
-        }
-        if l.varuint()? != VERSIONE {
-            return Err(ErroreFormato::NonSupportata("versione"));
-        }
-        if l.byte()? != SHA256 {
-            return Err(ErroreFormato::NonSupportata("impronta che non è SHA-256"));
-        }
-        let impronta = l.byte_fissi(32)?.to_vec();
-        let albero = Albero::leggi(&mut l, impronta, PROFONDITA_MASSIMA)?;
+        let impronta = leggi_testa(&mut l)?;
+        let mut budget = Budget::nuovo();
+        let albero = Albero::leggi(&mut l, impronta.to_vec(), PROFONDITA_MASSIMA, &mut budget)?;
         if !l.finito() {
             return Err(ErroreFormato::ByteInPiu);
         }
@@ -440,7 +540,8 @@ pub fn scrivi_albero(albero: &Albero) -> Result<Vec<u8>, ErroreFormato> {
 /// senza intestazione (`Timestamp.deserialize` del client).
 pub fn leggi_albero(byte: &[u8], messaggio: &[u8]) -> Result<Albero, ErroreFormato> {
     let mut l = Lettore::nuovo(byte);
-    let albero = Albero::leggi(&mut l, messaggio.to_vec(), PROFONDITA_MASSIMA)?;
+    let mut budget = Budget::nuovo();
+    let albero = Albero::leggi(&mut l, messaggio.to_vec(), PROFONDITA_MASSIMA, &mut budget)?;
     if !l.finito() {
         return Err(ErroreFormato::ByteInPiu);
     }
@@ -677,5 +778,38 @@ mod test {
         let mut v = Vec::new();
         scrivi_varuint(&mut v, 300);
         assert_eq!(v, [0xac, 0x02]);
+    }
+
+    /// Audit B3: una prova sotto i 64 KiB che genera troppi nodi o troppi byte di messaggi in
+    /// memoria deve essere rifiutata. Tetto atteso dopo la correzione: al massimo 10.000 nodi o
+    /// 16 MiB di messaggi in tutto (qui 1.300 rami da 8 nodi da 4 KiB = 10.402 nodi e ~40,6 MiB in
+    /// ~32 KiB di file, poco profonda così gira in una frazione di secondo anche oggi).
+    #[test]
+    fn audit_b3_una_prova_con_troppi_nodi_si_rifiuta() {
+        const RAMI: u16 = 1300;
+        const ROVESCI: usize = 7;
+
+        let mut v = INTESTAZIONE.to_vec();
+        scrivi_varuint(&mut v, VERSIONE);
+        v.push(SHA256);
+        v.extend_from_slice(&[0u8; 32]);
+        // Porta il messaggio da 32 a 4094 byte in un solo passo, così ogni ramo sta a 4096 byte.
+        v.push(ACCODA);
+        scrivi_byte_variabili(&mut v, &[0x41; 4062]);
+        for i in 0..RAMI {
+            if i + 1 < RAMI {
+                v.push(ALTRO_RAMO);
+            }
+            v.push(ACCODA);
+            scrivi_byte_variabili(&mut v, &i.to_be_bytes());
+            v.extend([ROVESCIA; ROVESCI]);
+            v.push(ATTESTAZIONE);
+            v.extend_from_slice(&[0u8; 8]);
+            v.push(0);
+        }
+        assert!(v.len() < 64 * 1024, "la prova sta sotto i 64 KiB ({} byte)", v.len());
+        let nodi = 2 + usize::from(RAMI) * (1 + ROVESCI);
+        let mib = (usize::from(RAMI) * (1 + ROVESCI) * MESSAGGIO_MASSIMO) / (1024 * 1024);
+        assert!(Prova::leggi(&v).is_err(), "una prova da {} byte che crea {nodi} nodi (~{mib} MiB) va rifiutata", v.len());
     }
 }

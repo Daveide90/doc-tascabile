@@ -576,11 +576,19 @@ impl Spettacolo {
         }
         if self.stato.ended {
             let titolo = Carattere::Grassetto.font(ui.ctx(), 20.0);
-            let dove = painter.text(rect.center() - vec2(0.0, 14.0), Align2::CENTER_CENTER, FINE, titolo, Color32::from_gray(200));
+            let dove =
+                painter.text(rect.center() - vec2(0.0, 14.0), Align2::CENTER_CENTER, tascabile_touch::t(FINE), titolo, Color32::from_gray(200));
             let sotto = Carattere::Testo.font(ui.ctx(), 15.0);
-            painter.text(rect.center() + vec2(0.0, 16.0), Align2::CENTER_CENTER, TOCCA_PER_USCIRE, sotto, Color32::from_gray(140));
+            painter.text(
+                rect.center() + vec2(0.0, 16.0),
+                Align2::CENTER_CENTER,
+                tascabile_touch::t(TOCCA_PER_USCIRE),
+                sotto,
+                Color32::from_gray(140),
+            );
             // Per chi usa il lettore dello schermo (e per le prove dell'app).
-            ui.interact(dove, ui.id().with("fine"), Sense::hover()).widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, FINE));
+            ui.interact(dove, ui.id().with("fine"), Sense::hover())
+                .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t(FINE)));
             return;
         }
         let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
@@ -618,9 +626,9 @@ impl Spettacolo {
         for t in &self.tratti {
             let punti: Vec<Pos2> = t.iter().map(|p| sullo_schermo(*p)).collect();
             if punti.len() == 1 {
-                painter.circle_filled(punti[0], PENNA / 2.0, tema::ROSSO);
+                painter.circle_filled(punti[0], PENNA / 2.0, tema::pagina::ROSSO);
             } else {
-                painter.add(egui::Shape::line(punti, Stroke::new(PENNA, tema::ROSSO)));
+                painter.add(egui::Shape::line(punti, Stroke::new(PENNA, tema::pagina::ROSSO)));
             }
         }
         if let Some(l) = self.laser {

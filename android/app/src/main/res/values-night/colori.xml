@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Col telefono in modalità scura, prima del primo disegno: la carta della tavolozza scura
+         (tema::SCURA.carta). Poi l'app mette il tema scelto nelle Impostazioni (tascabileTema). -->
+    <color name="carta">#1A1816</color>
+</resources>

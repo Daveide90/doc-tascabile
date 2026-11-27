@@ -98,7 +98,11 @@ pub struct Cartella {
 /// Senza il contenuto: nella diagnosi niente nomi di fogli né celle.
 impl std::fmt::Debug for Cartella {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Cartella").field("fogli", &self.cartella.sheets.len()).field("schede", &self.schede.len()).field("avvisi", &self.avvisi).finish()
+        f.debug_struct("Cartella")
+            .field("fogli", &self.cartella.sheets.len())
+            .field("schede", &self.schede.len())
+            .field("avvisi", &self.avvisi)
+            .finish()
     }
 }
 
@@ -140,7 +144,8 @@ impl Cartella {
         if celle > CELLE_MASSIME {
             return Err(Genere::Gonfiato);
         }
-        let schede: Vec<usize> = (0..cartella.sheets.len()).filter(|i| cartella.sheet(*i).is_some_and(|s| s.visibility == Visibility::Visible)).collect();
+        let schede: Vec<usize> =
+            (0..cartella.sheets.len()).filter(|i| cartella.sheet(*i).is_some_and(|s| s.visibility == Visibility::Visible)).collect();
         if schede.is_empty() {
             return Err(Genere::SenzaFogli);
         }
@@ -221,7 +226,8 @@ pub fn sembra_foglio(byte: &[u8]) -> bool {
             }
             let Ok(mut tipo) = z.by_name("mimetype") else { return false };
             let mut t = String::new();
-            std::io::Read::read_to_string(&mut std::io::Read::take(&mut tipo, 200), &mut t).is_ok() && t.trim() == "application/vnd.oasis.opendocument.spreadsheet"
+            std::io::Read::read_to_string(&mut std::io::Read::take(&mut tipo, 200), &mut t).is_ok()
+                && t.trim() == "application/vnd.oasis.opendocument.spreadsheet"
         }
         _ => false,
     }

@@ -222,6 +222,7 @@ impl CampoTesto {
     /// fuoco, il cursore; `vuoto` è il testo grigio da mostrare quando non c'è niente. Un tocco
     /// è un `clicked` della risposta: chi lo usa dà il fuoco al campo.
     pub fn mostra(&self, ui: &mut Ui, vuoto: &str) -> Response {
+        let vuoto = crate::lingua::t(vuoto);
         let (rect, risposta) = ui.allocate_exact_size(vec2(ui.available_width().max(48.0), 48.0), Sense::click());
         let v = ui.visuals();
         let bordo = if self.fuoco { v.selection.stroke } else { v.widgets.inactive.bg_stroke };
@@ -237,16 +238,17 @@ impl CampoTesto {
     /// lente grigia a sinistra e, quando c'è del testo, la X per svuotarlo. La X non conta come
     /// tocco sul campo: chi lo usa, se `svuota`, chiama [`CampoTesto::svuota`].
     pub fn mostra_ricerca(&self, ui: &mut Ui, vuoto: &str) -> RispostaRicerca {
+        let vuoto = crate::lingua::t(vuoto);
         let (rect, campo) = ui.allocate_exact_size(vec2(ui.available_width().max(52.0), 52.0), Sense::click());
         let sinistra = pillola(ui, rect, 18.0);
         let con_x = !self.testo.is_empty();
         let destra = if con_x { rect.right() - 4.0 - tema::PULSANTE } else { rect.right() - 18.0 };
         let dentro = Rect::from_min_max(egui::pos2(sinistra, rect.top()), egui::pos2(destra, rect.bottom()));
-        self.dipingi_testo(ui, dentro, Carattere::Testo.font(ui.ctx(), 16.0), [tema::INCHIOSTRO, tema::MATITA, tema::BLU], vuoto);
+        self.dipingi_testo(ui, dentro, Carattere::Testo.font(ui.ctx(), 16.0), [tema::inchiostro(), tema::matita(), tema::blu()], vuoto);
         self.info(&campo, vuoto);
         let svuota = con_x && {
             let posto = Rect::from_min_size(egui::pos2(destra, rect.center().y - tema::PULSANTE / 2.0), egui::Vec2::splat(tema::PULSANTE));
-            PulsanteIcona::new(icone::CLOSE, "Svuota la ricerca").colore(tema::MATITA).mostra_in(ui, posto, (tema::PULSANTE / 2.0) as u8).clicked()
+            PulsanteIcona::new(icone::CLOSE, "Svuota la ricerca").colore(tema::matita()).mostra_in(ui, posto, (tema::PULSANTE / 2.0) as u8).clicked()
         };
         RispostaRicerca { campo, svuota }
     }
@@ -255,20 +257,21 @@ impl CampoTesto {
     /// a destra, `conteggio` in grigio («2 di 5», «Nessun risultato»; vuoto, niente). Un tocco è
     /// un `clicked` della risposta, come in [`CampoTesto::mostra`].
     pub fn mostra_trova(&self, ui: &mut Ui, vuoto: &str, conteggio: &str) -> Response {
+        let vuoto = crate::lingua::t(vuoto);
         let (rect, campo) = ui.allocate_exact_size(vec2(ui.available_width().max(tema::PULSANTE), tema::PULSANTE), Sense::click());
         let sinistra = pillola(ui, rect, 14.0);
         let ctx = ui.ctx().clone();
         let mut destra = rect.right() - 16.0;
         if !conteggio.is_empty() {
-            let g = ui.painter().layout_no_wrap(conteggio.to_owned(), Carattere::Testo.font(&ctx, 14.0), tema::MATITA);
+            let g = ui.painter().layout_no_wrap(conteggio.to_owned(), Carattere::Testo.font(&ctx, 14.0), tema::matita());
             let posto = Rect::from_min_size(egui::pos2(destra - g.size().x, rect.center().y - g.size().y / 2.0), g.size());
-            ui.painter().galley(posto.min, g, tema::MATITA);
+            ui.painter().galley(posto.min, g, tema::matita());
             let r = ui.interact(posto, ui.id().with(("conteggio", rect.min.x as i32)), Sense::hover());
             r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, conteggio));
             destra = posto.left() - 8.0;
         }
         let dentro = Rect::from_min_max(egui::pos2(sinistra, rect.top()), egui::pos2(destra.max(sinistra), rect.bottom()));
-        self.dipingi_testo(ui, dentro, Carattere::Testo.font(&ctx, 16.0), [tema::INCHIOSTRO, tema::MATITA, tema::BLU], vuoto);
+        self.dipingi_testo(ui, dentro, Carattere::Testo.font(&ctx, 16.0), [tema::inchiostro(), tema::matita(), tema::blu()], vuoto);
         self.info(&campo, vuoto);
         campo
     }
@@ -276,10 +279,11 @@ impl CampoTesto {
     /// Il campo «Sostituisci con» sotto Trova: la stessa pillola di [`CampoTesto::mostra_trova`],
     /// con la matita al posto della lente e senza conteggio. Un tocco è un `clicked` della risposta.
     pub fn mostra_sostituisci(&self, ui: &mut Ui, vuoto: &str) -> Response {
+        let vuoto = crate::lingua::t(vuoto);
         let (rect, campo) = ui.allocate_exact_size(vec2(ui.available_width().max(tema::PULSANTE), tema::PULSANTE), Sense::click());
         let sinistra = pillola_con(ui, rect, 14.0, icone::EDIT);
         let dentro = Rect::from_min_max(egui::pos2(sinistra, rect.top()), egui::pos2((rect.right() - 16.0).max(sinistra), rect.bottom()));
-        self.dipingi_testo(ui, dentro, Carattere::Testo.font(ui.ctx(), 16.0), [tema::INCHIOSTRO, tema::MATITA, tema::BLU], vuoto);
+        self.dipingi_testo(ui, dentro, Carattere::Testo.font(ui.ctx(), 16.0), [tema::inchiostro(), tema::matita(), tema::blu()], vuoto);
         self.info(&campo, vuoto);
         campo
     }
@@ -289,9 +293,10 @@ impl CampoTesto {
     /// l'occhio che le mostra o le nasconde. Un tocco sul campo è `campo.clicked()`, l'occhio è
     /// `occhio`.
     pub fn mostra_segreto(&self, ui: &mut Ui, vuoto: &str, visibile: bool) -> RispostaSegreto {
+        let vuoto = crate::lingua::t(vuoto);
         let (rect, campo) = ui.allocate_exact_size(vec2(ui.available_width().max(tema::PULSANTE), 52.0), Sense::click());
-        let bordo = if self.fuoco { Stroke::new(2.0, tema::BLU) } else { Stroke::new(1.0, tema::LINEETTA) };
-        ui.painter().rect(rect, 12.0, tema::FOGLIO, bordo, StrokeKind::Inside);
+        let bordo = if self.fuoco { Stroke::new(2.0, tema::blu()) } else { Stroke::new(1.0, tema::lineetta()) };
+        ui.painter().rect(rect, 12.0, tema::foglio(), bordo, StrokeKind::Inside);
         let occhio = Rect::from_min_size(
             egui::pos2(rect.right() - 2.0 - tema::PULSANTE, rect.center().y - tema::PULSANTE / 2.0),
             egui::Vec2::splat(tema::PULSANTE),
@@ -301,11 +306,11 @@ impl CampoTesto {
         // Il cursore dopo lo stesso numero di caratteri anche fra i punti.
         let prima = self.testo.get(..self.sel.1).unwrap_or(&self.testo).chars().count();
         let cursore = mostrato.char_indices().nth(prima).map_or(mostrato.len(), |(i, _)| i);
-        let colori = [tema::INCHIOSTRO, tema::MATITA, tema::BLU];
+        let colori = [tema::inchiostro(), tema::matita(), tema::blu()];
         self.dipingi_come(ui, dentro, Carattere::Testo.font(ui.ctx(), 17.0), colori, vuoto, &mostrato, cursore);
         self.info(&campo, vuoto);
         let (icona, etichetta) = if visibile { (icone::VISIBILITY_OFF, NASCONDI) } else { (icone::VISIBILITY, MOSTRA) };
-        let occhio = PulsanteIcona::new(icona, etichetta).colore(tema::MATITA).mostra_in(ui, occhio, (tema::PULSANTE / 2.0) as u8).clicked();
+        let occhio = PulsanteIcona::new(icona, etichetta).colore(tema::matita()).mostra_in(ui, occhio, (tema::PULSANTE / 2.0) as u8).clicked();
         RispostaSegreto { campo, occhio }
     }
 
@@ -363,9 +368,9 @@ fn pillola(ui: &Ui, rect: Rect, bordo: f32) -> f32 {
 fn pillola_con(ui: &Ui, rect: Rect, bordo: f32, icona: &str) -> f32 {
     let raggio = egui::CornerRadius::same((rect.height() / 2.0) as u8);
     tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA);
-    ui.painter().rect_filled(rect, raggio, tema::FOGLIO);
+    ui.painter().rect_filled(rect, raggio, tema::foglio());
     let posto = egui::pos2(rect.left() + bordo + tema::ICONA / 2.0, rect.center().y);
-    ui.painter().text(posto, egui::Align2::CENTER_CENTER, icona, Carattere::Icona.font(ui.ctx(), tema::ICONA), tema::MATITA);
+    ui.painter().text(posto, egui::Align2::CENTER_CENTER, icona, Carattere::Icona.font(ui.ctx(), tema::ICONA), tema::matita());
     rect.left() + bordo + tema::ICONA + 12.0
 }
 
@@ -579,14 +584,14 @@ mod test {
         assert_eq!(campo.height(), 52.0);
         let tutte = forme(&h);
         let pillola = egui::CornerRadius::same(26);
-        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::FOGLIO && r.rect == campo && r.corner_radius == pillola)));
+        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::foglio() && r.rect == campo && r.corner_radius == pillola)));
         assert_eq!(tutte.iter().filter(|s| matches!(s, egui::Shape::Rect(r) if r.blur_width > 0.0)).count(), 2, "due strati d'ombra");
         // La lente grigia a 18 dp dal bordo, il testo vuoto grigio 12 dp dopo.
-        assert_eq!(colore_del_testo(&h, crate::icone::SEARCH), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, crate::icone::SEARCH), Some(tema::matita()));
         let lente = rettangolo_del_testo(&h, crate::icone::SEARCH).unwrap();
         let vuoto = rettangolo_del_testo(&h, "Cerca nei documenti").unwrap();
         assert!(lente.left() >= campo.left() + 18.0 && vuoto.left() >= campo.left() + 18.0 + 24.0 + 10.0, "{lente:?} {vuoto:?}");
-        assert_eq!(colore_del_testo(&h, "Cerca nei documenti"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "Cerca nei documenti"), Some(tema::matita()));
         assert!(h.query_by_label("Svuota la ricerca").is_none(), "vuota, niente X");
         h.get_by_value("Cerca nei documenti").click();
         h.run_steps(2);
@@ -614,23 +619,23 @@ mod test {
         assert_eq!(campo.height(), tema::PULSANTE);
         let tutte = forme(&h);
         let pillola = egui::CornerRadius::same(24);
-        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::FOGLIO && r.rect == campo && r.corner_radius == pillola)));
+        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::foglio() && r.rect == campo && r.corner_radius == pillola)));
         assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.blur_width > 0.0)), "senza ombra");
-        assert_eq!(colore_del_testo(&h, crate::icone::SEARCH), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, crate::icone::SEARCH), Some(tema::matita()));
         // Il conteggio grigio a destra, dentro la pillola, dopo il testo.
         let conteggio = h.get_by_label("2 di 5").rect();
         assert!(campo.contains_rect(conteggio), "{campo:?} {conteggio:?}");
         assert!((conteggio.right() - (campo.right() - 16.0)).abs() < 1.0, "{campo:?} {conteggio:?}");
-        assert_eq!(colore_del_testo(&h, "2 di 5"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "2 di 5"), Some(tema::matita()));
         assert!(rettangolo_del_testo(&h, "letto").unwrap().right() < conteggio.left());
         // Col fuoco il cursore blu dopo il testo.
-        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::BLU && r.rect.width() == 2.0)));
+        assert!(tutte.iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::blu() && r.rect.width() == 2.0)));
         h.get_by_value("letto").click();
         h.run_steps(2);
         assert_eq!(h.state().toccato, 1);
         // Vuoto: il testo grigio e niente conteggio.
         let h = banco(trova, Ricerca::default());
-        assert_eq!(colore_del_testo(&h, "Trova nel documento"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "Trova nel documento"), Some(tema::matita()));
         assert!(h.query_by_label("2 di 5").is_none());
     }
 
@@ -650,11 +655,11 @@ mod test {
         assert_eq!(campo.height(), tema::PULSANTE);
         let pillola = egui::CornerRadius::same(24);
         assert!(
-            forme(&h).iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::FOGLIO && r.rect == campo && r.corner_radius == pillola))
+            forme(&h).iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.fill == tema::foglio() && r.rect == campo && r.corner_radius == pillola))
         );
-        assert_eq!(colore_del_testo(&h, crate::icone::EDIT), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, crate::icone::EDIT), Some(tema::matita()));
         assert_eq!(colore_del_testo(&h, crate::icone::SEARCH), None, "niente lente");
-        assert_eq!(colore_del_testo(&h, "Sostituisci con"), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "Sostituisci con"), Some(tema::matita()));
         h.get_by_value("Sostituisci con").click();
         h.run_steps(2);
         assert_eq!(h.state().toccato, 1);
@@ -703,7 +708,7 @@ mod test {
         // Nell'accessibilità i punti, col bordo blu del fuoco.
         let campo = h.get_by_value(&punti).rect();
         assert_eq!(campo.height(), 52.0);
-        assert!(forme(&h).iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.stroke.color == tema::BLU && r.rect == campo)));
+        assert!(forme(&h).iter().any(|s| matches!(s, egui::Shape::Rect(r) if r.stroke.color == tema::blu() && r.rect == campo)));
         // L'occhio mostra le lettere, poi le nasconde di nuovo.
         h.get_by_label(MOSTRA).click();
         h.run_steps(2);
@@ -727,7 +732,7 @@ mod test {
         let v = stato.campo.prendi_fuoco(0).versione;
         stato.campo.ricevi("turno", (5, 5), v);
         let mut h = banco(ricerca, stato);
-        assert_eq!(colore_del_testo(&h, "turno"), Some(tema::INCHIOSTRO));
+        assert_eq!(colore_del_testo(&h, "turno"), Some(tema::inchiostro()));
         let x = h.get_by_label("Svuota la ricerca");
         assert!(h.get_by_value("turno").rect().contains_rect(x.rect()));
         x.click();

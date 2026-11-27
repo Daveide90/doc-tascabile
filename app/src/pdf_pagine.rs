@@ -29,10 +29,19 @@ use tascabile_word::salva;
 use crate::pdf_lavoro::{Strumento, si_modifica};
 use crate::pdf_ocr::{Lavoro, mostra_barra};
 use crate::{Errore, TascabileApp, home};
+use tascabile_touch::t;
 
 pub(crate) const CHIUDI: &str = "Chiudi";
 pub(crate) const RUOTA_A_SINISTRA: &str = "Ruota a sinistra";
 pub(crate) const RUOTA_A_DESTRA: &str = "Ruota a destra";
+/// «Ruota le pagine» dal menu del lettore e dagli Strumenti (0.10.0): il foglio con questa pagina
+/// o tutte, a destra o a sinistra. I PDF che arrivano storti si raddrizzano senza scegliere le
+/// pagine in «Organizza pagine».
+pub(crate) const RUOTA_LE_PAGINE: &str = "Ruota le pagine";
+pub(crate) const QUESTA_A_DESTRA: &str = "Questa pagina a destra";
+pub(crate) const QUESTA_A_SINISTRA: &str = "Questa pagina a sinistra";
+pub(crate) const TUTTE_A_DESTRA: &str = "Tutte le pagine a destra";
+pub(crate) const TUTTE_A_SINISTRA: &str = "Tutte le pagine a sinistra";
 pub(crate) const ELIMINA: &str = "Elimina";
 /// Il velo di «Organizza pagine» mentre il motore finisce una modifica.
 pub(crate) const UN_ATTIMO: &str = "Un attimo…";
@@ -148,8 +157,18 @@ enum FileFatti {
 }
 
 /// «1 pagina», «3 pagine».
+/// La riga sotto le scelte di «Ruota le pagine»: quale pagina è «questa», come si torna
+/// indietro, dove si scelgono solo alcune pagine.
+fn spiega_ruota(corrente: usize, n: usize) -> String {
+    tascabile_touch::tf!(
+        "Questa pagina è la {} di {}. Se sbagli, c'è Annulla in alto. Per ruotare solo alcune pagine: Strumenti, Organizza pagine.",
+        corrente + 1,
+        n
+    )
+}
+
 fn pagine(n: usize) -> String {
-    if n == 1 { "1 pagina".into() } else { format!("{n} pagine") }
+    if n == 1 { tascabile_touch::t("1 pagina").into() } else { tascabile_touch::tf!("{} pagine", n) }
 }
 
 /// Il nome di un file da una parte: «Lettera pagine 1-3», «Lettera pagina 5».
@@ -223,6 +242,63 @@ impl TascabileApp {
     // ---- Organizza pagine ----
 
     /// «Organizza pagine»: la griglia a tutto schermo, dalla pagina che si legge.
+    /// «Ruota le pagine»: il foglio con questa pagina o tutte, a destra o a sinistra.
+    pub(crate) fn apri_ruota_pdf(&mut self) {
+        if self.pdf.is_none() {
+            return;
+        }
+        diagnosi("pdf: ruota, foglio aperto");
+        self.fogli_pdf.ruota.apri();
+    }
+
+    /// Il foglio di «Ruota le pagine». Resta aperto dopo un tocco: due tocchi capovolgono la
+    /// pagina, e la pagina si vede girare sopra il foglio.
+    pub(crate) fn mostra_ruota_pdf(&mut self, ctx: &egui::Context) {
+        let (n, corrente) = self.pdf.as_ref().map_or((0, 0), |p| (p.lettore.pagine(), p.lettore.pagina_corrente()));
+        let scelta = self
+            .fogli_pdf
+            .ruota
+            .mostra(ctx, RUOTA_LE_PAGINE, |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                let mut scelta = None;
+                let righe = [
+                    (icone::ROTATE_RIGHT, QUESTA_A_DESTRA, false, 90),
+                    (icone::ROTATE_LEFT, QUESTA_A_SINISTRA, false, 270),
+                    (icone::ROTATE_RIGHT, TUTTE_A_DESTRA, true, 90),
+                    (icone::ROTATE_LEFT, TUTTE_A_SINISTRA, true, 270),
+                ];
+                for (i, (icona, testo, tutte, gradi)) in righe.into_iter().enumerate() {
+                    if crate::pdf_firma::riga(ui, icona, testo, None, i + 1 == righe.len()).clicked() {
+                        scelta = Some((tutte, gradi));
+                    }
+                }
+                ui.add_space(6.0);
+                ui.label(RichText::new(spiega_ruota(corrente, n)).font(Carattere::Testo.font(ui.ctx(), 14.0)).color(tema::matita()));
+                ui.add_space(6.0);
+                scelta
+            })
+            .flatten();
+        if let Some((tutte, gradi)) = scelta {
+            self.ruota_pdf(tutte, gradi);
+        }
+    }
+
+    /// Ruota la pagina che si legge (o tutte) di `gradi` in senso orario, e resta su quella pagina.
+    pub(crate) fn ruota_pdf(&mut self, tutte: bool, gradi: i64) {
+        let Some(p) = self.pdf.as_ref() else { return };
+        let n = p.lettore.pagine();
+        if n == 0 {
+            return;
+        }
+        let corrente = p.lettore.pagina_corrente().min(n - 1);
+        let scelte: Vec<usize> = if tutte { (0..n).collect() } else { vec![corrente] };
+        diagnosi(format!("pdf: ruota {} di {gradi} gradi", pagine(scelte.len())));
+        self.modifica_pdf(Modifica::ruota(scelte, gradi));
+        if let Some(p) = self.pdf.as_mut() {
+            p.lettore.vai_alla_pagina(corrente);
+        }
+    }
+
     pub(crate) fn apri_organizza_pdf(&mut self) {
         let Some(p) = self.pdf.as_mut() else { return };
         p.lettore.apri_miniature();
@@ -274,8 +350,8 @@ impl TascabileApp {
         let tutte = scelte == n && n > 0;
         let sotto = match scelte {
             0 => "Tocca per scegliere, tieni premuto per spostare".to_string(),
-            1 => format!("1 pagina scelta su {n}"),
-            k => format!("{k} pagine scelte su {n}"),
+            1 => tascabile_touch::tf!("1 pagina scelta su {}", n),
+            k => tascabile_touch::tf!("{} pagine scelte su {}", k, n),
         };
         let schermo = ctx.content_rect();
         let mut tocco = None;
@@ -283,9 +359,9 @@ impl TascabileApp {
         egui::Area::new(Id::new("organizza_pagine")).order(Order::Foreground).fixed_pos(schermo.min).constrain(false).show(ctx, |ui| {
             ui.set_min_size(schermo.size());
             let _ = ui.interact(schermo, Id::new("organizza_fondo"), Sense::click_and_drag());
-            ui.painter().rect_filled(schermo, 0.0, tema::TAVOLO);
+            ui.painter().rect_filled(schermo, 0.0, tema::tavolo());
             let barra = Rect::from_min_size(schermo.min, vec2(schermo.width(), tema::BARRA_ALTA));
-            ui.painter().rect_filled(barra, 0.0, tema::CARTA);
+            ui.painter().rect_filled(barra, 0.0, tema::carta());
             let storia = annulla || ripeti;
             let r = ui
                 .scope_builder(UiBuilder::new().max_rect(barra), |ui| {
@@ -334,12 +410,12 @@ impl TascabileApp {
             }
             if occupato {
                 let font = Carattere::Grassetto.font(ui.ctx(), 15.0);
-                let g = ui.painter().layout_no_wrap(UN_ATTIMO.to_string(), font, egui::Color32::WHITE);
+                let g = ui.painter().layout_no_wrap(t(UN_ATTIMO).to_string(), font, tema::sull_indicatore());
                 let pillola = Rect::from_center_size(griglia.center(), vec2(g.size().x + 32.0, 44.0));
-                ui.painter().rect_filled(pillola, 22.0, tema::INDICATORE);
+                ui.painter().rect_filled(pillola, 22.0, tema::indicatore());
                 ui.painter().galley(pillola.center() - g.size() / 2.0, g, egui::Color32::PLACEHOLDER);
                 ui.interact(pillola, Id::new("organizza_un_attimo"), Sense::hover())
-                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, UN_ATTIMO));
+                    .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, tascabile_touch::t(UN_ATTIMO)));
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(30));
             }
         });
@@ -406,7 +482,7 @@ impl TascabileApp {
                 let manda = self.pdf.as_ref().is_some_and(|p| p.in_attesa_firme.is_none());
                 // Salva riscrive tutto il file non firmato: la pagina tolta non resta nelle versioni di prima.
                 if manda && !firmato {
-                    self.avviso_breve.avvisa(if k == 1 { "1 pagina eliminata".to_string() } else { format!("{k} pagine eliminate") });
+                    self.avviso_breve.avvisa(if k == 1 { "1 pagina eliminata".to_string() } else { tascabile_touch::tf!("{} pagine eliminate", k) });
                 }
             }
             3 if !scelte.is_empty() => {
@@ -484,9 +560,13 @@ impl TascabileApp {
             });
             ui.add_space(10.0);
             let (testo, colore) = match (sbagliato, ogni) {
-                (true, false) => (format!("Scrivi gli intervalli come 1-3, 4-8 (9- vuol dire fino in fondo), da 1 a {n}."), tema::ROSSO),
-                (true, true) => (format!("Scrivi quante pagine in ogni file, da 1 a {n}."), tema::ROSSO),
-                (false, _) => (format!("Il PDF ha {}. I file nuovi vanno in Documents/Tascabile: questo resta com'è.", pagine(n)), tema::MATITA),
+                (true, false) => {
+                    (tascabile_touch::tf!("Scrivi gli intervalli come 1-3, 4-8 (9- vuol dire fino in fondo), da 1 a {}.", n), tema::rosso())
+                }
+                (true, true) => (tascabile_touch::tf!("Scrivi quante pagine in ogni file, da 1 a {}.", n), tema::rosso()),
+                (false, _) => {
+                    (tascabile_touch::tf!("Il PDF ha {}. I file nuovi vanno in Documents/Tascabile: questo resta com'è.", pagine(n)), tema::matita())
+                }
             };
             ui.label(RichText::new(testo).font(Carattere::Testo.font(ctx, 15.0)).color(colore));
             ui.add_space(6.0);
@@ -552,8 +632,8 @@ impl TascabileApp {
 
     fn mostra_foglio_bianca(&mut self, ctx: &egui::Context) {
         let vicina = self.pdf.as_ref().map_or(0, |p| p.pagine.vicina);
-        let prima = format!("Prima della pagina {}", vicina + 1);
-        let dopo = format!("Dopo la pagina {}", vicina + 1);
+        let prima = tascabile_touch::tf!("Prima della pagina {}", vicina + 1);
+        let dopo = tascabile_touch::tf!("Dopo la pagina {}", vicina + 1);
         let scelta = self
             .fogli_pdf
             .bianca
@@ -567,7 +647,7 @@ impl TascabileApp {
                     scelta = Some(Dove::Dopo);
                 }
                 ui.add_space(6.0);
-                ui.label(RichText::new("Grande come la pagina vicina.").font(Carattere::Testo.font(ui.ctx(), 14.0)).color(tema::MATITA));
+                ui.label(RichText::new(t("Grande come la pagina vicina.")).font(Carattere::Testo.font(ui.ctx(), 14.0)).color(tema::matita()));
                 ui.add_space(6.0);
                 scelta
             })
@@ -631,7 +711,7 @@ impl TascabileApp {
             Some(p) => (p.pagine.da_unire.clone(), p.pagine.unisci_dopo, p.pagine.unisci_pagina),
             None => (Vec::new(), None, 0),
         };
-        let dopo_la = format!("Dopo la pagina {}", pagina + 1);
+        let dopo_la = tascabile_touch::tf!("Dopo la pagina {}", pagina + 1);
         let scelta = self
             .fogli_pdf
             .unisci
@@ -745,18 +825,18 @@ impl TascabileApp {
             .comprimi
             .mostra(ctx, COMPRIMI, |ui| {
                 ui.label(
-                    RichText::new(format!(
+                    RichText::new(tascabile_touch::tf!(
                         "Adesso il PDF pesa {}. La copia compressa va in Documents/Tascabile: questo resta com'è.",
                         home::misura(prima as u64)
                     ))
                     .font(Carattere::Testo.font(ui.ctx(), 15.0))
-                    .color(tema::MATITA),
+                    .color(tema::matita()),
                 );
                 ui.add_space(8.0);
                 ui.spacing_mut().item_spacing.y = 0.0;
                 let mut scelta = None;
                 for (i, l) in Livello::TUTTI.into_iter().enumerate() {
-                    let testo = format!("{} · {}", l.nome(), l.spiegazione());
+                    let testo = format!("{} · {}", t(l.nome()), t(l.spiegazione()));
                     if crate::pdf_firma::riga(ui, icone::COMPRESS, &testo, None, i == 2).clicked() {
                         scelta = Some(l);
                     }
@@ -776,7 +856,7 @@ impl TascabileApp {
         let Some((byte, password)) = self.byte_di_adesso() else { return };
         let prima = self.pdf.as_ref().map_or(0, |p| p.motore.stato().informazioni.byte);
         let cartella = cartella_tascabile(&self.piattaforma.radice_archivio());
-        let nome = format!("{} compresso", self.base_dei_file());
+        let nome = tascabile_touch::tf!("{} compresso", self.base_dei_file());
         diagnosi(format!("pdf: comprimi, livello {}, {prima} byte", livello.nome().to_lowercase()));
         self.avvia_lavoro_file(Quale::Comprimi { prima }, ctx, move |avanti| {
             let pdf = Pdf::apri_condiviso(byte, password.as_deref()).map_err(|_| "apertura")?;
@@ -817,19 +897,19 @@ impl TascabileApp {
         let (mut campo, mut occhio, mut proteggi) = (false, false, false);
         self.fogli_pdf.proteggi.mostra(ctx, PROTEGGI_CON_PASSWORD, |ui| {
             ui.label(
-                RichText::new("Chi apre il PDF dovrà scrivere questa password. Cifratura AES a 256 bit.")
+                RichText::new(t("Chi apre il PDF dovrà scrivere questa password. Cifratura AES a 256 bit."))
                     .font(Carattere::Testo.font(ui.ctx(), 15.0))
-                    .color(tema::MATITA),
+                    .color(tema::matita()),
             );
             ui.add_space(12.0);
             let r = p.pagine.campo.mostra_segreto(ui, "Password", visibile);
             (campo, occhio) = (r.campo.clicked(), r.occhio);
             if sbagliato {
                 ui.add_space(6.0);
-                ui.label(RichText::new("Scrivi la password.").font(Carattere::Grassetto.font(ui.ctx(), 15.0)).color(tema::ROSSO));
+                ui.label(RichText::new(t("Scrivi la password.")).font(Carattere::Grassetto.font(ui.ctx(), 15.0)).color(tema::rosso()));
             }
             ui.add_space(12.0);
-            ui.label(RichText::new(avviso.as_str()).font(Carattere::Grassetto.font(ui.ctx(), 15.0)).color(tema::INCHIOSTRO));
+            ui.label(RichText::new(avviso.as_str()).font(Carattere::Grassetto.font(ui.ctx(), 15.0)).color(tema::inchiostro()));
             ui.add_space(12.0);
             proteggi = ui.add(Pulsante::new(PROTEGGI, Peso::Principale).icona(icone::LOCK).larghezza(ui.available_width())).clicked();
             ui.add_space(6.0);
@@ -895,7 +975,7 @@ impl TascabileApp {
             // subito. Resta finché non si risponde.
             let nome = percorso.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let firme = if p.motore.stato().protezione.firmato() { " Nella copia le firme digitali non valgono più." } else { "" };
-            let testo = format!("«{nome}» è nella memoria del telefono, in Documents/Tascabile. Il tuo PDF è rimasto com'è.{firme}");
+            let testo = tascabile_touch::tf!("«{}» è nella memoria del telefono, in Documents/Tascabile. Il tuo PDF è rimasto com'è.{}", nome, firme);
             let r = Dialogo::new(Id::new("pdf_definitiva_pronta"), crate::schermo_pdf::COPIA_PRONTA)
                 .testo(&testo)
                 .pulsante(crate::schermo_pdf::CHIUDI, Peso::Testo)
@@ -919,10 +999,12 @@ impl TascabileApp {
             let apri = !p.motore.stato().modificato && !p.copia.recuperato;
             let nome = percorso.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
             let meno = 100 - (dopo * 100).div_ceil(prima.max(1)).min(100);
-            let testo = format!(
-                "Da {} a {}: il {meno}% in meno. La copia è in Documents/Tascabile: «{nome}». Questo PDF resta com'è.",
+            let testo = tascabile_touch::tf!(
+                "Da {} a {}: il {}% in meno. La copia è in Documents/Tascabile: «{}». Questo PDF resta com'è.",
                 home::misura(prima as u64),
-                home::misura(dopo as u64)
+                home::misura(dopo as u64),
+                meno,
+                nome
             );
             // «Condividi» per ultimo, il principale: una copia più leggera si fa per mandarla.
             let mut d = Dialogo::new(Id::new("pdf_compresso"), PDF_COMPRESSO).testo(&testo).pulsante(HO_CAPITO, Peso::Testo);
@@ -962,10 +1044,15 @@ impl TascabileApp {
                 diagnosi(format!("pdf: {} fatto, {} file in {secondi:.1} s", quale.nome(), file.len()));
                 match file.as_slice() {
                     [] => self.avviso_breve.avvisa("Nessun file scritto."),
-                    [f] => self.avvisa_col_condividi(format!("Salvato in Documents/Tascabile: {}", nome(f)), f),
+                    [f] => self.avvisa_col_condividi(tascabile_touch::tf!("Salvato in Documents/Tascabile: {}", nome(f)), f),
                     [f, ..] => {
                         let fermo = if fermato { " (fermato prima della fine)" } else { "" };
-                        self.avviso_breve.avvisa(format!("{} file in Documents/Tascabile{fermo}: «{}» e gli altri.", file.len(), nome(f)))
+                        self.avviso_breve.avvisa(tascabile_touch::tf!(
+                            "{} file in Documents/Tascabile{}: «{}» e gli altri.",
+                            file.len(),
+                            fermo,
+                            nome(f)
+                        ))
                     }
                 }
             }
@@ -989,8 +1076,8 @@ impl TascabileApp {
                 diagnosi(format!("pdf: unisci {} {}", pagine(n), if fine { "in fondo" } else { "dopo una pagina" }));
                 self.modifica_pdf(Modifica::unisci(&nome, byte, posto));
                 if self.pdf.as_ref().is_some_and(|p| p.in_attesa_firme.is_none()) {
-                    let dove = if fine { "in fondo".to_string() } else { format!("dopo la pagina {posto}") };
-                    self.avviso_breve.avvisa(format!("Unisco {} {dove}.", pagine(n)));
+                    let dove = if fine { "in fondo".to_string() } else { tascabile_touch::tf!("dopo la pagina {}", posto) };
+                    self.avviso_breve.avvisa(tascabile_touch::tf!("Unisco {} {}.", pagine(n), dove));
                 }
                 self.scegli_pagine(posto..posto + n);
             }
@@ -1083,9 +1170,7 @@ impl TascabileApp {
             return true;
         }
         if let Some(p) = self.pdf.as_mut()
-            && (std::mem::take(&mut p.pagine.togli)
-                | p.pagine.compresso.take().is_some()
-                | p.pagine.definitiva.take().is_some())
+            && (std::mem::take(&mut p.pagine.togli) | p.pagine.compresso.take().is_some() | p.pagine.definitiva.take().is_some())
         {
             diagnosi("indietro: dialogo delle pagine chiuso");
             return true;

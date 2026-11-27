@@ -3,7 +3,6 @@
 pub mod annotazioni;
 pub mod apertura;
 mod caratteri;
-mod ritocco;
 pub mod contenuto;
 pub mod correzione;
 pub mod disegno;
@@ -20,6 +19,7 @@ pub mod ocr;
 pub mod pagine;
 pub mod prova;
 pub mod ricerca;
+mod ritocco;
 pub mod scansione;
 pub mod selezione;
 mod stendi;

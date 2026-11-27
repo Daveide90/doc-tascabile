@@ -117,7 +117,8 @@ mod test {
         // Dall'inizio dei dati (SOS) in poi tutto com'è: 0xFF 0x00, un RST, la fine.
         let dati = [&segmento(0xDA, &[1, 1, 0, 0, 0x3F, 0])[..], &[0x12, 0xFF, 0x00, 0x34, 0xFF, 0xD0, 0x56, 0xFF, 0xD9][..]].concat();
         let soi = &[0xFF, 0xD8][..];
-        let foto = [soi, &jfif[..], &exif[..], &xmp[..], &icc[..], &flashpix[..], &iptc[..], &commento[..], &tabelle[..], &adobe[..], &dati[..]].concat();
+        let foto =
+            [soi, &jfif[..], &exif[..], &xmp[..], &icc[..], &flashpix[..], &iptc[..], &commento[..], &tabelle[..], &adobe[..], &dati[..]].concat();
         let pulita = [soi, &jfif[..], &icc[..], &tabelle[..], &adobe[..], &dati[..]].concat();
         assert_eq!(senza_metadati(&foto), Some(pulita));
     }

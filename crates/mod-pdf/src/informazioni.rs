@@ -37,13 +37,13 @@ impl Firme {
         if n == 0 {
             return "Nessuna".to_string();
         }
-        let quante = if n == 1 { "1 firma".to_string() } else { format!("{n} firme") };
+        let quante = if n == 1 { "1 firma".to_string() } else { tascabile_touch::tf!("{} firme", n) };
         let come = if self.non_valide > 0 {
             match (n, self.non_valide) {
                 (1, _) => "non valida".to_string(),
                 (_, k) if k == n => "non valide".to_string(),
                 (_, 1) => "1 non valida".to_string(),
-                (_, k) => format!("{k} non valide"),
+                (_, k) => tascabile_touch::tf!("{} non valide", k),
             }
         } else if self.valide == n {
             if n == 1 { "valida" } else { "valide" }.to_string()
@@ -52,7 +52,7 @@ impl Firme {
         } else {
             "non verificate".to_string()
         };
-        format!("{quante}, {come}")
+        tascabile_touch::tf!("{}, {}", quante, come)
     }
 }
 

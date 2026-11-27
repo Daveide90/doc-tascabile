@@ -254,7 +254,11 @@ fn prova(genere: &str, varianti: Vec<(String, Vec<u8>)>, apri: fn(Vec<u8>) -> Es
         }
     }
     let _ = std::fs::remove_file(&in_corso);
-    eprintln!("{genere}: {totale} varianti, {aperti} aperte, {non_aperti} rifiutate, {} guai, la più lenta {:.1} s", guai.len(), piu_lento.as_secs_f32());
+    eprintln!(
+        "{genere}: {totale} varianti, {aperti} aperte, {non_aperti} rifiutate, {} guai, la più lenta {:.1} s",
+        guai.len(),
+        piu_lento.as_secs_f32()
+    );
     guai
 }
 

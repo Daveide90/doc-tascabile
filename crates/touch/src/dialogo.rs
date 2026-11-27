@@ -36,17 +36,17 @@ pub struct Dialogo<'a> {
 
 impl<'a> Dialogo<'a> {
     pub fn new(id: impl Into<Id>, titolo: &'a str) -> Self {
-        Self { id: id.into(), titolo, testo: None, pulsanti: Vec::new() }
+        Self { id: id.into(), titolo: crate::lingua::t(titolo), testo: None, pulsanti: Vec::new() }
     }
 
     pub fn testo(mut self, testo: &'a str) -> Self {
-        self.testo = Some(testo);
+        self.testo = Some(crate::lingua::t(testo));
         self
     }
 
     /// Un pulsante; stanno nell'ordine in cui si aggiungono, il principale di solito per ultimo.
     pub fn pulsante(mut self, etichetta: &'a str, peso: Peso) -> Self {
-        self.pulsanti.push((etichetta, peso));
+        self.pulsanti.push((crate::lingua::t(etichetta), peso));
         self
     }
 
@@ -61,18 +61,18 @@ impl<'a> Dialogo<'a> {
         let mut dato = None;
         let interno = (zona.width() - 2.0 * f32::from(BORDO)).min(LARGO) - 2.0 * f32::from(BORDO);
         let mut scelta = None;
-        let risposta = Modal::new(self.id).backdrop_color(tema::VELO_SCURO).frame(Frame::NONE).show(ctx, |ui| {
+        let risposta = Modal::new(self.id).backdrop_color(tema::velo_scuro()).frame(Frame::NONE).show(ctx, |ui| {
             Scheda::new().raggio(tema::RAGGIO_FOGLIO).ombra(tema::OMBRA_MENU).margine(Margin::same(BORDO)).show(ui, |ui| {
                 ui.set_width(interno);
                 ui.spacing_mut().item_spacing = vec2(tema::SPAZIO, 0.0);
                 let ctx = ui.ctx().clone();
-                let titolo = ui.painter().layout(self.titolo.to_owned(), Carattere::Titolo.font(&ctx, 22.0), tema::INCHIOSTRO, interno);
+                let titolo = ui.painter().layout(self.titolo.to_owned(), Carattere::Titolo.font(&ctx, 22.0), tema::inchiostro(), interno);
                 let (r, risposta) = ui.allocate_exact_size(titolo.size(), Sense::hover());
                 ui.painter().galley(r.min, titolo, Color32::PLACEHOLDER);
                 risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, self.titolo));
                 if let Some(testo) = self.testo {
                     ui.add_space(12.0);
-                    let g = ui.painter().layout(testo.to_owned(), Carattere::Testo.font(&ctx, 16.0), tema::MATITA, interno);
+                    let g = ui.painter().layout(testo.to_owned(), Carattere::Testo.font(&ctx, 16.0), tema::matita(), interno);
                     let (r, risposta) = ui.allocate_exact_size(g.size(), Sense::hover());
                     ui.painter().galley(r.min, g, Color32::PLACEHOLDER);
                     risposta.widget_info(|| WidgetInfo::labeled(WidgetType::Label, true, testo));
@@ -82,7 +82,7 @@ impl<'a> Dialogo<'a> {
                 ui.add_space(8.0);
                 let font = Carattere::Grassetto.font(&ctx, 15.0);
                 let larghi: f32 =
-                    self.pulsanti.iter().map(|(t, _)| ui.painter().layout_no_wrap((*t).to_owned(), font.clone(), tema::BLU).size().x + 40.0).sum();
+                    self.pulsanti.iter().map(|(t, _)| ui.painter().layout_no_wrap((*t).to_owned(), font.clone(), tema::blu()).size().x + 40.0).sum();
                 let in_fila = larghi + tema::SPAZIO * self.pulsanti.len().saturating_sub(1) as f32 <= interno;
                 if in_fila {
                     // Alta quanto un pulsante: una fila da destra centrata prenderebbe tutta
@@ -139,7 +139,7 @@ impl AvvisoBreve {
 
     /// Mostra questo testo da adesso, al posto di quello che c'era.
     pub fn avvisa(&mut self, testo: impl Into<String>) {
-        self.testo = Some(testo.into());
+        self.testo = Some(crate::lingua::t_string(testo.into()));
         self.azione = None;
         self.dal = None;
     }
@@ -147,7 +147,7 @@ impl AvvisoBreve {
     /// Mostra questo testo con un'azione da toccare, al posto di quello che c'era.
     pub fn avvisa_con_azione(&mut self, testo: impl Into<String>, azione: impl Into<String>) {
         self.avvisa(testo);
-        self.azione = Some(azione.into());
+        self.azione = Some(crate::lingua::t_string(azione.into()));
     }
 
     pub fn visibile(&self) -> bool {
@@ -186,15 +186,15 @@ impl AvvisoBreve {
             .fixed_pos(pos2(zona.center().x, fondo - 16.0))
             .show(ctx, |ui| {
                 let grassetto = Carattere::Grassetto.font(ui.ctx(), 15.0);
-                let pulsante = azione.as_ref().map(|a| ui.painter().layout_no_wrap(a.clone(), grassetto, tema::BLU_TENUE));
+                let pulsante = azione.as_ref().map(|a| ui.painter().layout_no_wrap(a.clone(), grassetto, tema::blu_tenue()));
                 let per_l_azione = pulsante.as_ref().map_or(0.0, |g| g.size().x + 24.0 + 4.0);
-                let g = ui.painter().layout(testo.clone(), Carattere::Testo.font(ui.ctx(), 15.0), tema::FOGLIO, massimo - 40.0 - per_l_azione);
+                let g = ui.painter().layout(testo.clone(), Carattere::Testo.font(ui.ctx(), 15.0), tema::foglio(), massimo - 40.0 - per_l_azione);
                 let alto = (g.size().y + 28.0).max(tema::PULSANTE);
                 let largo = if pulsante.is_some() { 20.0 + g.size().x + 8.0 + per_l_azione } else { g.size().x + 40.0 };
                 let (rect, r) = ui.allocate_exact_size(vec2(largo, alto), Sense::hover());
                 let raggio = (tema::PULSANTE / 2.0) as u8;
                 tema::dipingi_ombra(ui.painter(), rect, raggio, &tema::OMBRA_CONTESTO);
-                ui.painter().rect_filled(rect, raggio, tema::SCURO);
+                ui.painter().rect_filled(rect, raggio, tema::scuro());
                 let x = if pulsante.is_some() { rect.left() + 20.0 } else { rect.center().x - g.size().x / 2.0 };
                 let posto_testo = Rect::from_min_size(pos2(x, rect.center().y - g.size().y / 2.0), g.size());
                 ui.painter().galley(posto_testo.min, g, Color32::PLACEHOLDER);
@@ -214,7 +214,7 @@ impl AvvisoBreve {
                 let b = ui.interact(posto, self.id.with("azione"), Sense::click());
                 b.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, a));
                 if b.is_pointer_button_down_on() {
-                    ui.painter().rect_filled(posto, raggio, tema::PREMUTO_SCURO);
+                    ui.painter().rect_filled(posto, raggio, tema::premuto_scuro());
                 }
                 ui.painter().galley(posto.center() - p.size() / 2.0, p, Color32::PLACEHOLDER);
                 b.clicked()
@@ -249,14 +249,14 @@ mod test {
     fn il_dialogo_sta_al_centro_sopra_il_velo() {
         let h = banco(salvare, Vec::new());
         let schermo = egui::Rect::from_min_size(egui::Pos2::ZERO, SCHERMO);
-        assert_eq!(riempiti(&h, tema::VELO_SCURO), vec![schermo]);
+        assert_eq!(riempiti(&h, tema::velo_scuro()), vec![schermo]);
         let titolo = rettangolo_del_testo(&h, "Salvare le modifiche?").unwrap();
-        let foglio: Vec<_> = riempiti(&h, tema::FOGLIO).into_iter().filter(|r| r.contains_rect(titolo)).collect();
+        let foglio: Vec<_> = riempiti(&h, tema::foglio()).into_iter().filter(|r| r.contains_rect(titolo)).collect();
         assert_eq!(foglio.len(), 1, "{foglio:?}");
         assert!((foglio[0].center().x - SCHERMO.x / 2.0).abs() < 1.0 && (foglio[0].center().y - SCHERMO.y / 2.0).abs() < 1.0, "{foglio:?}");
         assert!(foglio[0].width() <= SCHERMO.x - 2.0 * 24.0);
         assert_eq!(famiglia_del_testo(&h, "Salvare le modifiche?"), Some(Carattere::Titolo.famiglia()));
-        assert_eq!(colore_del_testo(&h, "Il documento ha modifiche che non sono state salvate."), Some(tema::MATITA));
+        assert_eq!(colore_del_testo(&h, "Il documento ha modifiche che non sono state salvate."), Some(tema::matita()));
         // I pulsanti in fila in fondo a destra, nell'ordine dato.
         let annulla = h.get_by_label("Annulla").rect();
         let non_salvare = h.get_by_label("Non salvare").rect();
@@ -264,7 +264,7 @@ mod test {
         assert!(annulla.right() <= non_salvare.left() && non_salvare.right() <= salva.left());
         assert_eq!(annulla.center().y, salva.center().y);
         assert!((salva.right() - (foglio[0].right() - 24.0)).abs() < 1.0, "{salva:?} {foglio:?}");
-        assert_eq!(colore_del_testo(&h, "Salva"), Some(tema::FOGLIO));
+        assert_eq!(colore_del_testo(&h, "Salva"), Some(tema::foglio()));
     }
 
     #[test]
@@ -305,7 +305,7 @@ mod test {
         );
         let fondo = |h: &egui_kittest::Harness<'_, bool>| {
             let apri = h.get_by_label("Apri").rect();
-            riempiti(h, tema::FOGLIO).into_iter().filter(|r| r.contains_rect(apri)).map(|r| r.bottom() - apri.bottom()).fold(f32::MAX, f32::min)
+            riempiti(h, tema::foglio()).into_iter().filter(|r| r.contains_rect(apri)).map(|r| r.bottom() - apri.bottom()).fold(f32::MAX, f32::min)
         };
         let prima = fondo(&h);
         *h.state_mut() = true;
@@ -364,8 +364,8 @@ mod test {
         let avviso = h.get_by_label("Copia salvata in Documenti").rect();
         assert!(avviso.bottom() <= 800.0 && avviso.bottom() > 760.0, "{avviso:?}");
         assert!((avviso.center().x - SCHERMO.x / 2.0).abs() < 1.0);
-        assert_eq!(riempiti(&h, tema::SCURO), vec![avviso]);
-        assert_eq!(colore_del_testo(&h, "Copia salvata in Documenti"), Some(tema::FOGLIO));
+        assert_eq!(riempiti(&h, tema::scuro()), vec![avviso]);
+        assert_eq!(colore_del_testo(&h, "Copia salvata in Documenti"), Some(tema::foglio()));
         // L'avviso non si prende i tocchi: il resto dello schermo resta usabile.
         assert!(h.state().visibile());
         h.run_steps((DURATA_AVVISO / 0.25) as usize + 2);
@@ -382,7 +382,7 @@ mod test {
                 a.mostra(ui.ctx(), 800.0);
                 if *aperta {
                     egui::Area::new(egui::Id::new("tutto schermo")).order(Order::Foreground).fixed_pos(egui::Pos2::ZERO).show(ui.ctx(), |ui| {
-                        ui.painter().rect_filled(egui::Rect::from_min_size(egui::Pos2::ZERO, SCHERMO), 0.0, tema::CARTA);
+                        ui.painter().rect_filled(egui::Rect::from_min_size(egui::Pos2::ZERO, SCHERMO), 0.0, tema::carta());
                         ui.allocate_rect(egui::Rect::from_min_size(egui::Pos2::ZERO, SCHERMO), egui::Sense::click());
                     });
                 }
@@ -418,11 +418,11 @@ mod test {
         h.run_steps(2);
         let testo = h.get_by_label("PDF pronto in Documents/Tascabile").rect();
         let azione = h.get_by_role_and_label(Role::Button, "Condividi").rect();
-        let pillola = riempiti(&h, tema::SCURO);
+        let pillola = riempiti(&h, tema::scuro());
         assert_eq!(pillola.len(), 1, "{pillola:?}");
         assert!(pillola[0].contains_rect(azione) && testo.right() <= azione.left(), "{pillola:?} {testo:?} {azione:?}");
         assert!(azione.height() >= tema::PULSANTE && pillola[0].bottom() <= 800.0);
-        assert_eq!(colore_del_testo(&h, "Condividi"), Some(tema::BLU_TENUE));
+        assert_eq!(colore_del_testo(&h, "Condividi"), Some(tema::blu_tenue()));
         // Resta più di un avviso semplice, per dare il tempo di toccare.
         h.run_steps((DURATA_AVVISO / 0.25) as usize + 2);
         h.get_by_label("PDF pronto in Documents/Tascabile");

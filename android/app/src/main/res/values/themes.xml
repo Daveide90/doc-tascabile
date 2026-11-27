@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- GameActivity estende AppCompatActivity: serve un tema AppCompat. L'app è chiara («carta e
-         inchiostro», tappa A), anche col telefono in modalità scura: barre di sistema color carta
-         con le icone scure. Da Android 15 le barre sono trasparenti e sotto c'è la carta che
-         disegna l'app; windowBackground è quello che si vede prima del primo disegno. -->
+    <!-- GameActivity estende AppCompatActivity: serve un tema AppCompat. Questo è il tema chiaro
+         («carta e inchiostro»): barre di sistema color carta con le icone scure. Col telefono in
+         modalità scura vale values-night/themes.xml; dopo il primo frame l'app mette il tema scelto
+         nelle Impostazioni (MainActivity.tascabileTema, 0.10.0). Da Android 15 le barre sono
+         trasparenti e sotto c'è la carta che disegna l'app; windowBackground è quello che si vede
+         prima del primo disegno. -->
     <style name="Theme.Tascabile" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowBackground">@color/carta</item>
         <item name="android:statusBarColor">@color/carta</item>
